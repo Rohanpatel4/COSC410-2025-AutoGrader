@@ -1,0 +1,6 @@
+@import "tailwindcss";
+body { font-family: ui-sans-serif, system-ui; }
+button { @apply px-3 py-1 rounded border; }
+input, select { @apply border rounded px-2 py-1; }
+label { @apply block mb-1; }
+form > div { @apply mb-3; }

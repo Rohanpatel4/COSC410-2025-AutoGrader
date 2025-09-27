@@ -1,0 +1,31 @@
+{
+  "name": "sandbox-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest",
+    "test:cov": "vitest run --coverage"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0",
+    "typescript": "^5.6.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "msw": "^2.3.4",
+    "@vitest/coverage-v8": "^0.34.6",
+    "vitest": "^1.6.0",
+    "@testing-library/react": "^16.0.0",
+    "@testing-library/jest-dom": "^6.4.2",
+    "jsdom": "^25.0.0",
+    "tailwindcss": "4.0.0-alpha.18"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.1"
+  }
+}
