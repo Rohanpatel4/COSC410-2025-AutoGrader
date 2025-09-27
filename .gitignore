@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+app.db
+storage/
+
+# Node
+node_modules/
+dist/
+
+# General
+.DS_Store
+.vscode/
+.idea/
+.venv/
+coverage/
+htmlcov/
