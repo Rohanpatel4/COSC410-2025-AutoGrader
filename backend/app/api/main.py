@@ -4,7 +4,6 @@ from app.core.settings import settings
 from app.core.db import Base, engine
 from . import files, testsuites, submissions, runtimes, runs
 
-#testing 
 
 Base.metadata.create_all(bind=engine)
 
