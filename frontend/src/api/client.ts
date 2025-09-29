@@ -1,3 +1,8 @@
+/* =========================
+   ORIGINAL (commented out)
+   =========================
+import ... from ...
+// ...your previous code here...
 const BASE = import.meta.env.VITE_API_URL || "http://localhost:8000"
 
 export async function fetchJson(path: string, init?: RequestInit) {
@@ -7,4 +12,25 @@ export async function fetchJson(path: string, init?: RequestInit) {
   })
   if (!r.ok) throw new Error(await r.text())
   return r.json()
+}
+// Keep everything exactly as it was, just inside this block.
+*/
+
+/* ========== NEW ========== */
+const BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
+export async function fetchJson(path: string, init?: RequestInit) {
+  let token: string | null = null;
+  try { token = JSON.parse(localStorage.getItem("auth") || "null")?.token || null; } catch {}
+
+  const r = await fetch(`${BASE}${path}`, {
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init?.headers || {}),
+    },
+    ...init,
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
 }
