@@ -1,6 +1,25 @@
-@import "tailwindcss";
-body { font-family: ui-sans-serif, system-ui; }
-button { @apply px-3 py-1 rounded border; }
-input, select { @apply border rounded px-2 py-1; }
-label { @apply block mb-1; }
-form > div { @apply mb-3; }
+/* Global reset + single light theme (no auto dark mode) */
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+
+/* Explicit base colors so text never goes white-on-white */
+body {
+  background: #fafafa;   /* light background */
+  color: #111;           /* dark text */
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
+               "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+}
+
+/* Mild defaults you can reuse anywhere */
+.container { max-width: 520px; margin: 6rem auto; padding: 0 1rem; }
+button {
+  padding: 10px 14px;
+  border: 1px solid #c9c9c9;
+  border-radius: 10px;
+  background: #fff;
+  color: inherit;
+  cursor: pointer;
+}
+h1 { font-size: 1.6rem; margin: 0 0 1rem; }
+
+/* (No :root { color-scheme: ... } here) */
