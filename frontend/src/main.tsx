@@ -3,10 +3,10 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 
-import LoginPage from "./tsx_files/LoginPage";
-import StudentDashboard from "./tsx_files/StudentDashboard";
-import FacultyDashboard from "./tsx_files/FacultyDashboard";
-import SandboxApp from "./tsx_files/SandboxApp";
+import LoginPage from "./webpages/LoginPage";
+import StudentDashboard from "./webpages/StudentDashboard";
+import FacultyDashboard from "./webpages/FacultyDashboard";
+import SandboxApp from "./webpages/SandboxApp";
 import "./styles/index.css";
 
 import { AuthProvider, Protected, useAuth } from "./auth/AuthContext";
