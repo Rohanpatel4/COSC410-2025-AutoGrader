@@ -1,28 +1,25 @@
+/* ========== NEW ========== */
 import React from "react";
 import { createRoot } from "react-dom/client";
-import {
-  BrowserRouter,
-  Routes,
-  Route,
-  Navigate,
-  useLocation,
-} from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 
 import LoginPage from "./tsx_files/LoginPage";
 import StudentDashboard from "./tsx_files/StudentDashboard";
 import FacultyDashboard from "./tsx_files/FacultyDashboard";
-import SandboxApp from "./tsx_files/SandboxApp"; // unchanged
+import SandboxApp from "./tsx_files/SandboxApp";
 import "./styles/index.css";
 
-/** Decides what to show at /my based on role carried in navigation state */
+import { AuthProvider, Protected, useAuth } from "./auth/AuthContext";
+
 function RoleRouter() {
   const location = useLocation();
-  const role = (location.state as { role?: "faculty" | "student" } | undefined)?.role;
+  const { role } = useAuth();
+  const stateRole = (location.state as { role?: "faculty" | "student" } | undefined)?.role;
 
-  if (role === "faculty") return <FacultyDashboard />;
-  if (role === "student") return <StudentDashboard />;
+  const effectiveRole = role ?? stateRole;
 
-  // If someone hits /my directly without coming from login, push them to /login
+  if (effectiveRole === "faculty") return <FacultyDashboard />;
+  if (effectiveRole === "student") return <StudentDashboard />;
   return <Navigate to="/login" replace />;
 }
 
@@ -30,19 +27,27 @@ function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* default -> /login */}
         <Route path="/" element={<Navigate to="/login" replace />} />
-
-        {/* login (choose role, then go to /my) */}
         <Route path="/login" element={<LoginPage />} />
 
-        {/* this URL never shows role; RoleRouter decides which dashboard to render */}
-        <Route path="/my" element={<RoleRouter />} />
+        <Route
+          path="/my"
+          element={
+            <Protected>
+              <RoleRouter />
+            </Protected>
+          }
+        />
 
-        {/* your sandbox section remains accessible at /app/* */}
-        <Route path="/assignment/*" element={<SandboxApp />} />
+        <Route
+          path="/assignment/*"
+          element={
+            <Protected>
+              <SandboxApp />
+            </Protected>
+          }
+        />
 
-        {/* catch-all */}
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
@@ -51,4 +56,9 @@ function AppRouter() {
 
 const root = document.getElementById("root");
 if (!root) throw new Error("#root not found");
-createRoot(root).render(<AppRouter />);
+
+createRoot(root).render(
+  <AuthProvider>
+    <AppRouter />
+  </AuthProvider>
+);
