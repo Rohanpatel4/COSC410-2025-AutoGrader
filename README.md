@@ -12,6 +12,7 @@ python -m app.main
 cd ../frontend
 npm i
 export VITE_API_URL=http://localhost:8000
+# frontend url: http://localhost:5173/ and Ian Test
 npm run dev
 ```
 
