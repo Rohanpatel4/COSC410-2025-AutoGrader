@@ -1,5 +1,5 @@
 import os, uuid, json, shutil, hashlib, subprocess, shlex
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import List
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
@@ -42,11 +42,11 @@ def create_run(db: Session, submission_id: str, testsuite_id: str, runtime_id: s
 def execute_run(db: Session, run: m.Run):
     # Minimal placeholder executor: marks RUNNING then SUCCEEDED without real isolation
     run.status = m.RunStatus.RUNNING
-    run.started_at = datetime.utcnow()
+    run.started_at = datetime.now(UTC)
     db.commit()
     # TODO: integrate real sandbox + seccomp/AppArmor
     run.exit_code = 0
-    run.finished_at = datetime.utcnow()
+    run.finished_at = datetime.now(UTC)
     run.status = m.RunStatus.SUCCEEDED
     db.commit(); db.refresh(run)
     return run

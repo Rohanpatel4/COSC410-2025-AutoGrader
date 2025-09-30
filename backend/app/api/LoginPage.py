@@ -1,15 +1,16 @@
 from enum import Enum
-from typing import Literal, Optional
+from typing import Optional
 
 import sqlite3
 from sqlite3 import Connection
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, constr
+from pathlib import Path
 
 router = APIRouter(prefix="/login", tags=["login"])
 
-# TODO: set this to your real DB file
-DATABASE_PATH = "/absolute/path/to/your/database.db"
+# Point to backend/autograder.db regardless of where uvicorn is launched
+DATABASE_PATH = str(Path(__file__).resolve().parents[1] / "autograder.db")
 
 # ---------- DB helpers ----------
 
@@ -21,10 +22,10 @@ def get_db_connection() -> Connection:
     except sqlite3.Error as e:
         raise HTTPException(status_code=500, detail=f"Database connection error: {e}")
 
-def fetch_user_by_username(conn: Connection, username: str) -> Optional[sqlite3.Row]:
+def fetch_user_by_email(conn: Connection, email: str) -> Optional[sqlite3.Row]:
     cur = conn.execute(
-        "SELECT id, username, password, status FROM users WHERE username = ?",
-        (username,),
+        "SELECT user_id, email, password, role FROM users WHERE email = ?",
+        (email,),
     )
     return cur.fetchone()
 
@@ -33,12 +34,13 @@ def fetch_user_by_username(conn: Connection, username: str) -> Optional[sqlite3.
 class Role(str, Enum):
     student = "student"
     faculty = "faculty"
-    admin = "admin"  # future use
+    admin = "admin"
 
 class LoginRequest(BaseModel):
+    # Keep 'username' for compatibility, but it's actually the email in your DB
     username: constr(strip_whitespace=True, min_length=1)
     password: constr(min_length=1)
-    role: Role  # send "student" or "faculty" for now
+    role: Role  # must match users.role
 
 class LoginResponse(BaseModel):
     user_id: int
@@ -51,23 +53,26 @@ _INVALID = HTTPException(status_code=401, detail="Invalid username or password")
 @router.post("", response_model=LoginResponse)
 def login(payload: LoginRequest) -> LoginResponse:
     """
-    Verify username + password + role (status).
+    Verify email (sent as username) + password + role.
     On success, return user_id and status.
     On failure, return generic 401 (no info leak).
     """
     with get_db_connection() as conn:
-        row = fetch_user_by_username(conn, payload.username)
+        row = fetch_user_by_email(conn, payload.username)  # username is email in DB
         if row is None:
             raise _INVALID
 
-        # NOTE: You asked for plain-text password check.
-        # In production, store a hash (e.g., bcrypt) and verify the hash instead.
+        # Plaintext check (dev only). In prod, use bcrypt/argon2.
         if payload.password != row["password"]:
             raise _INVALID
 
-        # Role/status must match exactly
-        if payload.role != row["status"]:
-            # Per your request, treat mismatch as invalid credentials
+        # Role must match exactly
+        if payload.role != row["role"]:
             raise _INVALID
 
-        return LoginResponse(user_id=int(row["id"]), status=Role(row["status"]))
+        return LoginResponse(user_id=int(row["user_id"]), status=Role(row["role"]))
+    
+    
+
+
+

@@ -31,3 +31,12 @@ npm run test:cov
 docker compose up --build
 # visit http://localhost:8080
 ```
+
+# Run pytest with coverage (shows % covered per file) (From root directory)
+pytest --cov=app backend
+
+# Run pytest with coverage and see missing lines (From root directory)
+pytest --cov=app --cov-report=term-missing backend
+
+# Run pytest with coverage and fail if coverage < 90% (From root directory)
+pytest --cov=app --cov-report=term-missing --cov-fail-under=90 backend

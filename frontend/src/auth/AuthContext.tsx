@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useMemo, useState } from "react";
+import type { Role } from "../types/role";
 
 type Role = "faculty" | "student";
 type AuthState = { token: string | null; userId: string | null; role: Role | null };

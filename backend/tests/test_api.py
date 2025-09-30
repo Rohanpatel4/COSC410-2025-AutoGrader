@@ -18,7 +18,7 @@ def test_upload_and_list_files():
 def test_testsuite_and_submission_and_run():
     # upload files
     fc = b"input1"
-    sc = b"""print('solution')""".encode()
+    sc = "print('solution')".encode()
     f1 = client.post("/api/v1/files", files={"f": ("in.txt", fc, "text/plain")}, data={"category":"TEST_CASE"}).json()
     f2 = client.post("/api/v1/files", files={"f": ("sol.py", sc, "text/x-python")}, data={"category":"SUBMISSION"}).json()
     # create test suite and submission
