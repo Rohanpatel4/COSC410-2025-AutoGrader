@@ -98,7 +98,7 @@ export default function LoginPage() {
         <select id="role" value={role} onChange={e => setRole(e.target.value as Role)}>
           <option value="student">Student</option>
           <option value="faculty">Faculty</option>
-          <option value="admin">Admin</option>
+          {/* <option value="admin">Admin</option> */}
         </select>
 
         <label htmlFor="username">Email</label>
