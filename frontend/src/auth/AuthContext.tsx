@@ -20,7 +20,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUserId(userId);
     setRole(role);
     setToken(token);
-    // optional: persist in localStorage if you want refresh to keep session
+    // persist in local storage to avoid losing logged in state on refresh
     localStorage.setItem("auth", JSON.stringify({ userId, role, token }));
   };
 

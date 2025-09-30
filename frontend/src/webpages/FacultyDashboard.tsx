@@ -1,8 +1,6 @@
-/* =========================
-   ORIGINAL (commented out)
-   =========================
-import ... from ...
-// ...your previous code here...
+/*
+ORIGINAL
+//
 import React from "react";
 
 export default function FacultyDashboard() {
@@ -13,7 +11,7 @@ export default function FacultyDashboard() {
     </div>
   );
 }
-// Keep everything exactly as it was, just inside this block.
+//
 */
 
 /* ========== NEW ========== */

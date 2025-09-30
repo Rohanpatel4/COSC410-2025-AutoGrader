@@ -1,8 +1,6 @@
-/* =========================
-   ORIGINAL (commented out)
-   =========================
-import ... from ...
-// ...your previous code here...
+/*
+ORIGINAL
+//
 const BASE = import.meta.env.VITE_API_URL || "http://localhost:8000"
 
 export async function fetchJson(path: string, init?: RequestInit) {
@@ -13,7 +11,7 @@ export async function fetchJson(path: string, init?: RequestInit) {
   if (!r.ok) throw new Error(await r.text())
   return r.json()
 }
-// Keep everything exactly as it was, just inside this block.
+//
 */
 
 /* ========== NEW ========== */

@@ -1,10 +1,6 @@
-/* =========================
-   ORIGINAL (commented out)
-   =========================
-import ... from ...
-// ...your previous code here...
-
-
+/*
+ORIGINAL
+//
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import "../styles/LoginPage.css"; // keep or remove if you don't need per-page CSS
@@ -37,7 +33,7 @@ export default function LoginPage() {
     </div>
   );
 }
-// Keep everything exactly as it was, just inside this block.
+//
 */
 
 /* ========== CONNECTED TO BACKEND ========== */
