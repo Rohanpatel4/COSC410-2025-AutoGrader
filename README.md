@@ -13,7 +13,7 @@ cd ../frontend
 npm i
 export VITE_API_URL=http://localhost:8000
 # frontend url: http://localhost:5173/ and Ian Test
-npm run dev
+npm run dev # this to run frontend
 ```
 
 ## Tests & Coverage
@@ -21,6 +21,7 @@ npm run dev
 # Backend
 cd backend
 pytest -q --cov=app --cov-report=term-missing:skip-covered --cov-report=html --cov-fail-under=80
+uvicorn app.api.main:app --reload # this to run backend
 # Frontend
 cd ../frontend
 npm run test:cov
