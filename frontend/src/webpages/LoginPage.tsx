@@ -11,8 +11,8 @@ export default function LoginPage() {
   const authCtx = useAuth?.();
 
   const [role, setRole] = React.useState<Role>("student");
-  const [email, setEmail] = React.useState("alice@example.com");
-  const [password, setPassword] = React.useState("secret");
+  const [email, setEmail] = React.useState("");
+  const [password, setPassword] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
