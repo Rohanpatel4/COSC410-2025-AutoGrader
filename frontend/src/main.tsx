@@ -39,6 +39,10 @@ function AppRouter() {
           }
         />
 
+        {/*
+
+        LATER PUT THIS IN WHEN WE ARE FINISHED WITH THE SANDBOX!!!!!!!
+
         <Route
           path="/assignment/*"
           element={
@@ -46,8 +50,8 @@ function AppRouter() {
               <SandboxApp />
             </Protected>
           }
-        />
-
+        /> */}
+        <Route path="/assignment/*" element={<SandboxApp />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>

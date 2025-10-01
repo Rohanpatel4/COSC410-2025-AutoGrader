@@ -2,35 +2,39 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core.settings import settings
 from app.core.db import Base, engine
+from app.core.settings import settings  # keep if you use it elsewhere
 
-# Feature modules (routers):
+# Routers
 from .files import router as files_router
 from .testsuites import router as testsuites_router
 from .submissions import router as submissions_router
 from .runtimes import router as runtimes_router
 from .runs import router as runs_router
-from .LoginPage import router as login_router  # <- matches filename capitalization
+from .LoginPage import router as login_router
 
-# Create DB tables once at startup (alembic migrations are better later)
+# Init DB
 Base.metadata.create_all(bind=engine)
 
-# One app for everything
+# App
 app = FastAPI(title="AutoGrader API", version="1.0.0")
 
-# CORS (adjust as needed)
+# ---- CORS (dev, explicit) ----
+ALLOW_ORIGINS = ["http://localhost:5173"]
+print(">>> CORS allow_origins =", ALLOW_ORIGINS, flush=True)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.CORS_ORIGINS],  # or ["*"] during dev
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=ALLOW_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],   # you can tighten later
+    allow_headers=["*"],   # you can tighten later
 )
 
-# Mount all routers (prefixes can live here or inside each router)
-app.include_router(files_router,      prefix="/api/v1/files",       tags=["files"])
-app.include_router(testsuites_router, prefix="/api/v1/test-suites", tags=["test-suites"])
-app.include_router(submissions_router,prefix="/api/v1/submissions", tags=["submissions"])
-app.include_router(runtimes_router,   prefix="/api/v1/runtimes",    tags=["runtimes"])
-app.include_router(runs_router,       prefix="/api/v1/runs",        tags=["runs"])
-app.include_router(login_router,      prefix="/api/v1",       tags=["login"])
+# Routers (unchanged)
+app.include_router(files_router,       prefix="/api/v1/files",       tags=["files"])
+app.include_router(testsuites_router,  prefix="/api/v1/test-suites", tags=["test-suites"])
+app.include_router(submissions_router, prefix="/api/v1/submissions", tags=["submissions"])
+app.include_router(runtimes_router,    prefix="/api/v1/runtimes",    tags=["runtimes"])
+app.include_router(runs_router,        prefix="/api/v1/runs",        tags=["runs"])
+app.include_router(login_router,       prefix="/api/v1",             tags=["login"])
