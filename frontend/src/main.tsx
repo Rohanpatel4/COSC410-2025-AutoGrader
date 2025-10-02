@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-route
 import LoginPage from "./webpages/LoginPage";
 import StudentDashboard from "./webpages/StudentDashboard";
 import FacultyDashboard from "./webpages/FacultyDashboard";
+import CoursePage from "./webpages/CoursePage"; // ← added
 import SandboxApp from "./webpages/SandboxApp";
 import "./styles/index.css";
 
@@ -39,8 +40,17 @@ function AppRouter() {
           }
         />
 
-        {/*
+        {/* Protect the course page so only logged-in users can view it */}
+        <Route
+          path="/courses/:course_id"
+          element={
+            <Protected>
+              <CoursePage />
+            </Protected>
+          }
+        />
 
+        {/*
         LATER PUT THIS IN WHEN WE ARE FINISHED WITH THE SANDBOX!!!!!!!
 
         <Route
@@ -66,3 +76,4 @@ createRoot(root).render(
     <AppRouter />
   </AuthProvider>
 );
+

@@ -87,3 +87,24 @@ class RunOut(BaseModel):
     exit_code: Optional[int] = None
     stdout_path: Optional[str] = None
     stderr_path: Optional[str] = None
+
+class CourseIn(BaseModel):
+    course_id: str
+    name: str
+    description: Optional[str] = None
+    professor_id: str
+
+class CourseOut(CourseIn):
+    id: str
+    professor_name: Optional[str] = None
+
+class ListCoursesOut(BaseModel):
+    items: list[CourseOut]
+    nextCursor: Optional[str] = None
+
+class RegistrationIn(BaseModel):
+    student_id: str
+    course_id: str
+
+class RegistrationOut(RegistrationIn):
+    id: str

@@ -8,6 +8,8 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 alembic upgrade head || true
 python -m app.main
+uvicorn app.api.main_mock:app --reload # this to run mock backend
+uvicorn app.api.main:app --reload # this to run backend
 # Frontend
 cd ../frontend
 npm i
@@ -21,12 +23,10 @@ npm run dev # this to run frontend
 # Backend
 cd backend
 pytest -q --cov=app --cov-report=term-missing:skip-covered --cov-report=html --cov-fail-under=80
-uvicorn app.api.main:app --reload # this to run backend
 # Frontend
 cd ../frontend
 npm run test:cov
 ```
-
 ## Docker
 ```bash
 docker compose up --build
