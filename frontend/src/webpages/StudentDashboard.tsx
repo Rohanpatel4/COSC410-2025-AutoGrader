@@ -79,7 +79,6 @@ export default function StudentDashboard() {
         <Link to="/assignment">Go to Sandbox</Link>
         <button onClick={onLogout}>Log out</button>
       </div>
-
       <form onSubmit={onRegister} style={{ border: "1px solid #ddd", padding: 12, borderRadius: 8 }}>
         <label htmlFor="course-search">Register for courses</label>
         <div style={{ display: "flex", gap: 8 }}>
@@ -109,8 +108,11 @@ export default function StudentDashboard() {
       ) : (
         <p>Not enrolled in any courses yet.</p>
       )}
+      <div className="student-placeholder-buttons" style={{ marginTop: 24 }}>
+        <button className="course-lookup-btn">Button 1</button>
+        <button className="course-lookup-btn">Button 2</button>
+        <button className="course-lookup-btn">Button 3</button>
+      </div>
     </div>
   );
 }
-
-

@@ -1,0 +1,26 @@
+/* Placeholder styles for future 'Look up Course ID' buttons for students */
+.course-lookup-btn {
+    display: inline-block;
+    padding: 10px 18px;
+    background-color: #4285f4;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-size: 1rem;
+    cursor: pointer;
+    margin: 12px 0;
+    transition: background 0.2s;
+  }
+  
+  .course-lookup-btn:hover,
+  .course-lookup-btn:focus {
+    background-color: #357ae8;
+    outline: none;
+  }
+  
+  /* Example of disabled state for future use */
+  .course-lookup-btn:disabled {
+    background-color: #c0c0c0;
+    color: #666;
+    cursor: not-allowed;
+  }
