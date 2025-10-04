@@ -1,7 +1,7 @@
 # backend/app/api/mock_registrations.py
 from fastapi import APIRouter, HTTPException
 from app.schemas.schemas import RegistrationIn, RegistrationOut, CourseOut
-from .mock_db import COURSES, REGISTRATIONS
+from app.mock.mock_db import COURSES, REGISTRATIONS
 import time
 
 router = APIRouter()

@@ -1,7 +1,7 @@
 # backend/app/api/mock_courses.py
 from fastapi import APIRouter, HTTPException, Query
 from app.schemas.schemas import CourseIn, CourseOut, ListCoursesOut
-from app.api.mock_db import COURSES
+from app.mock.mock_db import COURSES
 import time
 
 router = APIRouter()

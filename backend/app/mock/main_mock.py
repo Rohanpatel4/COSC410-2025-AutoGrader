@@ -3,16 +3,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 # keep any real routers you still need in dev (files, runs, login, etc.)
-from .files import router as files_router
-from .testsuites import router as testsuites_router
-from .submissions import router as submissions_router
-from .runtimes import router as runtimes_router
-from .runs import router as runs_router
-from .LoginPage import router as login_router
+from app.api.files import router as files_router
+from app.api.testsuites import router as testsuites_router
+from app.api.submissions import router as submissions_router
+from app.api.runtimes import router as runtimes_router
+from app.api.runs import router as runs_router
+from app.api.LoginPage import router as login_router
 
 # mock routers (same paths/shapes as real)
-from .mock_courses import router as mock_courses_router
-from .mock_registrations import router as mock_registrations_router
+from app.mock.mock_courses import router as mock_courses_router
+from app.mock.mock_registrations import router as mock_registrations_router
 
 app = FastAPI(title="AutoGrader API (MOCK)", version="1.0.0")
 
