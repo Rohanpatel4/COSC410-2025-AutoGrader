@@ -1,32 +1,18 @@
-/*
-ORIGINAL
-//
-import React from "react";
-
-export default function StudentDashboard() {
-  return (
-    <div className="container">
-      <h1>Student</h1>
-      <p>User ID: </p>
-    </div>
-  );
-}
-//
-*/
-
-/* ========== NEW ========== */
+/* ========== NEW (numeric IDs) ========== */
 import React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { fetchJson } from "../api/client";
-import type { Course } from "../types/courses"; // 👈 moved here
+import type { Course } from "../types/courses";
 
 export default function StudentDashboard() {
   const { userId, logout } = useAuth();
   const navigate = useNavigate();
-  const studentId = userId ?? "u1";
 
-  const [query, setQuery] = React.useState("");
+  // Coerce to number; fall back to 0 (harmless) if not present.
+  const studentId = Number(userId ?? 0);
+
+  const [query, setQuery] = React.useState(""); // user types a number, we parse it
   const [mine, setMine] = React.useState<Course[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [msg, setMsg] = React.useState<string | null>(null);
@@ -51,17 +37,25 @@ export default function StudentDashboard() {
     }
   }
 
-  React.useEffect(() => { loadMyCourses(); }, []);
+  React.useEffect(() => {
+    loadMyCourses();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function onRegister(e: React.FormEvent) {
     e.preventDefault();
-    const code = query.trim();
-    if (!code) return;
+    const trimmed = query.trim();
+    const courseIdNum = Number(trimmed);
+    if (!trimmed || !Number.isFinite(courseIdNum)) {
+      setMsg("Please enter a numeric Course ID");
+      return;
+    }
+
     setMsg(null);
     try {
       await fetchJson("/api/v1/registrations", {
         method: "POST",
-        body: JSON.stringify({ student_id: studentId, course_id: code }),
+        body: JSON.stringify({ student_id: studentId, course_id: courseIdNum }),
       });
       setMsg("Registered!");
       setQuery("");
@@ -75,22 +69,35 @@ export default function StudentDashboard() {
     <div className="container">
       <h1>Student</h1>
       <p>User ID: {userId ?? "—"}</p>
+
       <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
         <Link to="/assignment">Go to Sandbox</Link>
         <button onClick={onLogout}>Log out</button>
       </div>
-      <form onSubmit={onRegister} style={{ border: "1px solid #ddd", padding: 12, borderRadius: 8 }}>
+
+      <form
+        onSubmit={onRegister}
+        style={{ border: "1px solid #ddd", padding: 12, borderRadius: 8 }}
+      >
         <label htmlFor="course-search">Register for courses</label>
         <div style={{ display: "flex", gap: 8 }}>
           <input
             id="course-search"
-            placeholder="Enter Course ID (e.g., COSC-410)"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            placeholder="Enter numeric Course ID (e.g., 4101)"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
-          <button type="submit" disabled={!query.trim()}>Register</button>
+          <button type="submit" disabled={!query.trim()}>
+            Register
+          </button>
         </div>
-        {msg && <p role="status" aria-live="polite">{msg}</p>}
+        {msg && (
+          <p role="status" aria-live="polite">
+            {msg}
+          </p>
+        )}
       </form>
 
       <h2 style={{ marginTop: 16 }}>My Courses</h2>
@@ -100,7 +107,9 @@ export default function StudentDashboard() {
         <ul>
           {mine.map((c) => (
             <li key={c.id}>
-              <Link to={`/courses/${encodeURIComponent(c.course_id)}`}>{c.name}</Link>{" "}
+              <Link to={`/courses/${encodeURIComponent(c.course_id)}`}>
+                {c.name}
+              </Link>{" "}
               <span style={{ color: "#666" }}>({c.course_id})</span>
             </li>
           ))}
@@ -108,6 +117,7 @@ export default function StudentDashboard() {
       ) : (
         <p>Not enrolled in any courses yet.</p>
       )}
+
       <div className="student-placeholder-buttons" style={{ marginTop: 24 }}>
         <button className="course-lookup-btn">Button 1</button>
         <button className="course-lookup-btn">Button 2</button>

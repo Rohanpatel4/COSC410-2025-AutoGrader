@@ -12,11 +12,12 @@ def register(payload: RegistrationIn):
         raise HTTPException(status_code=404, detail="Invalid course")
     if any(r["student_id"] == payload.student_id and r["course_id"] == payload.course_id for r in REGISTRATIONS):
         raise HTTPException(status_code=409, detail="Already registered")
-    rec = {"id": f"r_{int(time.time()*1000)}", **payload.dict()}
+    rec = {"id": int(time.time()*1000), **payload.model_dump()}
     REGISTRATIONS.append(rec)
     return rec
 
 @router.get("/students/{student_id}/courses", response_model=list[CourseOut])
-def student_courses(student_id: str):
+def student_courses(student_id: int):  # int path param
     course_ids = {r["course_id"] for r in REGISTRATIONS if r["student_id"] == student_id}
     return [c for c in COURSES if c["course_id"] in course_ids]
+

@@ -1,11 +1,11 @@
 # backend/app/api/mock_db.py
 COURSES: list[dict] = [
     {
-        "id": "c1",
-        "course_id": "COSC-410",
+        "id": 1,
+        "course_id": 410,
         "name": "Software Engineering",
         "description": "Practical SE",
-        "professor_id": "u_faculty_1",
+        "professor_id": 3,
         "professor_name": "Prof. Ada",
     }
 ]
