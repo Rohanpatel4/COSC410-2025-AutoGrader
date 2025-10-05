@@ -2,6 +2,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.routers.main_db import router as db_router
+
 from app.core.db import Base, engine
 from app.core.settings import settings  # keep if you use it elsewhere
 
@@ -40,3 +42,4 @@ app.include_router(runtimes_router,    prefix="/api/v1/runtimes",    tags=["runt
 app.include_router(runs_router,        prefix="/api/v1/runs",        tags=["runs"])
 app.include_router(login_router,       prefix="/api/v1",             tags=["login"])
 app.include_router(judge0_router,      prefix="/api/v1/judge0",      tags=["judge0"])
+app.include_router(db_router)
