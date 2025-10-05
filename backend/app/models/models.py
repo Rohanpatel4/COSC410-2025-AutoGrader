@@ -61,3 +61,8 @@ class Run(Base):
     exit_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
     stdout_path: Mapped[str | None] = mapped_column(String, nullable=True)
     stderr_path: Mapped[str | None] = mapped_column(String, nullable=True)
+
+# ORM
+# Defines the database schema using SQLAlchemy ORM.
+# Each class corresponds to a table in the database.
+# if changed upgrade db with `alembic revision --autogenerate -m "msg"` + `alembic upgrade head` or something like that AI did this 

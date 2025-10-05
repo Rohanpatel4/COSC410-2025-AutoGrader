@@ -89,13 +89,13 @@ class RunOut(BaseModel):
     stderr_path: Optional[str] = None
 
 class CourseIn(BaseModel):
-    course_id: str
+    course_id: int
     name: str
     description: Optional[str] = None
-    professor_id: str
+    professor_id: int
 
 class CourseOut(CourseIn):
-    id: str
+    id: int
     professor_name: Optional[str] = None
 
 class ListCoursesOut(BaseModel):
@@ -103,8 +103,8 @@ class ListCoursesOut(BaseModel):
     nextCursor: Optional[str] = None
 
 class RegistrationIn(BaseModel):
-    student_id: str
-    course_id: str
+    student_id: int
+    course_id: int
 
 class RegistrationOut(RegistrationIn):
-    id: str
+    id: int
