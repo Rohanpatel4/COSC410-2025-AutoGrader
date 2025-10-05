@@ -1,7 +1,7 @@
 import enum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import Integer, Enum, String, Boolean, Text, ForeignKey, DateTime, Column, Table
-from backend.db import Base
+from app.core.db import Base
 
 user_courses = Table(
     "user_courses",
@@ -57,7 +57,6 @@ class Assignment(Base):
     course_id: Mapped[int] = mapped_column(ForeignKey("courses.id"), nullable=False)
 
     course: Mapped["Course"] = relationship(back_populates="assignments")
-
 
 #Second table redundant
 user_course_association = Table(

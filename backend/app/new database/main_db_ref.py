@@ -1,7 +1,8 @@
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
-from backend import models, schemas
-from backend.db import SessionLocal, engine
+from app.models import models
+from app.schemas import schemas
+from app.core.db import SessionLocal, engine
 
 
 # Ensure the database table exists
