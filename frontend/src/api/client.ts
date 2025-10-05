@@ -19,7 +19,7 @@ export const BASE =
   import.meta.env.VITE_API_URL || "http://localhost:8000";
   
 // JSON helper (kept from your version, with token support)
-export async function fetchJson(path: string, init?: RequestInit) {
+export async function fetchJson<T = unknown>(path: string, init?: RequestInit): Promise<T> {
   let token: string | null = null;
   try {
     token = JSON.parse(localStorage.getItem("auth") || "null")?.token || null;
@@ -35,7 +35,7 @@ export async function fetchJson(path: string, init?: RequestInit) {
   });
 
   if (!r.ok) throw new Error(await r.text());
-  return r.json();
+  return (await r.json()) as T;
 }
 
 // (Optional) export an upload helper from here if you want:
