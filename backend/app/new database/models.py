@@ -58,6 +58,8 @@ class Assignment(Base):
 
     course: Mapped["Course"] = relationship(back_populates="assignments")
 
+
+#Second table redundant
 user_course_association = Table(
     "user_course_association",
     Base.metadata,
