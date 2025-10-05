@@ -6,9 +6,19 @@ let FILES = [
   { id: "f_tc_1",  name: "test_input_1.txt", category: "TEST_CASE" },
 ];
 
+// test COURSES and REGISTRATIONS to see if they work. lines 10-15 are what I added in
+let COURSES = [
+  { id: "c1", course_id: "COSC-410", name: "Software Engineering", description: "SE", professor_id: "prof1", professor_name: "Prof. Ada" },
+  { id: "c2", course_id: "COSC-150", name: "Intro CS", professor_id: "prof1" },
+];
+
+let REGISTRATIONS: Array<{ id: string; student_id: string; course_id: string }> = [];
+
 let SUBMISSIONS = [{ id: "s1", name: "Submission One", file_ids: ["f_sub_1"] }];
 let TEST_SUITES  = [{ id: "ts1", name: "Suite One", file_ids: ["f_tc_1"] }];
 let RUNTIMES     = [{ id: "rt_py_3_11", name: "Python 3.11", language: "python", version: "3.11" }];
+
+
 
 // (Optional) Simple auth gate
 function requireAuth(req: Request) {
