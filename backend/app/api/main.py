@@ -12,6 +12,7 @@ from .submissions import router as submissions_router
 from .runtimes import router as runtimes_router
 from .runs import router as runs_router
 from .LoginPage import router as login_router
+from .judge0 import router as judge0_router
 
 # Init DB
 Base.metadata.create_all(bind=engine)
@@ -38,3 +39,4 @@ app.include_router(submissions_router, prefix="/api/v1/submissions", tags=["subm
 app.include_router(runtimes_router,    prefix="/api/v1/runtimes",    tags=["runtimes"])
 app.include_router(runs_router,        prefix="/api/v1/runs",        tags=["runs"])
 app.include_router(login_router,       prefix="/api/v1",             tags=["login"])
+app.include_router(judge0_router,      prefix="/api/v1/judge0",      tags=["judge0"])

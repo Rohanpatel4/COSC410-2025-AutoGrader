@@ -1,4 +1,5 @@
 from fastapi import APIRouter, UploadFile, File as UpFile, Form, Depends, HTTPException
+from fastapi.responses import FileResponse
 from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -8,6 +9,7 @@ from app.models.models import File, FileCategory
 from app.schemas.schemas import FileOut
 from app.services.services import store_uploaded_file
 import traceback
+import os
 
 router = APIRouter()
 
@@ -73,3 +75,17 @@ def delete_file(id: str, db: Session = Depends(get_db)):
     db.delete(e)
     db.commit()
     return {"ok": True}
+
+@router.get("/results/{run_id}")
+def get_run_results(run_id: str, db: Session = Depends(get_db)):
+    """Get execution results for a run."""
+    from app.models.models import Run
+
+    run = db.get(Run, run_id)
+    if not run or not run.stdout_path:
+        raise HTTPException(404, "Run not found or no results available")
+
+    if not os.path.exists(run.stdout_path):
+        raise HTTPException(404, "Results file not found")
+
+    return FileResponse(run.stdout_path, media_type='application/json')

@@ -54,6 +54,7 @@ class SubmissionOut(BaseModel):
 class RuntimeCreate(BaseModel):
     language: str
     version: str
+    judge0_id: int
     host_path: str
     compile_cmd: Optional[str] = None
     run_cmd: str
@@ -64,6 +65,7 @@ class RuntimeOut(BaseModel):
     id: str
     language: str
     version: str
+    judge0_id: int
     host_path: str
     compile_cmd: Optional[str] = None
     run_cmd: str

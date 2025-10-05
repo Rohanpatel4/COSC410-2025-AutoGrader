@@ -4,14 +4,37 @@ services:
       context: .
       dockerfile: infra/docker/backend.Dockerfile
     environment:
-      - DATABASE_URL=sqlite:///./app.db
+      - DATABASE_URL=sqlite:///./data/app.db
       - CORS_ORIGINS=http://localhost:5173
+      - JUDGE0_URL=http://judge0:2358
     volumes:
-      - db_data:/app/app.db
+      - db_data:/app/data
+      - storage_data:/app/storage
     healthcheck:
       test: ["CMD", "python", "-c", "import socket; import sys; import time; import urllib.request as u; u.urlopen('http://localhost:8000/docs'); print('ok')"]
       interval: 10s
       timeout: 5s
+      retries: 5
+    depends_on:
+      - judge0
+  judge0:
+    image: judge0/judge0:latest
+    environment:
+      - JUDGE0_DISABLE_INTERNET=true
+      - JUDGE0_MAX_QUEUE_SIZE=100
+      - JUDGE0_MAX_RUNTIME_CPU_TIME=10
+      - JUDGE0_MAX_RUNTIME_MEMORY=512000000
+      - JUDGE0_MAX_RUNTIME_OUTPUT_SIZE=1024000
+      - JUDGE0_MAX_RUNTIME_STACK_SIZE=128000000
+    ports:
+      - "2358:2358"
+    volumes:
+      - judge0_data:/var/lib/judge0
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:2358/languages"]
+      interval: 30s
+      timeout: 10s
       retries: 5
   frontend:
     build:
@@ -25,3 +48,5 @@ services:
       - backend
 volumes:
   db_data:
+  storage_data:
+  judge0_data:

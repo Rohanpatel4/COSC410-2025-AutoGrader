@@ -9,3 +9,5 @@ psycopg[binary]>=3.2.1
 pytest
 pytest-cov
 httpx
+requests>=2.31.0
+aiohttp>=3.9.0

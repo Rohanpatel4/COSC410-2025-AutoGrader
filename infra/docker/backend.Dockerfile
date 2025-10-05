@@ -4,6 +4,7 @@ WORKDIR /app
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY backend /app
-ENV DATABASE_URL=sqlite:///./app.db
+RUN mkdir -p /app/data
+ENV DATABASE_URL=sqlite:///./data/app.db
 EXPOSE 8000
 CMD ["python","-m","app.main"]

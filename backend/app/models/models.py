@@ -43,6 +43,7 @@ class Runtime(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True)
     language: Mapped[str] = mapped_column(String, nullable=False)
     version: Mapped[str] = mapped_column(String, nullable=False)
+    judge0_id: Mapped[int] = mapped_column(Integer, nullable=False)
     host_path: Mapped[str] = mapped_column(String, nullable=False)
     compile_cmd: Mapped[str | None] = mapped_column(String, nullable=True)
     run_cmd: Mapped[str] = mapped_column(String, nullable=False)
