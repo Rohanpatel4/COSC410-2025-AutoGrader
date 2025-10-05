@@ -33,7 +33,7 @@ class Course(Base):
     __tablename__ = "courses"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    course_id: Mapped[str] = mapped_column(String(255))
+    course_tag: Mapped[str] = mapped_column(String(255))
     name: Mapped[str] = mapped_column(String(255))
     description: Mapped[str] = mapped_column(String(255))
     
@@ -43,6 +43,20 @@ class Course(Base):
         secondary="user_course_association",
         back_populates="courses"
     )
+
+    assignments: Mapped[list["Assignment"]] = relationship(
+        back_populates="course", cascade="all, delete-orphan"
+    )
+
+class Assignment(Base):
+    __tablename__ = "assignments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(255))
+    description: Mapped[str] = mapped_column(String(255))
+    course_id: Mapped[int] = mapped_column(ForeignKey("courses.id"), nullable=False)
+
+    course: Mapped["Course"] = relationship(back_populates="assignments")
 
 user_course_association = Table(
     "user_course_association",

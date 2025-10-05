@@ -18,20 +18,35 @@ class UserRead(BaseModel):
         from_attributes = True
 
 class CourseCreate(BaseModel):
-    course_id: str
+    course_tag: str
     name: str
     description: Optional[str] 
     
 
 class CourseRead(BaseModel):
     id: int
-    course_id: str
+    course_tag: str
     name: str
     description: Optional[str] 
     
     class Config:
         from_attributes = True
 
+class AssignmentCreate(BaseModel):
+    title: str
+    description: Optional[str]
+    course_id: int
+
+
+class AssignmentRead(BaseModel):
+    id: int
+    title: str
+    course_id: int
+    description: Optional[str]
+
+    class Config:
+        from_attributes = True
+    
 
 
 
