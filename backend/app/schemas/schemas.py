@@ -40,7 +40,7 @@ class TestSuiteOut(BaseModel):
     file_ids: List[str]
     created_at: datetime
 
-class SubmissionCreate(BaseModel):
+'''class SubmissionCreate(BaseModel):
     name: str
     file_ids: List[str]
 
@@ -49,7 +49,7 @@ class SubmissionOut(BaseModel):
     id: str
     name: str
     file_ids: List[str]
-    created_at: datetime
+    created_at: datetime'''
 
 class RuntimeCreate(BaseModel):
     language: str
@@ -90,7 +90,7 @@ class RunOut(BaseModel):
     stdout_path: Optional[str] = None
     stderr_path: Optional[str] = None
 
-class CourseIn(BaseModel):
+'''class CourseIn(BaseModel):
     course_id: int
     name: str
     description: Optional[str] = None
@@ -109,4 +109,55 @@ class RegistrationIn(BaseModel):
     course_id: int
 
 class RegistrationOut(RegistrationIn):
+    id: int'''
+
+class RoleEnum(str, Enum):
+    student = "student"
+    faculty = "faculty"
+
+class UserCreate(BaseModel):
+    role: RoleEnum
+    name: str
+
+class UserRead(BaseModel):
     id: int
+    role: RoleEnum
+    name: str
+    class Config:
+        from_attributes = True
+
+class CourseCreate(BaseModel):
+    course_tag: str
+    name: str
+    description: Optional[str] 
+    
+
+class CourseRead(BaseModel):
+    id: int
+    course_tag: str
+    name: str
+    description: Optional[str] 
+    
+    class Config:
+        from_attributes = True
+
+class AssignmentCreate(BaseModel):
+    title: str
+    description: Optional[str]
+    course_id: int
+
+
+class AssignmentRead(BaseModel):
+    id: int
+    title: str
+    course_id: int
+    description: Optional[str]
+
+    class Config:
+        from_attributes = True
+    
+
+
+
+
+    
