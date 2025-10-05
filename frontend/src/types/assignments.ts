@@ -3,9 +3,9 @@ export type Assignment = {
     course_id: string;
     title: string;
     description?: string | null;
-    test_file_id: string;
+    test_file: File;
     submission_limit?: number | null;
-    start_at?: string | null;  // ISO timestamps
-    end_at?: string | null;
+    start_at?: Date | null;  // Date object in client
+    end_at?: Date | null;
     submission_count?: number; // server-provided count
   };

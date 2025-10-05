@@ -7,6 +7,8 @@ import LoginPage from "./webpages/LoginPage";
 import StudentDashboard from "./webpages/StudentDashboard";
 import FacultyDashboard from "./webpages/FacultyDashboard";
 import CoursePage from "./webpages/CoursePage"; // ← added
+import AssignmentsPage from "./webpages/AssignmentsPage"; // add this
+// inside <Routes> (before the "*" route)
 import SandboxApp from "./webpages/SandboxApp";
 import "./styles/index.css";
 
@@ -62,6 +64,7 @@ function AppRouter() {
           }
         /> */}
         <Route path="/assignment/*" element={<SandboxApp />} />
+        <Route path="/stuassignment/*" element={<AssignmentsPage />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
