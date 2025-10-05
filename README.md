@@ -13,6 +13,7 @@ uvicorn app.api.main:app --reload # this to run backend
 # Frontend
 cd ../frontend
 npm i
+npm test # this to run tests
 export VITE_API_URL=http://localhost:8000
 # frontend url: http://localhost:5173/ and Ian Test
 npm run dev # this to run frontend
