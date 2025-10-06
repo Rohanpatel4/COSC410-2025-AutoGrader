@@ -150,6 +150,7 @@ class AssignmentCreate(BaseModel):
     title: str
     description: Optional[str]
     course_id: int
+    sub_limit: int
 
 
 class AssignmentRead(BaseModel):
@@ -157,6 +158,7 @@ class AssignmentRead(BaseModel):
     title: str
     course_id: int
     description: Optional[str]
+    sub_limit: int
 
     class Config:
         from_attributes = True

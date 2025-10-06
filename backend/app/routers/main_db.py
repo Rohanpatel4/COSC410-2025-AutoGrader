@@ -51,7 +51,8 @@ def create_assignment(assignment: schemas.AssignmentCreate, db: Session = Depend
     new_assignment = models.Assignment(
         title=assignment.title,
         description=assignment.description,
-        course_id=assignment.course_id
+        course_id=assignment.course_id,
+        sub_limit=assignment.sub_limit
     )
     db.add(new_assignment)
     db.commit()
