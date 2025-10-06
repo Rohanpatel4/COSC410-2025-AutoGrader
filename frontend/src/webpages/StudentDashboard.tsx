@@ -111,6 +111,10 @@ export default function StudentDashboard() {
                 {c.name}
               </Link>{" "}
               <span style={{ color: "#666" }}>({c.course_id})</span>
+              <span style={{ marginLeft: 8, color: "#666" }}>
+                {/* Line 116 shows professor name for who is teaching course */}
+              — Instructor: {c.professor_name ?? `#${c.professor_id}`} 
+              </span>
             </li>
           ))}
         </ul>
