@@ -42,4 +42,4 @@ app.include_router(runtimes_router,    prefix="/api/v1/runtimes",    tags=["runt
 app.include_router(runs_router,        prefix="/api/v1/runs",        tags=["runs"])
 app.include_router(login_router,       prefix="/api/v1",             tags=["login"])
 app.include_router(judge0_router,      prefix="/api/v1/judge0",      tags=["judge0"])
-app.include_router(db_router)
+app.include_router(db_router, prefix="/api/v1", tags=["db"])

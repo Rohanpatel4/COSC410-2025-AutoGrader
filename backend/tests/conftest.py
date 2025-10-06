@@ -1,6 +1,8 @@
 # backend/tests/conftest.py
 import os
 import sys
+import subprocess
+import time
 from pathlib import Path
 import shutil
 import tempfile
@@ -18,6 +20,27 @@ from app.core.db import Base
 from app.core import db as core_db  # has Base, engine, SessionLocal maybe
 from app.api.main import app
 
+# Path to the mock Judge0 server
+MOCK_JUDGE0_PATH = ROOT.parent / "mock_judge0_server.py"
+
+@pytest.fixture(scope="session", autouse=True)
+def mock_judge0_server():
+    """Start mock Judge0 server for tests."""
+    print("Starting mock Judge0 server...")
+    server_process = subprocess.Popen([
+        sys.executable, str(MOCK_JUDGE0_PATH)
+    ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    # Wait a bit for server to start
+    time.sleep(2)
+
+    try:
+        yield server_process
+    finally:
+        print("Stopping mock Judge0 server...")
+        server_process.terminate()
+        server_process.wait(timeout=5)
+
 @pytest.fixture(scope="session", autouse=True)
 def test_isolated_db_and_storage():
     """
@@ -34,6 +57,9 @@ def test_isolated_db_and_storage():
     # If your code uses a settings var for storage, set it here.
     # Example (adjust to your project):
     os.environ["STORAGE_DIR"] = str(test_storage_dir)
+
+    # Configure Judge0 client to use localhost for tests
+    os.environ["JUDGE0_URL"] = "http://localhost:2358"
 
     # Build an engine for this temp DB
     engine = create_engine(

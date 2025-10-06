@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Enum, Integer, Boolean, Text, ForeignKey, DateTime
+from sqlalchemy import Column, String, Enum, Integer, Boolean, Text, ForeignKey, DateTime, Table
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from datetime import datetime, UTC
 import enum
@@ -63,11 +63,11 @@ class Run(Base):
     stdout_path: Mapped[str | None] = mapped_column(String, nullable=True)
     stderr_path: Mapped[str | None] = mapped_column(String, nullable=True)
 
-user_courses = Table(
-    "user_courses",
+user_course_association = Table(
+    "user_course_association",
     Base.metadata,
-    Column("user_id", ForeignKey("users.id"), primary_key=True),
-    Column("course_id", ForeignKey("courses.id"), primary_key=True),
+    Column("user_id", ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
+    Column("course_id", ForeignKey("courses.id", ondelete="CASCADE"), primary_key=True),
 )
 
 # Define allowed roles
@@ -84,7 +84,7 @@ class User(Base):
 
     courses = relationship(
         "Course",
-        secondary=user_courses,
+        secondary=user_course_association,
         back_populates="professors"
     )
 
@@ -124,6 +124,7 @@ user_course_association = Table(
     Base.metadata,
     Column("user_id", ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
     Column("course_id", ForeignKey("courses.id", ondelete="CASCADE"), primary_key=True),
+    extend_existing=True
 )
 
 # ORM

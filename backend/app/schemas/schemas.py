@@ -1,7 +1,8 @@
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_serializer
 from typing import List, Optional
 from datetime import datetime
 from enum import Enum
+import json
 
 class FileCategory(str, Enum):
     TEST_CASE = "TEST_CASE"
@@ -40,7 +41,7 @@ class TestSuiteOut(BaseModel):
     file_ids: List[str]
     created_at: datetime
 
-'''class SubmissionCreate(BaseModel):
+class SubmissionCreate(BaseModel):
     name: str
     file_ids: List[str]
 
@@ -48,8 +49,12 @@ class SubmissionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
     name: str
-    file_ids: List[str]
-    created_at: datetime'''
+    file_ids: str  # This will be converted from JSON string to list
+    created_at: datetime
+
+    @field_serializer('file_ids')
+    def serialize_file_ids(self, value: str) -> List[str]:
+        return json.loads(value)
 
 class RuntimeCreate(BaseModel):
     language: str
