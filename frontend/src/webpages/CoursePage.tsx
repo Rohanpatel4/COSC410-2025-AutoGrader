@@ -5,6 +5,8 @@ import { useParams, Link } from "react-router-dom";
 import { fetchJson } from "../api/client";
 import type { Course } from "../types/courses";
 
+
+
 export default function CoursePage() {
   const { course_id = "" } = useParams<{ course_id: string }>();
 
@@ -74,11 +76,12 @@ export default function CoursePage() {
 import React from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { fetchJson } from "../api/client";
+import type { Course } from "../types/courses";
 
 // Dummy types—adjust as needed to match your backend.
 type Student = { student_id: string; name?: string };
 type Faculty = { faculty_id: string; name?: string };
-type Assignment = { assignment_id: string; title: string };
+type Assignment = { assignment_id: string; title: string; submission_count?: number; };
 
 export default function CoursePage() {
   const { course_id = "" } = useParams<{ course_id: string }>();
@@ -88,6 +91,7 @@ export default function CoursePage() {
   const [faculty, setFaculty] = React.useState<Faculty[]>([]);
   const [assignments, setAssignments] = React.useState<Assignment[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [newTitle, setNewTitle] = React.useState("");
 
   // Placeholder: replace with real faculty auth check
   const isFaculty = true;
@@ -121,6 +125,24 @@ export default function CoursePage() {
     // TODO: call DELETE endpoint, update UI
     alert(`Delete assignment ${assignment_id} (not implemented)`);
   };
+
+  async function handleCreateAssignment() {
+    if (!newTitle.trim()) return alert("Please enter a title");
+
+    try {
+      const res = await fetch(`/api/v1/courses/${course_id}/assignments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: newTitle }),
+      });
+      if (!res.ok) throw new Error(`Failed to create assignment: ${res.statusText}`);
+      const created = await res.json();
+      setAssignments(prev => [...prev, created]);
+      setNewTitle("");
+    } catch (err: any) {
+      alert(err.message);
+    }
+  }
 
   return (
     <div className="container">
@@ -168,6 +190,40 @@ export default function CoursePage() {
           ))}
         </ul>
       )}
+
+
+      {/* 🆕 Assignment Creation Form */}
+      {isFaculty && (
+        <div style={{ marginTop: 24, marginBottom: 16 }}>
+          <h3>Create New Assignment</h3>
+          <input
+            type="text"
+            placeholder="New assignment title"
+            value={newTitle}
+            onChange={e => setNewTitle(e.target.value)}
+            style={{
+              padding: 6,
+              marginRight: 8,
+              borderRadius: 4,
+              border: "1px solid #ccc",
+            }}
+          />
+          <button
+            onClick={handleCreateAssignment}
+            style={{
+              background: "#34a853",
+              color: "#fff",
+              border: "none",
+              borderRadius: 6,
+              padding: "6px 12px",
+              cursor: "pointer"
+            }}
+          >
+            ➕ Create Assignment
+          </button>
+        </div>
+      )}      
+
 
       {/* Assignments List */}
       <h2>Assignments</h2>
