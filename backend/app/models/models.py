@@ -5,7 +5,7 @@ import enum
 from app.core.db import Base
 
 class FileCategory(str, enum.Enum):
-    TEST_CASE = "TEST_CASE"
+    TEST_FILE = "TEST_FILE"
     SUBMISSION = "SUBMISSION"
 
 class RunStatus(str, enum.Enum):
@@ -120,13 +120,24 @@ class Assignment(Base):
     course: Mapped["Course"] = relationship(back_populates="assignments")
 
 class TestCase(Base):
-    __tablename__ = "test_cases"
+    __tablename__ = "test_files"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     assignment_id: Mapped[int] = mapped_column(ForeignKey("assignments.id"), nullable=False)
     var_char: Mapped[str] = mapped_column(String(255))
 
-    assignment: Mapped["Assignment"] = relationship(back_populates="test_cases")
+    assignment: Mapped["Assignment"] = relationship(back_populates="test_files")
+
+class StudentSubmission(Base):
+    __tablename__ = "student_submissions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    assignment_id: Mapped[int] = mapped_column(ForeignKey("assignments.id"), nullable=False)
+    grade: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    student: Mapped["User"] = relationship()
+    assignment: Mapped["Assignment"] = relationship()
 
 #Second table redundant
 user_course_association = Table(

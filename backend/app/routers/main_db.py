@@ -78,22 +78,50 @@ def get_assignment(assignment_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Assignment not found")
     return assignment
 
-@router.post("/test_cases", response_model=schemas.TestCaseRead)
-def create_test_case(test_case: schemas.TestCaseCreate, db: Session = Depends(get_db)):
-    assignment = db.query(models.Assignment).filter(models.Assignment.id == test_case.assignment_id).first()
+@router.post("/test_files", response_model=schemas.TestCaseRead)
+def create_test_file(test_file: schemas.TestCaseCreate, db: Session = Depends(get_db)):
+    assignment = db.query(models.Assignment).filter(models.Assignment.id == test_file.assignment_id).first()
     if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found")
     
-    new_test_case = models.TestCase(
-        assignment_id=test_case.assignment_id,
-        var_char=test_case.var_char
+    new_test_file = models.TestCase(
+        assignment_id=test_file.assignment_id,
+        var_char=test_file.var_char
     )
-    db.add(new_test_case)
+    db.add(new_test_file)
     db.commit()
-    db.refresh(new_test_case)
-    return new_test_case
+    db.refresh(new_test_file)
+    return new_test_file
 
-@router.get("/test_cases/", response_model=list[schemas.TestCaseRead])
-def get_test_cases(db: Session = Depends(get_db)):
-    test_cases = db.query(models.TestCase).all()
-    return test_cases
+@router.get("/test_files/", response_model=list[schemas.TestCaseRead])
+def get_test_files(db: Session = Depends(get_db)):
+    test_files = db.query(models.TestCase).all()
+    return test_files
+
+@router.post("/studentsubmissions", response_model=schemas.StudentSubmissionRead)
+def create_student_submission(submission: schemas.StudentSubmissionCreate, db: Session = Depends(get_db)):
+    student = db.query(models.User).filter(models.User.id == submission.student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    
+    assignment = db.query(models.Assignment).filter(models.Assignment.id == submission.assignment_id).first()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    
+    new_submission = models.StudentSubmission(
+        student_id=submission.student_id,
+        assignment_id=submission.assignment_id,
+        grade=submission.grade
+        #file_path=submission.file_path
+    )
+    db.add(new_submission)
+    db.commit()
+    db.refresh(new_submission)
+    return new_submission
+
+@router.get("/assignments/{assignments_id}/studentsubmissions/", response_model=list[schemas.StudentSubmissionRead])
+def get_submissions_for_assignment(assignments_id: int, db: Session = Depends(get_db)):
+    assignment = db.query(models.Assignment).filter(models.Assignment.id == assignments_id).first()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    return assignment.student_submissions

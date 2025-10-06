@@ -5,7 +5,7 @@ from enum import Enum
 import json
 
 class FileCategory(str, Enum):
-    TEST_CASE = "TEST_CASE"
+    test_file = "test_file"
     SUBMISSION = "SUBMISSION"
 
 class RunStatus(str, Enum):
@@ -171,6 +171,22 @@ class TestCaseRead(BaseModel):
     id: int
     assignment_id: int
     var_char: str
+
+    class Config:
+        from_attributes = True
+
+class StudentSubmissionCreate(BaseModel):
+    student_id: int
+    assignment_id: int
+    grade: Optional[int] = None
+    #file_path: str # Path to the submission file   
+
+class StudentSubmissionRead(BaseModel):
+    id: int
+    student_id: int
+    assignment_id: int
+    grade: Optional[int] = None
+    #file_path: str # Path to the submission file   
 
     class Config:
         from_attributes = True
