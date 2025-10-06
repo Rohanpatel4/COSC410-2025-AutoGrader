@@ -77,3 +77,23 @@ def get_assignment(assignment_id: int, db: Session = Depends(get_db)):
     if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found")
     return assignment
+
+@router.post("/test_cases", response_model=schemas.TestCaseRead)
+def create_test_case(test_case: schemas.TestCaseCreate, db: Session = Depends(get_db)):
+    assignment = db.query(models.Assignment).filter(models.Assignment.id == test_case.assignment_id).first()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    
+    new_test_case = models.TestCase(
+        assignment_id=test_case.assignment_id,
+        var_char=test_case.var_char
+    )
+    db.add(new_test_case)
+    db.commit()
+    db.refresh(new_test_case)
+    return new_test_case
+
+@router.get("/test_cases/", response_model=list[schemas.TestCaseRead])
+def get_test_cases(db: Session = Depends(get_db)):
+    test_cases = db.query(models.TestCase).all()
+    return test_cases

@@ -119,6 +119,15 @@ class Assignment(Base):
 
     course: Mapped["Course"] = relationship(back_populates="assignments")
 
+class TestCase(Base):
+    __tablename__ = "test_cases"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    assignment_id: Mapped[int] = mapped_column(ForeignKey("assignments.id"), nullable=False)
+    var_char: Mapped[str] = mapped_column(String(255))
+
+    assignment: Mapped["Assignment"] = relationship(back_populates="test_cases")
+
 #Second table redundant
 user_course_association = Table(
     "user_course_association",
@@ -127,6 +136,8 @@ user_course_association = Table(
     Column("course_id", ForeignKey("courses.id", ondelete="CASCADE"), primary_key=True),
     extend_existing=True
 )
+
+
 
 # ORM
 # Defines the database schema using SQLAlchemy ORM.

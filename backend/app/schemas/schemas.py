@@ -162,6 +162,18 @@ class AssignmentRead(BaseModel):
 
     class Config:
         from_attributes = True
+
+class TestCaseCreate(BaseModel):
+    assignment_id: int
+    var_char: str
+
+class TestCaseRead(BaseModel):
+    id: int
+    assignment_id: int
+    var_char: str
+
+    class Config:
+        from_attributes = True
     
 
 
