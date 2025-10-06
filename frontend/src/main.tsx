@@ -10,6 +10,8 @@ import CoursePage from "./webpages/CoursePage"; // ← added
 import AssignmentsPage from "./webpages/AssignmentsPage"; // add this
 // inside <Routes> (before the "*" route)
 import SandboxApp from "./webpages/SandboxApp";
+import UploadFiles from "./webpages/UploadTestFile.tsx";
+import UploadStudentFiles from "./webpages/UploadStudentFile";
 import "./styles/index.css";
 
 import { AuthProvider, Protected, useAuth } from "./auth/AuthContext";
@@ -65,6 +67,8 @@ function AppRouter() {
         /> */}
         <Route path="/assignment/*" element={<SandboxApp />} />
         <Route path="/stuassignment/*" element={<AssignmentsPage />} />
+        <Route path="/upload/test" element={<UploadFiles />} />
+        <Route path="/upload/student" element={<UploadStudentFiles />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>

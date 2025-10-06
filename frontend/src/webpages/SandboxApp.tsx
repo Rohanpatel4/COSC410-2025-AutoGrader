@@ -1,11 +1,11 @@
 import React from "react";
 import { Routes, Route, Link, Navigate } from "react-router-dom";
 
-import UploadFiles from "../pages/UploadFiles";
-import ManageTestSuites from "../pages/ManageTestSuites";
-import ManageSubmissions from "../pages/ManageSubmissions";
-import RunExecution from "../pages/RunExecution";
-import Runtimes from "../pages/Runtimes";
+import UploadFiles from "./UploadTestFile.tsx";
+import ManageTestSuites from "../pages (delete later)/ManageTestSuites";
+import ManageSubmissions from "../pages (delete later)/ManageSubmissions";
+import RunExecution from "../pages (delete later)/RunExecution";
+import Runtimes from "../pages (delete later)/Runtimes";
 import "../styles/SandboxApp.css";
 
 

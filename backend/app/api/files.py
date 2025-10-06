@@ -1,91 +1,32 @@
-from fastapi import APIRouter, UploadFile, File as UpFile, Form, Depends, HTTPException
-from fastapi.responses import FileResponse
-from typing import Optional
-from sqlalchemy.orm import Session
-from sqlalchemy.exc import IntegrityError
+from fastapi import APIRouter, UploadFile, File, HTTPException
+from starlette import status
+import app.services.FileConverter as fc  # this is your converter module
 
-from app.core.db import get_db
-from app.models.models import File, FileCategory
-from app.schemas.schemas import FileOut
-from app.services.services import store_uploaded_file
-import traceback
-import os
+router = APIRouter()  # prefix /api/v1/files is added in main.py
 
-router = APIRouter()
 
-@router.post("", response_model=FileOut, status_code=201)
-async def upload_file(
-    category: FileCategory = Form(...),
-    # Accept either form key "f" (current frontend) or "file" (common default)
-    f: Optional[UploadFile] = UpFile(None),
-    file: Optional[UploadFile] = UpFile(None),
-    db: Session = Depends(get_db),
-):
-    up = f or file
-    if up is None:
-        raise HTTPException(status_code=422, detail='file field required (use "f" or "file")')
+@router.post("/", status_code=status.HTTP_201_CREATED)
+async def upload_py_and_echo(file: UploadFile = File(..., description=".py test file")):
+    """
+    Accept a Python test file, convert it to UTF-8 text using FileConverter,
+    and return it as JSON to the frontend.
+    """
+    # Validate file type
+    if not file.filename or not file.filename.lower().endswith(".py"):
+        raise HTTPException(status_code=415, detail="Only .py files are accepted.")
+
+    # Convert file content → text
     try:
-        content = await up.read()
-        fid, path, sha, size = store_uploaded_file(up.filename, content, category)
-
-        entity = File(
-            id=fid,
-            name=up.filename,
-            category=category,
-            path=path,
-            size_bytes=size,
-            sha256=sha,
-        )
-        db.add(entity)
-        db.commit()
-        db.refresh(entity)
-        return entity
-
-    except IntegrityError:
-        db.rollback()
-        # Likely UNIQUE constraint on sha256 (duplicate upload)
-        raise HTTPException(status_code=409, detail="duplicate file (sha256)")
-    except HTTPException:
-        # Re-raise explicit HTTP errors (422, etc.)
-        raise
+        text = await fc.file_to_text(file)
+    except HTTPException as e:
+        raise e
     except Exception as e:
-        db.rollback()
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"upload failed: {e}")
+        raise HTTPException(status_code=400, detail=f"Conversion failed: {e}")
 
-@router.get("/{id}", response_model=FileOut)
-def get_file(id: str, db: Session = Depends(get_db)):
-    e = db.get(File, id)
-    if not e:
-        raise HTTPException(404)
-    return e
-
-@router.get("", response_model=list[FileOut])
-def list_files(category: FileCategory | None = None, db: Session = Depends(get_db)):
-    q = db.query(File)
-    if category:
-        q = q.filter(File.category == category)
-    return q.order_by(File.created_at.desc()).all()
-
-@router.delete("/{id}")
-def delete_file(id: str, db: Session = Depends(get_db)):
-    e = db.get(File, id)
-    if not e:
-        raise HTTPException(404)
-    db.delete(e)
-    db.commit()
-    return {"ok": True}
-
-@router.get("/results/{run_id}")
-def get_run_results(run_id: str, db: Session = Depends(get_db)):
-    """Get execution results for a run."""
-    from app.models.models import Run
-
-    run = db.get(Run, run_id)
-    if not run or not run.stdout_path:
-        raise HTTPException(404, "Run not found or no results available")
-
-    if not os.path.exists(run.stdout_path):
-        raise HTTPException(404, "Results file not found")
-
-    return FileResponse(run.stdout_path, media_type='application/json')
+    # Return it to the frontend
+    return {
+        "status": "ok",
+        "filename": file.filename,
+        "test_case": text,
+        "converter": "file_to_text",
+    }

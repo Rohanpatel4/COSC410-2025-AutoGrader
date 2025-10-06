@@ -1,24 +1,33 @@
 services:
-  backend:
-    build:
-      context: .
-      dockerfile: infra/docker/backend.Dockerfile
+  postgres:
+    image: postgres:13-alpine
     environment:
-      - DATABASE_URL=sqlite:///./data/app.db
-      - CORS_ORIGINS=http://localhost:5173
-      - JUDGE0_URL=http://judge0:2358
+      - POSTGRES_DB=judge0
+      - POSTGRES_USER=judge0
+      - POSTGRES_PASSWORD=judge0_password
     volumes:
-      - db_data:/app/data
-      - storage_data:/app/storage
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "python", "-c", "import socket; import sys; import time; import urllib.request as u; u.urlopen('http://localhost:8000/docs'); print('ok')"]
+      test: ["CMD-SHELL", "pg_isready -U judge0 -d judge0"]
       interval: 10s
       timeout: 5s
       retries: 5
-    depends_on:
-      - judge0
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "PING"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   judge0:
-    image: judge0/judge0:latest
+    build:
+      context: .
+      dockerfile: infra/docker/docker/judge0.with-docker.Dockerfile
+    user: root
+    privileged: true
     environment:
       - JUDGE0_DISABLE_INTERNET=true
       - JUDGE0_MAX_QUEUE_SIZE=100
@@ -26,27 +35,89 @@ services:
       - JUDGE0_MAX_RUNTIME_MEMORY=512000000
       - JUDGE0_MAX_RUNTIME_OUTPUT_SIZE=1024000
       - JUDGE0_MAX_RUNTIME_STACK_SIZE=128000000
-    ports:
-      - "2358:2358"
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=judge0
+      - POSTGRES_USER=judge0
+      - POSTGRES_PASSWORD=judge0_password
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    ports: ["2358:2358"]
     volumes:
       - judge0_data:/var/lib/judge0
       - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:2358/languages"]
-      interval: 30s
-      timeout: 10s
+      interval: 60s
+      timeout: 30s
+      retries: 10
+      start_period: 60s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  judge0_workers:
+    build:
+      context: .
+      dockerfile: infra/docker/docker/judge0.with-docker.Dockerfile
+    command: ["/scripts/workers"]
+    user: root
+    privileged: true
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=judge0
+      - POSTGRES_USER=judge0
+      - POSTGRES_PASSWORD=judge0_password
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JUDGE0_DISABLE_INTERNET=true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  backend:
+    build:
+      context: .
+      dockerfile: infra/docker/backend.Dockerfile
+    environment:
+      - DATABASE_URL=sqlite:///./backend/app.db
+      - CORS_ORIGINS=http://localhost:5173
+      - JUDGE0_URL=http://judge0:2358
+    ports: ["8000:8000"]
+    volumes:
+      - ./backend:/app/backend
+      - storage_data:/app/storage
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/docs'); print('ok')"]
+      interval: 10s
+      timeout: 5s
       retries: 5
+      start_period: 30s
+    depends_on:
+      judge0:
+        condition: service_healthy
+      judge0_workers:
+        condition: service_started
+
   frontend:
     build:
       context: .
       dockerfile: infra/docker/frontend.Dockerfile
     environment:
       - VITE_API_URL=/api
-    ports:
-      - "8080:80"
+    ports: ["5173:80"]
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+
 volumes:
-  db_data:
   storage_data:
   judge0_data:
+  postgres_data:

@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
 import { vi, afterEach } from "vitest";
-import UploadFiles from "../pages/UploadFiles";
+import UploadFiles from "../webpages/UploadTestFile.tsx";
 
 afterEach(() => {
   vi.restoreAllMocks();

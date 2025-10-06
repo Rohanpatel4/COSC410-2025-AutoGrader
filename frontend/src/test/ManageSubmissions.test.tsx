@@ -1,7 +1,7 @@
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
-import ManageSubmissions from "../pages/ManageSubmissions";
+import ManageSubmissions from "../pages (delete later)/ManageSubmissions";
 import { renderPage } from "./test-utils";
 
 test("lists submissions and can create a new one", async () => {

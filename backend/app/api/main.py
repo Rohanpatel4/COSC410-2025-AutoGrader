@@ -15,7 +15,7 @@ from .runtimes import router as runtimes_router
 from .runs import router as runs_router
 from .LoginPage import router as login_router
 from .judge0 import router as judge0_router
-
+from .attempt_submission_test import router as attempts_router
 # Init DB
 Base.metadata.create_all(bind=engine)
 
@@ -23,7 +23,7 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(title="AutoGrader API", version="1.0.0")
 
 # ---- CORS (dev, explicit) ----
-ALLOW_ORIGINS = ["http://localhost:5173"]
+ALLOW_ORIGINS = settings.CORS_ORIGINS 
 print(">>> CORS allow_origins =", ALLOW_ORIGINS, flush=True)
 
 app.add_middleware(
@@ -43,3 +43,4 @@ app.include_router(runs_router,        prefix="/api/v1/runs",        tags=["runs
 app.include_router(login_router,       prefix="/api/v1",             tags=["login"])
 app.include_router(judge0_router,      prefix="/api/v1/judge0",      tags=["judge0"])
 app.include_router(db_router, prefix="/api/v1", tags=["db"])
+app.include_router(attempts_router,    prefix="/api/v1/attempts",    tags=["attempts"])
