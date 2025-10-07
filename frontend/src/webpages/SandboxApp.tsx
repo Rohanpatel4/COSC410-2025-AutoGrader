@@ -1,7 +1,7 @@
 import React from "react";
 import { Routes, Route, Link, Navigate } from "react-router-dom";
 
-import UploadFiles from "./UploadTestFile.tsx";
+import UploadFiles from "./UploadTestFile.js";
 import ManageTestSuites from "../pages (delete later)/ManageTestSuites";
 import ManageSubmissions from "../pages (delete later)/ManageSubmissions";
 import RunExecution from "../pages (delete later)/RunExecution";

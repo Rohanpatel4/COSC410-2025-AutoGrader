@@ -1,8 +1,7 @@
 export type Course = {
-  id: number;
-  course_id: number;            // int now
+  id: number;                 // DB PK
+  course_tag: string;         // human/tag used for joining & URLs
   name: string;
   description?: string | null;
-  professor_id: number;         // int now
-  professor_name?: string | null;
 };
+

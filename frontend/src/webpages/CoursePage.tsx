@@ -1,148 +1,139 @@
-// src/webpages/CoursePage.tsx
-/*
-import React from "react";
-import { useParams, Link } from "react-router-dom";
-import { fetchJson } from "../api/client";
-import type { Course } from "../types/courses";
-
-
-
-export default function CoursePage() {
-  const { course_id = "" } = useParams<{ course_id: string }>();
-
-  const [course, setCourse] = React.useState<Course | null>(null);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    let alive = true;
-    setLoading(true);
-    setError(null);
-
-    fetchJson<Course>(`/api/v1/courses/${encodeURIComponent(course_id)}`)
-      .then((c) => {
-        if (alive) setCourse(c);
-      })
-      .catch(async (e: any) => {
-        if (!alive) return;
-        // e.message may contain FastAPI's detail or raw text
-        setError(e?.message || "Failed to load course");
-      })
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
-
-    return () => {
-      alive = false;
-    };
-  }, [course_id]);
-
-  return (
-    <div className="container">
-      <div style={{ marginBottom: 12 }}>
-        <Link to="/my">← Back to dashboard</Link>
-      </div>
-
-      {loading && <p>Loading…</p>}
-      {error && !loading && <p style={{ color: "crimson" }}>{error}</p>}
-
-      {!loading && !error && course && (
-        <>
-          <h1 style={{ marginBottom: 8 }}>{course.name}</h1>
-          <p style={{ margin: 0, color: "#666" }}>Course ID: {course.course_id}</p>
-          {course.description && (
-            <p style={{ marginTop: 8 }}>{course.description}</p>
-          )}
-          {course.professor_name || course.professor_id ? (
-            <p style={{ marginTop: 8 }}>
-              Instructor: {course.professor_name ?? course.professor_id}
-            </p>
-          ) : null}
-        </>
-      )}
-
-      {!loading && !error && !course && (
-        <p>Course not found.</p>
-      )}
-    </div>
-  );
-}
-*/
-
-
-
-//AI generated framework
-
 import React from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { fetchJson } from "../api/client";
-import type { Course } from "../types/courses";
+import type { Assignment } from "../types/assignments";
+import { useAuth } from "../auth/AuthContext";
 
-// Dummy types—adjust as needed to match your backend.
-type Student = { student_id: string; name?: string };
-type Faculty = { faculty_id: string; name?: string };
-type Assignment = { assignment_id: string; title: string; submission_count?: number; };
+type Student = { id: number; name?: string };
+type Faculty = { id: number; name?: string };
 
 export default function CoursePage() {
   const { course_id = "" } = useParams<{ course_id: string }>();
   const navigate = useNavigate();
+  const { role } = useAuth();
 
+  // ---- data ----
   const [students, setStudents] = React.useState<Student[]>([]);
   const [faculty, setFaculty] = React.useState<Faculty[]>([]);
   const [assignments, setAssignments] = React.useState<Assignment[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const [newTitle, setNewTitle] = React.useState("");
+  const [err, setErr] = React.useState<string | null>(null);
 
-  // Placeholder: replace with real faculty auth check
-  const isFaculty = true;
+  // ---- faculty-only create form ----
+  const isFaculty = role === "faculty";
+  const [showCreate, setShowCreate] = React.useState(false);
+  const [title, setTitle] = React.useState("");
+  const [description, setDescription] = React.useState("");
+  const [subLimit, setSubLimit] = React.useState<string>("");
+  const [start, setStart] = React.useState<string>("");
+  const [stop, setStop] = React.useState<string>("");
+  const [testFile, setTestFile] = React.useState<File | null>(null);
+  const [creating, setCreating] = React.useState(false);
+  const [createMsg, setCreateMsg] = React.useState<string | null>(null);
+
+  // ---- load all ----
+  async function loadAll() {
+    setLoading(true);
+    setErr(null);
+    try {
+      const [s, f, a] = await Promise.all([
+        fetchJson<Student[]>(`/api/v1/courses/${course_id}/students`).catch(() => []),
+        fetchJson<Faculty[]>(`/api/v1/courses/${course_id}/faculty`).catch(() => []),
+        fetchJson<Assignment[]>(`/api/v1/courses/${course_id}/assignments`).catch(() => []),
+      ]);
+      setStudents(s);
+      setFaculty(f);
+      setAssignments(a);
+    } catch (e: any) {
+      setErr(e?.message ?? "Failed to load course page");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   React.useEffect(() => {
-    let alive = true;
-    setLoading(true);
-
-    fetchJson<Student[]>(`/api/v1/courses/${course_id}/students`)
-      .then(s => { if (alive) setStudents(s); })
-      .catch(() => { if (alive) setStudents([]); });
-
-    fetchJson<Faculty[]>(`/api/v1/courses/${course_id}/faculty`)
-      .then(f => { if (alive) setFaculty(f); })
-      .catch(() => { if (alive) setFaculty([]); });
-
-    fetchJson<Assignment[]>(`/api/v1/courses/${course_id}/assignments`)
-      .then(a => { if (alive) setAssignments(a); })
-      .catch(() => { if (alive) setAssignments([]); })
-      .finally(() => { if (alive) setLoading(false); });
-
-    return () => { alive = false; };
+    loadAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [course_id]);
 
-  const handleDeleteStudent = (student_id: string) => {
-    // TODO: call DELETE endpoint, update UI
+  // ---- create assignment (with optional test file) ----
+  async function createAssignment(e: React.FormEvent) {
+    e.preventDefault();
+    if (creating) return;
+
+    setCreateMsg(null);
+    setErr(null);
+
+    const payload: any = {
+      title: title.trim(),
+      description: description.trim() || null,
+    };
+    const limitNum = subLimit.trim() ? Number(subLimit.trim()) : null;
+    if (limitNum != null && Number.isFinite(limitNum)) payload.sub_limit = limitNum;
+    if (start) payload.start = start;
+    if (stop) payload.stop = stop;
+
+    if (!payload.title) {
+      setCreateMsg("Title is required.");
+      return;
+    }
+
+    setCreating(true);
+
+    try {
+      // 1) If there is a test file, upload to /api/v1/files to get test_case text
+      if (testFile) {
+        const fd = new FormData();
+        fd.append("file", testFile);
+        const res = await fetch(`/api/v1/files`, { method: "POST", body: fd });
+        const data = await res.clone().json().catch(() => null);
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          throw new Error(`Test file upload failed: ${res.status} ${text}`);
+        }
+        const testCase: string | undefined = data?.test_case;
+        if (testCase && typeof testCase === "string") {
+          payload.test_case = testCase;
+        } else {
+          // If the converter responded but no test_case, we still continue (assignment can be created without it)
+          console.warn("Upload returned no test_case; creating assignment without attached test.");
+        }
+      }
+
+      // 2) Create the assignment for this course
+      const created = await fetchJson<Assignment>(
+        `/api/v1/courses/${encodeURIComponent(course_id)}/assignments`,
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        }
+      );
+
+      // 3) Update UI and reset
+      setAssignments((prev) => [created, ...prev]);
+      setTitle("");
+      setDescription("");
+      setSubLimit("");
+      setStart("");
+      setStop("");
+      setTestFile(null);
+      setShowCreate(false);
+      setCreateMsg("Assignment created!");
+    } catch (e: any) {
+      setCreateMsg(e?.message ?? "Create failed");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  // ---- delete (stubs) ----
+  const handleDeleteStudent = (student_id: number) => {
     alert(`Delete student ${student_id} (not implemented)`);
   };
 
-  const handleDeleteAssignment = (assignment_id: string) => {
-    // TODO: call DELETE endpoint, update UI
+  const handleDeleteAssignment = async (assignment_id: number) => {
     alert(`Delete assignment ${assignment_id} (not implemented)`);
   };
-
-  async function handleCreateAssignment() {
-    if (!newTitle.trim()) return alert("Please enter a title");
-
-    try {
-      const res = await fetch(`/api/v1/courses/${course_id}/assignments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: newTitle }),
-      });
-      if (!res.ok) throw new Error(`Failed to create assignment: ${res.statusText}`);
-      const created = await res.json();
-      setAssignments(prev => [...prev, created]);
-      setNewTitle("");
-    } catch (err: any) {
-      alert(err.message);
-    }
-  }
 
   return (
     <div className="container">
@@ -150,38 +141,35 @@ export default function CoursePage() {
         <Link to="/my">← Back to dashboard</Link>
       </div>
 
+      {err && <p style={{ color: "crimson" }}>{err}</p>}
       {loading && <p>Loading…</p>}
 
-      {/* Faculty List */}
+      {/* Faculty list */}
       <h2>Faculty</h2>
       {faculty.length === 0 ? (
         <p>No faculty listed.</p>
       ) : (
         <ul>
-          {faculty.map(f => (
-            <li key={f.faculty_id}>
-              {f.name ?? f.faculty_id}
-            </li>
+          {faculty.map((f) => (
+            <li key={f.id}>{f.name ?? f.id}</li>
           ))}
         </ul>
       )}
 
-      {/* Students List */}
+      {/* Students */}
       <h2>Students</h2>
       {students.length === 0 ? (
         <p>No students enrolled.</p>
       ) : (
         <ul>
-          {students.map(student => (
-            <li key={student.student_id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              {student.name ?? student.student_id}
+          {students.map((s) => (
+            <li key={s.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {s.name ?? s.id}
               {isFaculty && (
                 <button
-                  style={{
-                    background: "none", border: "none", cursor: "pointer", color: "crimson"
-                  }}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "crimson" }}
                   title="Remove student"
-                  onClick={() => handleDeleteStudent(student.student_id)}
+                  onClick={() => handleDeleteStudent(s.id)}
                 >
                   🗑️
                 </button>
@@ -191,50 +179,103 @@ export default function CoursePage() {
         </ul>
       )}
 
-
-      {/* 🆕 Assignment Creation Form */}
-      {isFaculty && (
-        <div style={{ marginTop: 24, marginBottom: 16 }}>
-          <h3>Create New Assignment</h3>
-          <input
-            type="text"
-            placeholder="New assignment title"
-            value={newTitle}
-            onChange={e => setNewTitle(e.target.value)}
-            style={{
-              padding: 6,
-              marginRight: 8,
-              borderRadius: 4,
-              border: "1px solid #ccc",
-            }}
-          />
-          <button
-            onClick={handleCreateAssignment}
-            style={{
-              background: "#34a853",
-              color: "#fff",
-              border: "none",
-              borderRadius: 6,
-              padding: "6px 12px",
-              cursor: "pointer"
-            }}
-          >
-            ➕ Create Assignment
+      {/* Assignments header + create toggle */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <h2 style={{ margin: 0 }}>Assignments</h2>
+        {isFaculty && (
+          <button onClick={() => setShowCreate((v) => !v)}>
+            {showCreate ? "Cancel" : "Create Assignment"}
           </button>
-        </div>
-      )}      
+        )}
+      </div>
 
+      {/* Create Assignment (faculty only) */}
+      {isFaculty && showCreate && (
+        <form
+          onSubmit={createAssignment}
+          style={{
+            border: "1px solid #ddd",
+            borderRadius: 8,
+            padding: 12,
+            margin: "12px 0",
+            display: "grid",
+            gap: 8,
+            maxWidth: 560,
+          }}
+        >
+          <label>
+            Title
+            <input value={title} onChange={(e) => setTitle(e.target.value)} required />
+          </label>
 
-      {/* Assignments List */}
-      <h2>Assignments</h2>
+          <label>
+            Description
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} />
+          </label>
+
+          <label>
+            Submission limit (blank = no limit)
+            <input
+              inputMode="numeric"
+              pattern="[0-9]*"
+              placeholder="e.g., 3"
+              value={subLimit}
+              onChange={(e) => setSubLimit(e.target.value)}
+            />
+          </label>
+
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <label>
+              Start
+              <input
+                type="datetime-local"
+                value={start}
+                onChange={(e) => setStart(e.target.value)}
+                style={{ marginLeft: 6 }}
+              />
+            </label>
+            <label>
+              Stop
+              <input
+                type="datetime-local"
+                value={stop}
+                onChange={(e) => setStop(e.target.value)}
+                style={{ marginLeft: 6 }}
+              />
+            </label>
+          </div>
+
+          <div>
+            <label>
+              Attach test file (.py)
+              <input
+                type="file"
+                accept=".py"
+                onChange={(e) => setTestFile(e.target.files?.[0] ?? null)}
+                style={{ display: "block", marginTop: 6 }}
+              />
+            </label>
+            <p style={{ color: "#475569", marginTop: 4, fontSize: 13 }}>
+              We’ll upload this file, convert it to text, and store it as the assignment’s test case.
+            </p>
+          </div>
+
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button type="submit" disabled={creating}>
+              {creating ? "Saving…" : "Save Assignment"}
+            </button>
+            {createMsg && <span style={{ color: createMsg.includes("failed") ? "crimson" : "#0f766e" }}>{createMsg}</span>}
+          </div>
+        </form>
+      )}
+
+      {/* Assignments list */}
       {assignments.length === 0 ? (
         <p>No assignments.</p>
       ) : (
         <ul>
-          {assignments.map(assignment => (
-            <li key={assignment.assignment_id}
-                style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
-              {/* Clickable assignment button */}
+          {assignments.map((a) => (
+            <li key={a.id} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
               <button
                 style={{
                   background: "#4285f4",
@@ -242,24 +283,25 @@ export default function CoursePage() {
                   border: "none",
                   borderRadius: 6,
                   padding: "6px 12px",
-                  cursor: "pointer"
+                  cursor: "pointer",
                 }}
-                onClick={() => navigate(`/assignments/${assignment.assignment_id}`)}
+                onClick={() => navigate(`/assignments/${a.id}`)}
               >
-                {assignment.title}
+                {a.title}
               </button>
               {isFaculty && (
                 <button
                   style={{ background: "none", border: "none", cursor: "pointer", color: "crimson" }}
                   title="Delete assignment"
-                  onClick={() => handleDeleteAssignment(assignment.assignment_id)}
+                  onClick={() => handleDeleteAssignment(a.id)}
                 >
                   🗑️
                 </button>
               )}
-              {/* Display the submission count for each assignment */}
               <span style={{ color: "#555" }}>
-                Submissions: {assignment.submission_count ?? 0}
+                Attempts: {a.num_attempts ?? 0} • Window:{" "}
+                {a.start ? new Date(a.start).toLocaleString() : "–"} →{" "}
+                {a.stop ? new Date(a.stop).toLocaleString() : "–"}
               </span>
             </li>
           ))}
@@ -268,3 +310,6 @@ export default function CoursePage() {
     </div>
   );
 }
+
+
+

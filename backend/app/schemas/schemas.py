@@ -5,7 +5,7 @@ from enum import Enum
 import json
 
 class FileCategory(str, Enum):
-    test_file = "test_file"
+    TEST_FILE = "TEST_FILE"
     SUBMISSION = "SUBMISSION"
 
 class RunStatus(str, Enum):
@@ -95,27 +95,6 @@ class RunOut(BaseModel):
     stdout_path: Optional[str] = None
     stderr_path: Optional[str] = None
 
-'''class CourseIn(BaseModel):
-    course_id: int
-    name: str
-    description: Optional[str] = None
-    professor_id: int
-
-class CourseOut(CourseIn):
-    id: int
-    professor_name: Optional[str] = None
-
-class ListCoursesOut(BaseModel):
-    items: list[CourseOut]
-    nextCursor: Optional[str] = None
-
-class RegistrationIn(BaseModel):
-    student_id: int
-    course_id: int
-
-class RegistrationOut(RegistrationIn):
-    id: int'''
-
 class RoleEnum(str, Enum):
     student = "student"
     faculty = "faculty"
@@ -127,7 +106,7 @@ class UserCreate(BaseModel):
 class UserRead(BaseModel):
     id: int
     role: RoleEnum
-    name: str
+    username: str
     class Config:
         from_attributes = True
 

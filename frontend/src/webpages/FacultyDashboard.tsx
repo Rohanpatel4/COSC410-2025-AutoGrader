@@ -1,4 +1,3 @@
-/* ========== NEW (numeric IDs) ========== */
 import React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
@@ -8,11 +7,9 @@ import type { Course } from "../types/courses";
 export default function FacultyDashboard() {
   const { userId, logout } = useAuth();
   const navigate = useNavigate();
-
-  // Coerce to number; if your seed puts faculty user 3, userId should already be that.
   const professorId = Number(userId ?? 0);
 
-  const [courseId, setCourseId] = React.useState(""); // numeric string; parse before POST
+  const [courseTag, setCourseTag] = React.useState("");
   const [name, setName] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [mine, setMine] = React.useState<Course[]>([]);
@@ -28,46 +25,40 @@ export default function FacultyDashboard() {
     setLoading(true);
     setMsg(null);
     try {
-      const res = await fetchJson<{ items: Course[] }>(
-        `/api/v1/courses?professor=${encodeURIComponent(professorId)}`
-      );
-      setMine(res.items);
+      const res = await fetchJson<any>(`/api/v1/courses?professor=${encodeURIComponent(professorId)}`);
+      const items: Course[] = Array.isArray(res?.items) ? res.items : [];
+      setMine(items);
+      if (!Array.isArray(res?.items)) {
+        setMsg("Unexpected response format; showing 0 courses.");
+      }
     } catch (e: any) {
       setMsg(e?.message ?? "Failed to load courses");
+      setMine([]);
     } finally {
       setLoading(false);
     }
   }
 
-  React.useEffect(() => {
-    loadMine();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  React.useEffect(() => { loadMine(); }, []);
 
   async function onCreate(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
-
-    const courseIdNum = Number(courseId.trim());
-    if (!Number.isFinite(courseIdNum)) {
-      setMsg("Course ID must be numeric");
+    if (!courseTag.trim() || !name.trim()) {
+      setMsg("course_tag and name are required");
       return;
     }
-
     try {
-      const created = await fetchJson<Course>("/api/v1/courses", {
+      const created = await fetchJson<Course>(`/api/v1/courses?professor_id=${professorId}`, {
         method: "POST",
         body: JSON.stringify({
-          course_id: courseIdNum,
+          course_tag: courseTag.trim(),
           name: name.trim(),
           description: description || null,
-          professor_id: professorId,
         }),
       });
       setMine((prev) => [created, ...prev]);
-      setCourseId("");
-      setName("");
-      setDescription("");
+      setCourseTag(""); setName(""); setDescription("");
       setMsg("Course created!");
     } catch (e: any) {
       setMsg(e?.message ?? "Create failed");
@@ -84,63 +75,40 @@ export default function FacultyDashboard() {
         <button onClick={onLogout}>Log out</button>
       </div>
 
-      <form
-        onSubmit={onCreate}
-        style={{ border: "1px solid #ddd", padding: 12, borderRadius: 8 }}
-      >
+      <form onSubmit={onCreate} style={{ border: "1px solid #ddd", padding: 12, borderRadius: 8 }}>
         <div>
-          <label htmlFor="c-id">Course ID</label>
+          <label htmlFor="c-tag">Course Tag</label>
           <input
-            id="c-id"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            placeholder="e.g., 4101"
-            value={courseId}
-            onChange={(e) => setCourseId(e.target.value)}
+            id="c-tag"
+            placeholder="e.g., COSC-410"
+            value={courseTag}
+            onChange={(e) => setCourseTag(e.target.value)}
             required
           />
         </div>
         <div>
           <label htmlFor="c-name">Course Name</label>
-          <input
-            id="c-name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-          />
+          <input id="c-name" value={name} onChange={(e) => setName(e.target.value)} required />
         </div>
         <div>
           <label htmlFor="c-desc">Description</label>
-          <textarea
-            id="c-desc"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
+          <textarea id="c-desc" value={description} onChange={(e) => setDescription(e.target.value)} />
         </div>
-        <button
-          type="submit"
-          disabled={!courseId.trim() || !name.trim()}
-        >
+        <button type="submit" disabled={!courseTag.trim() || !name.trim()}>
           Create Course
         </button>
-        {msg && (
-          <p role="status" aria-live="polite">
-            {msg}
-          </p>
-        )}
+        {msg && <p role="status" aria-live="polite">{msg}</p>}
       </form>
 
       <h2 style={{ marginTop: 16 }}>My Courses</h2>
       {loading ? (
         <p>Loading…</p>
-      ) : mine.length ? (
+      ) : (mine?.length ?? 0) > 0 ? (
         <ul>
-          {mine.map((c) => (
+          {(mine ?? []).map((c) => (
             <li key={c.id}>
-              <Link to={`/courses/${encodeURIComponent(c.course_id)}`}>
-                {c.name}
-              </Link>{" "}
-              <span style={{ color: "#666" }}>({c.course_id})</span>
+              <Link to={`/courses/${encodeURIComponent(c.course_tag)}`}>{c.name}</Link>{" "}
+              <span style={{ color: "#666" }}>({c.course_tag})</span>
             </li>
           ))}
         </ul>
@@ -150,3 +118,6 @@ export default function FacultyDashboard() {
     </div>
   );
 }
+
+
+
