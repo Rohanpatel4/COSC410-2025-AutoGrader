@@ -1,50 +1,49 @@
 import React, { useState } from "react";
 import { BASE } from "../api/client";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 
+/**
+ * Faculty: upload a test file that's attached to a specific assignment.
+ * Backend route: POST /api/v1/assignments/:assignment_id/test-file
+ */
 const UploadTestFile: React.FC = () => {
+  const navigate = useNavigate();
+  const location = useLocation() as any;
+
+  // allow caller to pass { assignment_id } via navigate(..., { state })
+  const [assignmentId, setAssignmentId] = useState<string>(
+    String(location?.state?.assignment_id ?? "")
+  );
   const [file, setFile] = useState<File | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
-  const navigate = useNavigate();
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMsg("Uploading test file…");
 
-    if (!file) {
-      setMsg("Please choose a test file");
-      return;
-    }
+    if (!assignmentId.trim()) return setMsg("Missing assignment_id");
+    if (!file) return setMsg("Please choose a test file");
     if (!file.name.toLowerCase().endsWith(".py")) {
-      setMsg("Only .py files are accepted.");
-      return;
+      return setMsg("Only .py files are accepted.");
     }
 
     const fd = new FormData();
     fd.append("file", file);
 
     try {
-      const res = await fetch(`${BASE}/api/v1/files`, {
-        method: "POST",
-        body: fd,
-      });
+      const res = await fetch(
+        `${BASE}/api/v1/assignments/${encodeURIComponent(assignmentId)}/test-file`,
+        { method: "POST", body: fd }
+      );
 
-      const data = await res.clone().json().catch(() => null);
       if (!res.ok) {
         const text = await res.text();
         setMsg(`Upload failed: ${res.status} ${text}`);
         return;
       }
 
-      const testCase = data?.test_case ?? "";
-      const filename = data?.filename ?? file.name;
-
-      // ✅ store in session so /upload/student can read it
-      sessionStorage.setItem("autograder:test_case", testCase);
-      sessionStorage.setItem("autograder:test_filename", filename);
-
       setMsg("Test uploaded. Redirecting to student submission…");
-      navigate("/upload/student", { state: { testCase, filename }, replace: true });
+      navigate("/upload/student", { state: { assignment_id: assignmentId }, replace: true });
     } catch (err: any) {
       setMsg(err?.message || "Network error");
     }
@@ -53,6 +52,18 @@ const UploadTestFile: React.FC = () => {
   return (
     <form onSubmit={onSubmit}>
       <h2>Upload Test File</h2>
+
+      <label style={{ display: "block", marginBottom: 8 }}>
+        Assignment ID
+        <input
+          style={{ marginLeft: 8 }}
+          value={assignmentId}
+          onChange={(e) => setAssignmentId(e.target.value)}
+          placeholder="e.g., 1"
+          required
+        />
+      </label>
+
       <input
         type="file"
         accept=".py"
@@ -65,3 +76,4 @@ const UploadTestFile: React.FC = () => {
 };
 
 export default UploadTestFile;
+

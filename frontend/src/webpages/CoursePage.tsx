@@ -1,6 +1,7 @@
+// src/webpages/CoursePage.tsx
 import React from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { fetchJson } from "../api/client";
+import { fetchJson, BASE } from "../api/client";
 import type { Assignment } from "../types/assignments";
 import { useAuth } from "../auth/AuthContext";
 
@@ -11,16 +12,15 @@ export default function CoursePage() {
   const { course_id = "" } = useParams<{ course_id: string }>();
   const navigate = useNavigate();
   const { role } = useAuth();
+  const isFaculty = role === "faculty";
 
-  // ---- data ----
   const [students, setStudents] = React.useState<Student[]>([]);
   const [faculty, setFaculty] = React.useState<Faculty[]>([]);
   const [assignments, setAssignments] = React.useState<Assignment[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [err, setErr] = React.useState<string | null>(null);
 
-  // ---- faculty-only create form ----
-  const isFaculty = role === "faculty";
+  // create form
   const [showCreate, setShowCreate] = React.useState(false);
   const [title, setTitle] = React.useState("");
   const [description, setDescription] = React.useState("");
@@ -28,10 +28,7 @@ export default function CoursePage() {
   const [start, setStart] = React.useState<string>("");
   const [stop, setStop] = React.useState<string>("");
   const [testFile, setTestFile] = React.useState<File | null>(null);
-  const [creating, setCreating] = React.useState(false);
-  const [createMsg, setCreateMsg] = React.useState<string | null>(null);
 
-  // ---- load all ----
   async function loadAll() {
     setLoading(true);
     setErr(null);
@@ -56,12 +53,8 @@ export default function CoursePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [course_id]);
 
-  // ---- create assignment (with optional test file) ----
   async function createAssignment(e: React.FormEvent) {
     e.preventDefault();
-    if (creating) return;
-
-    setCreateMsg(null);
     setErr(null);
 
     const payload: any = {
@@ -74,43 +67,37 @@ export default function CoursePage() {
     if (stop) payload.stop = stop;
 
     if (!payload.title) {
-      setCreateMsg("Title is required.");
+      setErr("Title is required.");
       return;
     }
 
-    setCreating(true);
-
     try {
-      // 1) If there is a test file, upload to /api/v1/files to get test_case text
+      // POST /api/v1/courses/:course_id/assignments or fallback to /assignments with course_id
+      // If you already have the course-scoped POST, use it. Otherwise do this:
+      const created = await fetchJson<Assignment>(`/api/v1/assignments`, {
+        method: "POST",
+        body: JSON.stringify({ ...payload, course_id: isNaN(Number(course_id)) ? undefined : Number(course_id) }),
+      }).catch(async (errFromGlobal) => {
+        // try the course-scoped route if you wired that instead
+        return fetchJson<Assignment>(`/api/v1/courses/${encodeURIComponent(course_id)}/assignments`, {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+      });
+
+      setAssignments((prev) => [created, ...prev]);
+
+      // If a test file was picked, attach it
       if (testFile) {
         const fd = new FormData();
         fd.append("file", testFile);
-        const res = await fetch(`/api/v1/files`, { method: "POST", body: fd });
-        const data = await res.clone().json().catch(() => null);
-        if (!res.ok) {
-          const text = await res.text().catch(() => "");
-          throw new Error(`Test file upload failed: ${res.status} ${text}`);
-        }
-        const testCase: string | undefined = data?.test_case;
-        if (testCase && typeof testCase === "string") {
-          payload.test_case = testCase;
-        } else {
-          // If the converter responded but no test_case, we still continue (assignment can be created without it)
-          console.warn("Upload returned no test_case; creating assignment without attached test.");
-        }
+        await fetch(`${BASE}/api/v1/assignments/${created.id}/test-file`, {
+          method: "POST",
+          body: fd,
+        });
       }
 
-      // 2) Create the assignment for this course
-      const created = await fetchJson<Assignment>(
-        `/api/v1/courses/${encodeURIComponent(course_id)}/assignments`,
-        {
-          method: "POST",
-          body: JSON.stringify(payload),
-        }
-      );
-
-      // 3) Update UI and reset
-      setAssignments((prev) => [created, ...prev]);
+      // reset
       setTitle("");
       setDescription("");
       setSubLimit("");
@@ -118,20 +105,16 @@ export default function CoursePage() {
       setStop("");
       setTestFile(null);
       setShowCreate(false);
-      setCreateMsg("Assignment created!");
     } catch (e: any) {
-      setCreateMsg(e?.message ?? "Create failed");
-    } finally {
-      setCreating(false);
+      setErr(e?.message ?? "Create failed");
     }
   }
 
-  // ---- delete (stubs) ----
   const handleDeleteStudent = (student_id: number) => {
     alert(`Delete student ${student_id} (not implemented)`);
   };
 
-  const handleDeleteAssignment = async (assignment_id: number) => {
+  const handleDeleteAssignment = (assignment_id: number) => {
     alert(`Delete assignment ${assignment_id} (not implemented)`);
   };
 
@@ -144,23 +127,13 @@ export default function CoursePage() {
       {err && <p style={{ color: "crimson" }}>{err}</p>}
       {loading && <p>Loading…</p>}
 
-      {/* Faculty list */}
       <h2>Faculty</h2>
-      {faculty.length === 0 ? (
-        <p>No faculty listed.</p>
-      ) : (
-        <ul>
-          {faculty.map((f) => (
-            <li key={f.id}>{f.name ?? f.id}</li>
-          ))}
-        </ul>
+      {faculty.length === 0 ? <p>No faculty listed.</p> : (
+        <ul>{faculty.map((f) => <li key={f.id}>{f.name ?? f.id}</li>)}</ul>
       )}
 
-      {/* Students */}
       <h2>Students</h2>
-      {students.length === 0 ? (
-        <p>No students enrolled.</p>
-      ) : (
+      {students.length === 0 ? <p>No students enrolled.</p> : (
         <ul>
           {students.map((s) => (
             <li key={s.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -179,7 +152,6 @@ export default function CoursePage() {
         </ul>
       )}
 
-      {/* Assignments header + create toggle */}
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <h2 style={{ margin: 0 }}>Assignments</h2>
         {isFaculty && (
@@ -189,7 +161,6 @@ export default function CoursePage() {
         )}
       </div>
 
-      {/* Create Assignment (faculty only) */}
       {isFaculty && showCreate && (
         <form
           onSubmit={createAssignment}
@@ -227,49 +198,30 @@ export default function CoursePage() {
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <label>
               Start
-              <input
-                type="datetime-local"
-                value={start}
-                onChange={(e) => setStart(e.target.value)}
-                style={{ marginLeft: 6 }}
-              />
+              <input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} style={{ marginLeft: 6 }} />
             </label>
             <label>
               Stop
-              <input
-                type="datetime-local"
-                value={stop}
-                onChange={(e) => setStop(e.target.value)}
-                style={{ marginLeft: 6 }}
-              />
+              <input type="datetime-local" value={stop} onChange={(e) => setStop(e.target.value)} style={{ marginLeft: 6 }} />
             </label>
           </div>
+
+          <label>
+            Attach test file (.py) now (optional)
+            <input
+              type="file"
+              accept=".py"
+              onChange={(e) => setTestFile(e.target.files?.[0] ?? null)}
+              style={{ display: "block", marginTop: 6 }}
+            />
+          </label>
 
           <div>
-            <label>
-              Attach test file (.py)
-              <input
-                type="file"
-                accept=".py"
-                onChange={(e) => setTestFile(e.target.files?.[0] ?? null)}
-                style={{ display: "block", marginTop: 6 }}
-              />
-            </label>
-            <p style={{ color: "#475569", marginTop: 4, fontSize: 13 }}>
-              We’ll upload this file, convert it to text, and store it as the assignment’s test case.
-            </p>
-          </div>
-
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <button type="submit" disabled={creating}>
-              {creating ? "Saving…" : "Save Assignment"}
-            </button>
-            {createMsg && <span style={{ color: createMsg.includes("failed") ? "crimson" : "#0f766e" }}>{createMsg}</span>}
+            <button type="submit">Save Assignment</button>
           </div>
         </form>
       )}
 
-      {/* Assignments list */}
       {assignments.length === 0 ? (
         <p>No assignments.</p>
       ) : (
@@ -310,6 +262,7 @@ export default function CoursePage() {
     </div>
   );
 }
+
 
 
 

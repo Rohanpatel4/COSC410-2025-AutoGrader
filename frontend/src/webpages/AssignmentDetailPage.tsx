@@ -1,157 +1,234 @@
+// src/webpages/AssignmentDetailPage.tsx
 import React from "react";
-import { Link, useParams } from "react-router-dom";
-import { fetchJson } from "../api/client";
+import { useParams, Link } from "react-router-dom";
+import { fetchJson, BASE } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import type { Assignment } from "../types/assignments";
 
-type AttemptSummary = {
-  // optional shape if you later expose a summary endpoint
-  total_attempts?: number;
-  highest_score?: number | null;
-};
+type Attempt = { id: number; grade: number | null };
 
 export default function AssignmentDetailPage() {
-  const { assignment_id = "" } = useParams<{ assignment_id: string }>();
-  const { role } = useAuth();
+  // ✅ match your route: /assignments/:assignment_id
+  const { assignment_id } = useParams<{ assignment_id: string }>();
+  const { role, userId } = useAuth();
+  const isStudent = role === "student";
 
-  const [assignment, setAssignment] = React.useState<Assignment | null>(null);
-  const [summary, setSummary] = React.useState<AttemptSummary | null>(null);
+  const [a, setA] = React.useState<Assignment | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [err, setErr] = React.useState<string | null>(null);
 
-  const isFaculty = role === "faculty";
-  const isStudent = role === "student";
+  const [attempts, setAttempts] = React.useState<Attempt[]>([]);
+  const [file, setFile] = React.useState<File | null>(null);
+  const [submitMsg, setSubmitMsg] = React.useState<string | null>(null);
+  const [lastResult, setLastResult] = React.useState<any>(null);
+
+  async function loadAll() {
+    if (!assignment_id) return; // guard
+    setLoading(true);
+    setErr(null);
+    try {
+      const details = await fetchJson<Assignment>(
+        `/api/v1/assignments/${encodeURIComponent(assignment_id)}`
+      );
+      setA(details);
+
+      if (isStudent && userId) {
+        const list = await fetchJson<Attempt[]>(
+          `/api/v1/assignments/${encodeURIComponent(
+            assignment_id
+          )}/attempts?student_id=${encodeURIComponent(String(userId))}`
+        ).catch(() => []);
+        setAttempts(list || []);
+      }
+    } catch (e: any) {
+      setErr(e?.message ?? "Failed to load assignment");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   React.useEffect(() => {
-    let alive = true;
-    (async () => {
-      setLoading(true);
-      setErr(null);
-      try {
-        // Basic assignment details
-        const a = await fetchJson<Assignment>(`/api/v1/assignments/${encodeURIComponent(assignment_id)}`);
-        if (!alive) return;
-        setAssignment(a);
-
-        // OPTIONAL: if/when you add a summary route, uncomment:
-        // const s = await fetchJson<AttemptSummary>(`/api/v1/assignments/${assignment_id}/summary`).catch(() => null);
-        // if (!alive) return;
-        // setSummary(s);
-      } catch (e: any) {
-        if (!alive) return;
-        setErr(e?.message ?? "Failed to load assignment");
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
+    loadAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignment_id]);
+
+  const bestGrade = React.useMemo(() => {
+    if (!attempts.length) return null;
+    return attempts.reduce(
+      (max, r) => (r.grade != null && r.grade > max ? r.grade : max),
+      -1
+    );
+  }, [attempts]);
+
+  const nowBlocked = React.useMemo(() => {
+    if (!a) return false;
+    try {
+      const now = Date.now();
+      const startOk = a.start ? now >= new Date(a.start).getTime() : true;
+      const stopOk = a.stop ? now <= new Date(a.stop).getTime() : true;
+      return !(startOk && stopOk);
+    } catch {
+      return false;
+    }
+  }, [a]);
+
+  const limitReached = React.useMemo(() => {
+    if (!a) return false;
+    if (a.sub_limit == null || a.sub_limit < 0) return false;
+    return attempts.length >= a.sub_limit;
+  }, [a, attempts]);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!assignment_id) return;
+    if (!file) {
+      setSubmitMsg("Choose a .py file");
+      return;
+    }
+    setSubmitMsg("Submitting…");
+    setLastResult(null);
+
+    try {
+      const fd = new FormData();
+      fd.append("student_id", String(userId ?? "")); // API expects this
+      fd.append("submission", file);
+
+      const res = await fetch(
+        `${BASE}/api/v1/assignments/${encodeURIComponent(assignment_id)}/submit`,
+        { method: "POST", body: fd }
+      );
+
+      const text = await res.text();
+      let data: any = null;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        /* ignore */
+      }
+
+      if (!res.ok) {
+        const detail = data?.detail ?? text;
+        setSubmitMsg(
+          `Submit failed: ${res.status} ${
+            typeof detail === "string" ? detail : JSON.stringify(detail)
+          }`
+        );
+        return;
+      }
+
+      setSubmitMsg(`Submitted. Grade: ${data?.grade ?? "—"}`);
+      setLastResult(data?.result ?? null);
+
+      // refresh attempts
+      const list = await fetchJson<Attempt[]>(
+        `/api/v1/assignments/${encodeURIComponent(
+          assignment_id
+        )}/attempts?student_id=${encodeURIComponent(String(userId))}`
+      ).catch(() => []);
+      setAttempts(list || []);
+    } catch (err: any) {
+      setSubmitMsg(err?.message || "Network error");
+    }
+  }
 
   return (
     <div className="container">
       <div style={{ marginBottom: 12 }}>
-        <Link to="/my">← Back to dashboard</Link>
+        <Link to="/my">← Back</Link>
       </div>
 
-      {err && <p style={{ color: "crimson" }}>{err}</p>}
-      {loading && <p>Loading…</p>}
-      {!loading && !assignment && <p>Not found.</p>}
+      {!assignment_id && (
+        <p style={{ color: "crimson" }}>No assignment selected.</p>
+      )}
 
-      {assignment && (
+      {loading && <p>Loading…</p>}
+      {err && <p style={{ color: "crimson" }}>{err}</p>}
+
+      {!a ? null : (
         <>
-          <h1 style={{ marginBottom: 4 }}>{assignment.title}</h1>
-          <p style={{ marginTop: 0, color: "#555" }}>
-            Course ID: <strong>{assignment.course_id}</strong>
+          <h1>{a.title}</h1>
+          {a.description && <p>{a.description}</p>}
+
+          <p style={{ color: "#555" }}>
+            Window: {a.start ? new Date(a.start).toLocaleString() : "—"} →{" "}
+            {a.stop ? new Date(a.stop).toLocaleString() : "—"}
+          </p>
+          <p style={{ color: "#555" }}>
+            Submission limit: {a.sub_limit == null ? "∞" : a.sub_limit}
           </p>
 
-          {assignment.description && (
+          {isStudent && (
             <>
-              <h3>Description</h3>
-              <p style={{ whiteSpace: "pre-wrap" }}>{assignment.description}</p>
+              <h2>Submit your code</h2>
+              <form onSubmit={onSubmit}>
+                <input
+                  type="file"
+                  accept=".py"
+                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                  disabled={nowBlocked || limitReached}
+                />
+                <button type="submit" disabled={!file || nowBlocked || limitReached}>
+                  Submit
+                </button>
+                {nowBlocked && (
+                  <p style={{ color: "#b91c1c" }}>Submission window is closed.</p>
+                )}
+                {limitReached && (
+                  <p style={{ color: "#b91c1c" }}>
+                    You’ve reached the submission limit.
+                  </p>
+                )}
+                {submitMsg && <p style={{ color: "#334155" }}>{submitMsg}</p>}
+              </form>
+
+              {lastResult && (
+                <div style={{ marginTop: 12 }}>
+                  <h3>Last run result</h3>
+                  <pre
+                    style={{
+                      background: "#f8fafc",
+                      border: "1px solid #e2e8f0",
+                      padding: 12,
+                      borderRadius: 8,
+                      whiteSpace: "pre-wrap",
+                    }}
+                  >
+                    {JSON.stringify(lastResult, null, 2)}
+                  </pre>
+                </div>
+              )}
+
+              <h2 style={{ marginTop: 16 }}>Your attempts</h2>
+              {!attempts.length ? (
+                <p>No attempts yet.</p>
+              ) : (
+                <ul>
+                  {attempts.map((t, idx) => (
+                    <li key={t.id}>
+                      Attempt {idx + 1}: Grade {t.grade ?? "—"}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p>
+                Best grade:{" "}
+                <strong>
+                  {bestGrade == null || bestGrade < 0 ? "—" : bestGrade}
+                </strong>
+              </p>
             </>
           )}
 
-          <h3>Submission Window</h3>
-          <p style={{ marginTop: 0 }}>
-            {assignment.start ? new Date(assignment.start).toLocaleString() : "No start"} →{" "}
-            {assignment.stop ? new Date(assignment.stop).toLocaleString() : "No stop"}
-          </p>
-
-          <h3>Limits</h3>
-          <p style={{ marginTop: 0 }}>
-            Submission limit:{" "}
-            <strong>{assignment.sub_limit == null ? "No limit" : assignment.sub_limit}</strong>
-            {typeof assignment.num_attempts === "number" && (
-              <>
-                {" "}• Attempts so far: <strong>{assignment.num_attempts}</strong>
-              </>
-            )}
-          </p>
-
-          {/* Optional summary block once you wire a summary endpoint */}
-          {summary && (
-            <div
-              style={{
-                border: "1px solid #e2e8f0",
-                borderRadius: 8,
-                padding: 12,
-                marginTop: 12,
-                background: "#f8fafc",
-              }}
-            >
-              <h3 style={{ marginTop: 0 }}>Summary</h3>
-              <div>Total attempts: {summary.total_attempts ?? "—"}</div>
-              <div>Highest score: {summary.highest_score ?? "—"}</div>
-            </div>
-          )}
-
-          {/* Student section (placeholder until backend auto-grading submit endpoint is ready) */}
-          {isStudent && (
-            <div
-              style={{
-                border: "1px dashed #94a3b8",
-                borderRadius: 8,
-                padding: 12,
-                marginTop: 16,
-                background: "#f1f5f9",
-                color: "#334155",
-              }}
-            >
-              <strong>Student submissions</strong>
-              <p style={{ marginTop: 6 }}>
-                Submissions and instant grading will appear here once the submission endpoint is wired.
-              </p>
-            </div>
-          )}
-
-          {/* Faculty notes */}
-          {isFaculty && (
-            <div
-              style={{
-                borderTop: "1px solid #e2e8f0",
-                marginTop: 24,
-                paddingTop: 12,
-                color: "#475569",
-              }}
-            >
-              <strong>Faculty</strong>
-              <ul style={{ marginTop: 6 }}>
-                <li>
-                  Test files are uploaded during <em>Create Assignment</em> on the Course page (as requested).
-                </li>
-                <li>
-                  This page no longer shows “Upload Test File” or “Try Student Submission”. Grading runs when students
-                  submit (once that endpoint is live).
-                </li>
-              </ul>
-            </div>
+          {!isStudent && (
+            <p style={{ color: "#64748b" }}>
+              (Faculty view here could show a gradebook later.)
+            </p>
           )}
         </>
       )}
     </div>
   );
 }
+
 
 
