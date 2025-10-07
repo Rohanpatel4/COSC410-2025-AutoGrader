@@ -123,6 +123,35 @@ const UploadStudentFile: React.FC = () => {
         </pre>
       )}
 
+      {/* === SHOW GRADING STATUS === */}
+      {result && result.grading && (
+        <div
+          style={{
+            marginTop: 20,
+            padding: "16px",
+            borderRadius: "8px",
+            border: "2px solid",
+            backgroundColor: result.grading.passed ? "#f0fdf4" : "#fef2f2",
+            borderColor: result.grading.passed ? "#22c55e" : "#ef4444",
+            textAlign: "center",
+          }}
+        >
+          <div
+            style={{
+              fontSize: "24px",
+              fontWeight: "bold",
+              color: result.grading.passed ? "#16a34a" : "#dc2626",
+              marginBottom: "8px",
+            }}
+          >
+            {result.grading.passed ? "PASS" : "FAIL"}
+          </div>
+          <div style={{ fontSize: "14px", color: "#64748b" }}>
+            {result.grading.passed_tests} of {result.grading.total_tests} tests passed
+          </div>
+        </div>
+      )}
+
       {/* === SHOW RESULT (if success) === */}
       {result && (
         <pre

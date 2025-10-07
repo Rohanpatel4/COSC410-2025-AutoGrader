@@ -28,6 +28,9 @@ services:
       dockerfile: infra/docker/docker/judge0.with-docker.Dockerfile
     user: root
     privileged: true
+    cap_add:
+      - SYS_ADMIN
+      - SYS_PTRACE
     environment:
       - JUDGE0_DISABLE_INTERNET=true
       - JUDGE0_MAX_QUEUE_SIZE=100
@@ -46,6 +49,7 @@ services:
     volumes:
       - judge0_data:/var/lib/judge0
       - /var/run/docker.sock:/var/run/docker.sock
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:2358/languages"]
       interval: 60s
@@ -62,9 +66,12 @@ services:
     build:
       context: .
       dockerfile: infra/docker/docker/judge0.with-docker.Dockerfile
-    command: ["/scripts/workers"]
+    command: ["sh", "-c", "cd /api && bundle exec rake resque:work"]
     user: root
     privileged: true
+    cap_add:
+      - SYS_ADMIN
+      - SYS_PTRACE
     environment:
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
@@ -74,12 +81,17 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - JUDGE0_DISABLE_INTERNET=true
+      - QUEUE=*
+      - INTERVAL=0.1
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      judge0:
         condition: service_healthy
 
   backend:
@@ -88,7 +100,7 @@ services:
       dockerfile: infra/docker/backend.Dockerfile
     environment:
       - DATABASE_URL=sqlite:///./backend/app.db
-      - CORS_ORIGINS=http://localhost:5173
+      - CORS_ORIGINS=["http://localhost:5173"]
       - JUDGE0_URL=http://judge0:2358
     ports: ["8000:8000"]
     volumes:
@@ -103,8 +115,6 @@ services:
     depends_on:
       judge0:
         condition: service_healthy
-      judge0_workers:
-        condition: service_started
 
   frontend:
     build:
