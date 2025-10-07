@@ -1,11 +1,12 @@
 export type Assignment = {
-    id: string;
-    course_id: string;
-    title: string;
-    description?: string | null;
-    test_file: File;
-    submission_limit?: number | null;
-    start_at?: Date | null;  // Date object in client
-    end_at?: Date | null;
-    submission_count?: number; // server-provided count
-  };
+  id: number;
+  title: string;
+  course_id: number;
+  description?: string | null;
+  test_file_id?: string | number | null;
+  sub_limit?: number | null;
+  num_attempts?: number; 
+  start?: string | null;
+  stop?: string | null;
+};
+

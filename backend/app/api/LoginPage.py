@@ -1,76 +1,50 @@
-from enum import Enum
-from typing import Optional
+# backend/app/api/LoginPage.py
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from passlib.hash import bcrypt
 
-import sqlite3
-from sqlite3 import Connection
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, constr
-from pathlib import Path
+from app.core.db import get_db
+from app.models.models import User, RoleEnum
 
-router = APIRouter(prefix="/login", tags=["login"])
+router = APIRouter()
 
-# Point to backend/autograder.db regardless of where uvicorn is launched
-DATABASE_PATH = str(Path(__file__).resolve().parents[1] / "autograder.db")
+@router.post("/login")
+def login(payload: dict, db: Session = Depends(get_db)):
+    # Frontend sends username (email), password, role
+    username = (payload.get("username") or payload.get("email") or "").strip()
+    password = payload.get("password") or ""
+    role_in  = (payload.get("role") or "").strip()
 
-# ---------- DB helpers ----------
+    if not username or not password or not role_in:
+        raise HTTPException(400, "username, password, and role are required")
 
-def get_db_connection() -> Connection:
+    # Validate role -> Enum
     try:
-        conn = sqlite3.connect(DATABASE_PATH)
-        conn.row_factory = sqlite3.Row  # dict-like rows
-        return conn
-    except sqlite3.Error as e:
-        raise HTTPException(status_code=500, detail=f"Database connection error: {e}")
+        role = RoleEnum(role_in)
+    except ValueError:
+        raise HTTPException(400, "Invalid role")
 
-def fetch_user_by_email(conn: Connection, email: str) -> Optional[sqlite3.Row]:
-    cur = conn.execute(
-        "SELECT user_id, email, password, role FROM users WHERE email = ?",
-        (email,),
-    )
-    return cur.fetchone()
+    # Look up by username (which you store as email in the seeder)
+    user = db.query(User).filter(User.username == username).first()
+    if not user or user.role != role:
+        raise HTTPException(401, "Invalid username or password")
 
-# ---------- Models ----------
+    # Check bcrypt
+    try:
+        if not bcrypt.verify(password, user.password_hash):
+            raise HTTPException(401, "Invalid username or password")
+    except Exception:
+        raise HTTPException(401, "Invalid username or password")
 
-class Role(str, Enum):
-    student = "student"
-    faculty = "faculty"
-    admin = "admin"
+    # Shape matches your frontend expectations
+    return {
+        "user_id": user.id,
+        "userId": user.id,
+        "role": user.role.value,
+        "status": user.role.value,
+        "token": None,
+    }
 
-class LoginRequest(BaseModel):
-    # Keep 'username' for compatibility, but it's actually the email in your DB
-    username: constr(strip_whitespace=True, min_length=1)
-    password: constr(min_length=1)
-    role: Role  # must match users.role
-
-class LoginResponse(BaseModel):
-    user_id: int
-    status: Role
-
-# ---------- Route ----------
-
-_INVALID = HTTPException(status_code=401, detail="Invalid username or password")
-
-@router.post("", response_model=LoginResponse)
-def login(payload: LoginRequest) -> LoginResponse:
-    """
-    Verify email (sent as username) + password + role.
-    On success, return user_id and status.
-    On failure, return generic 401 (no info leak).
-    """
-    with get_db_connection() as conn:
-        row = fetch_user_by_email(conn, payload.username)  # username is email in DB
-        if row is None:
-            raise _INVALID
-
-        # Plaintext check (dev only). In prod, use bcrypt/argon2.
-        if payload.password != row["password"]:
-            raise _INVALID
-
-        # Role must match exactly
-        if payload.role != row["role"]:
-            raise _INVALID
-
-        return LoginResponse(user_id=int(row["user_id"]), status=Role(row["role"]))
     
     
 

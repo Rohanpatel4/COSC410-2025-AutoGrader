@@ -3,18 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { fetchJson } from "../api/client";
 import type { Assignment } from "../types/assignments";
 
-// Helpers for <input type="datetime-local">
+// datetime-local helpers
 function toLocalInputValue(d: Date | null) {
   if (!d) return "";
   const pad = (n: number) => String(n).padStart(2, "0");
-  const year = d.getFullYear();
-  const month = pad(d.getMonth() + 1);
-  const day = pad(d.getDate());
-  const hours = pad(d.getHours());
-  const minutes = pad(d.getMinutes());
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
-
 function fromLocalInputValue(v: string): Date | null {
   if (!v) return null;
   const [date, time] = v.split("T");
@@ -27,33 +21,41 @@ export default function AssignmentsPage() {
   const navigate = useNavigate();
   const [assignments, setAssignments] = React.useState<Assignment[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const [dateMap, setDateMap] = React.useState<Record<string, { start: Date | null; end: Date | null }>>({});
+  const [dateMap, setDateMap] = React.useState<Record<
+    number,
+    { start: Date | null; stop: Date | null }
+  >>({});
 
   React.useEffect(() => {
     let alive = true;
     setLoading(true);
 
-    // Fetch as unknown and normalize date fields to Date objects
     fetchJson<any[]>("/api/v1/assignments")
-      .then(raw => {
+      .then((raw) => {
         if (!alive) return;
         const normalized: Assignment[] = (raw || []).map((a: any) => ({
           ...a,
-          start_at: a?.start_at ? new Date(a.start_at) : null,
-          end_at: a?.end_at ? new Date(a.end_at) : null,
+          start: a?.start ?? null,
+          stop: a?.stop ?? null,
+          num_attempts: a?.num_attempts ?? 0,
         }));
         setAssignments(normalized);
-        // seed local date inputs
-        const seeded: Record<string, { start: Date | null; end: Date | null }> = {};
+
+        const seeded: Record<number, { start: Date | null; stop: Date | null }> = {};
         for (const a of normalized) {
-          seeded[a.id] = { start: a.start_at ?? null, end: a.end_at ?? null };
+          seeded[a.id] = {
+            start: a.start ? new Date(a.start) : null,
+            stop: a.stop ? new Date(a.stop) : null,
+          };
         }
         setDateMap(seeded);
       })
-      .catch(() => { if (alive) setAssignments([]); })
-      .finally(() => { if (alive) setLoading(false); });
+      .catch(() => {})
+      .finally(() => alive && setLoading(false));
 
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, []);
 
   return (
@@ -65,8 +67,8 @@ export default function AssignmentsPage() {
         <p>No assignments found.</p>
       ) : (
         <ul>
-          {assignments.map(assignment => (
-            <li key={assignment.id} style={{ marginBottom: 12 }}>
+          {assignments.map((a) => (
+            <li key={a.id} style={{ marginBottom: 12 }}>
               <button
                 style={{
                   background: "#4285f4",
@@ -75,57 +77,57 @@ export default function AssignmentsPage() {
                   borderRadius: 6,
                   padding: "6px 12px",
                   cursor: "pointer",
-                  marginRight: 8
+                  marginRight: 8,
                 }}
-                onClick={() => navigate(`/assignments/${assignment.id}`)}
+                onClick={() => navigate(`/assignments/${a.id}`)}
               >
-                {assignment.title}
+                {a.title}
               </button>
               <span style={{ marginLeft: 12, color: "#555" }}>
-                Submissions: {assignment.submission_count ?? 0}
+                Attempts: {a.num_attempts ?? 0}
               </span>
               <div style={{ fontSize: "0.95em", color: "#555" }}>
-                <div>Course: {assignment.course_id}</div>
-                {assignment.description && <div>Description: {assignment.description}</div>}
-                <div>Test File ID: {assignment.test_file_id ?? "None"}</div>
-                <div>Submission Limit: {assignment.submission_limit == null ? "∞" : assignment.submission_limit}</div>
+                <div>Course: {a.course_id}</div>
+                {a.description && <div>Description: {a.description}</div>}
+                <div>Submission Limit: {a.sub_limit == null ? "∞" : a.sub_limit}</div>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                   <label>
                     Start
                     <input
                       style={{ marginLeft: 6 }}
                       type="datetime-local"
-                      value={toLocalInputValue(dateMap[assignment.id]?.start ?? null)}
+                      value={toLocalInputValue(dateMap[a.id]?.start ?? null)}
                       onChange={(e) =>
-                        setDateMap(prev => ({
+                        setDateMap((prev) => ({
                           ...prev,
-                          [assignment.id]: {
+                          [a.id]: {
                             start: fromLocalInputValue(e.target.value),
-                            end: prev[assignment.id]?.end ?? null,
+                            stop: prev[a.id]?.stop ?? null,
                           },
                         }))
                       }
                     />
                   </label>
                   <label>
-                    End
+                    Stop
                     <input
                       style={{ marginLeft: 6 }}
                       type="datetime-local"
-                      value={toLocalInputValue(dateMap[assignment.id]?.end ?? null)}
+                      value={toLocalInputValue(dateMap[a.id]?.stop ?? null)}
                       onChange={(e) =>
-                        setDateMap(prev => ({
+                        setDateMap((prev) => ({
                           ...prev,
-                          [assignment.id]: {
-                            start: prev[assignment.id]?.start ?? null,
-                            end: fromLocalInputValue(e.target.value),
+                          [a.id]: {
+                            start: prev[a.id]?.start ?? null,
+                            stop: fromLocalInputValue(e.target.value),
                           },
                         }))
                       }
                     />
                   </label>
                   <span style={{ color: "#666" }}>
-                    ({assignment.start_at ? assignment.start_at.toLocaleString() : "No start"} → {assignment.end_at ? assignment.end_at.toLocaleString() : "No stop"})
+                    ({a.start ? new Date(a.start).toLocaleString() : "No start"} →{" "}
+                    {a.stop ? new Date(a.stop).toLocaleString() : "No stop"})
                   </span>
                 </div>
               </div>

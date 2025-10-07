@@ -1,21 +1,21 @@
 import React, { useState } from "react";
 import { BASE } from "../api/client";
 import { useLocation } from "react-router-dom";
+import { useAuth } from "../auth/AuthContext";
 
+/**
+ * Student: upload a submission for a specific assignment.
+ * Backend route: POST /api/v1/assignments/:assignment_id/submit
+ * FormData fields: submission (file), student_id (number)
+ */
 const UploadStudentFile: React.FC = () => {
   const location = useLocation() as any;
+  const { userId } = useAuth();
 
-  // --- retrieve test case from router or sessionStorage ---
-  let testCase: string = location?.state?.testCase ?? "";
-  let testFilename: string = location?.state?.filename ?? "";
-
-  if (!testCase) {
-    testCase = sessionStorage.getItem("autograder:test_case") ?? "";
-  }
-  if (!testFilename) {
-    testFilename =
-      sessionStorage.getItem("autograder:test_filename") ?? "test_case.py";
-  }
+  // prefill assignment_id from navigation state if present
+  const [assignmentId, setAssignmentId] = useState<string>(
+    String(location?.state?.assignment_id ?? "")
+  );
 
   const [file, setFile] = useState<File | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -28,29 +28,25 @@ const UploadStudentFile: React.FC = () => {
     setResult(null);
     setErrorJson(null);
 
+    if (!assignmentId.trim()) return setMsg("Missing assignment_id");
     if (!file) return setMsg("Please choose a student .py file");
-    if (!file.name.toLowerCase().endsWith(".py"))
+    if (!file.name.toLowerCase().endsWith(".py")) {
       return setMsg("Only .py files are accepted.");
-    if (!testCase)
-      return setMsg("No test case available. Upload a test file first.");
+    }
 
     const fd = new FormData();
     fd.append("submission", file);
-    fd.append("test_case", testCase);
+    fd.append("student_id", String(userId ?? ""));
 
     try {
-      const res = await fetch(`${BASE}/api/v1/attempts`, {
-        method: "POST",
-        body: fd,
-      });
+      const res = await fetch(
+        `${BASE}/api/v1/assignments/${encodeURIComponent(assignmentId)}/submit`,
+        { method: "POST", body: fd }
+      );
 
       const text = await res.text();
       let data: any = null;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        /* ignore JSON parse errors */
-      }
+      try { data = JSON.parse(text); } catch {}
 
       if (!res.ok) {
         const detail = data?.detail ?? text;
@@ -64,7 +60,7 @@ const UploadStudentFile: React.FC = () => {
       }
 
       setResult(data);
-      setMsg("Ran in sandbox.");
+      setMsg(`Submitted. Grade: ${data?.grade ?? "—"}`);
     } catch (err: any) {
       setMsg(err?.message || "Network error");
     }
@@ -74,29 +70,16 @@ const UploadStudentFile: React.FC = () => {
     <form onSubmit={onSubmit} style={{ maxWidth: 800, margin: "0 auto" }}>
       <h2>Upload Student Code</h2>
 
-      {testCase ? (
-        <p style={{ fontSize: 12, color: "#475569" }}>
-          Test loaded: <strong>{testFilename}</strong>
-        </p>
-      ) : (
-        <div
-          style={{
-            background: "#fef2f2",
-            color: "#b91c1c",
-            padding: "1rem",
-            borderRadius: "0.5rem",
-            border: "2px solid #b91c1c",
-            textAlign: "center",
-            fontWeight: "bold",
-            marginTop: "1rem",
-            fontSize: "1.5rem",
-          }}
-        >
-          ⚠️ NO TEST CASE FOUND ⚠️  
-          <br />
-          Please upload a test file first at <code>/upload/test</code>.
-        </div>
-      )}
+      <label style={{ display: "block", marginBottom: 8 }}>
+        Assignment ID
+        <input
+          style={{ marginLeft: 8 }}
+          value={assignmentId}
+          onChange={(e) => setAssignmentId(e.target.value)}
+          placeholder="e.g., 1"
+          required
+        />
+      </label>
 
       <input
         type="file"
@@ -107,7 +90,6 @@ const UploadStudentFile: React.FC = () => {
       <button type="submit">Upload &amp; Run</button>
       <p style={{ color: "#334155", marginTop: 10 }}>{msg}</p>
 
-      {/* === SHOW DETAILED ERROR (if exists) === */}
       {errorJson && (
         <pre
           style={{
@@ -123,7 +105,7 @@ const UploadStudentFile: React.FC = () => {
         </pre>
       )}
 
-      {/* === SHOW GRADING STATUS === */}
+      {/* Show grading status */}
       {result && result.grading && (
         <div
           style={{
@@ -152,7 +134,7 @@ const UploadStudentFile: React.FC = () => {
         </div>
       )}
 
-      {/* === SHOW RESULT (if success) === */}
+      {/* Show raw result */}
       {result && (
         <pre
           style={{
@@ -166,39 +148,6 @@ const UploadStudentFile: React.FC = () => {
         >
           {JSON.stringify(result, null, 2)}
         </pre>
-      )}
-
-      {/* === SHOW TEST CASE CONTENT === */}
-      {testCase && (
-        <div style={{ marginTop: 20 }}>
-          <h3 style={{ marginBottom: 6 }}>
-            Test Case Contents{" "}
-            <span
-              style={{
-                fontSize: "0.9rem",
-                fontWeight: "normal",
-                color: "#475569",
-                marginLeft: 6,
-              }}
-            >
-              (type: <strong>{typeof testCase}</strong>)
-            </span>
-          </h3>
-          <pre
-            style={{
-              background: "#f1f5f9",
-              border: "1px solid #cbd5e1",
-              padding: 10,
-              borderRadius: 8,
-              fontFamily: "monospace",
-              fontSize: 13,
-              whiteSpace: "pre-wrap",
-              overflowX: "auto",
-            }}
-          >
-            {testCase}
-          </pre>
-        </div>
       )}
     </form>
   );

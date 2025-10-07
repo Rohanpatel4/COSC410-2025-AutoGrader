@@ -1,4 +1,4 @@
-/* ========== NEW ========== */
+/* ========== UPDATED main.tsx ========== */
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
@@ -6,21 +6,24 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-route
 import LoginPage from "./webpages/LoginPage";
 import StudentDashboard from "./webpages/StudentDashboard";
 import FacultyDashboard from "./webpages/FacultyDashboard";
-import CoursePage from "./webpages/CoursePage"; // ← added
-import AssignmentsPage from "./webpages/AssignmentsPage"; // add this
-// inside <Routes> (before the "*" route)
-import SandboxApp from "./webpages/SandboxApp";
-import UploadFiles from "./webpages/UploadTestFile.tsx";
-import UploadStudentFiles from "./webpages/UploadStudentFile";
-import "./styles/index.css";
+import CoursePage from "./webpages/CoursePage";
+import AssignmentsPage from "./webpages/AssignmentsPage";
+import AssignmentDetailPage from "./webpages/AssignmentDetailPage"; // ← NEW
 
+// Optional sandbox (still rough per your note)
+import SandboxApp from "./webpages/SandboxApp";
+
+// NEW upload pages
+import UploadTestFile from "./webpages/UploadTestFile";
+import UploadStudentFile from "./webpages/UploadStudentFile";
+
+import "./styles/index.css";
 import { AuthProvider, Protected, useAuth } from "./auth/AuthContext";
 
 function RoleRouter() {
   const location = useLocation();
   const { role } = useAuth();
   const stateRole = (location.state as { role?: "faculty" | "student" } | undefined)?.role;
-
   const effectiveRole = role ?? stateRole;
 
   if (effectiveRole === "faculty") return <FacultyDashboard />;
@@ -44,7 +47,7 @@ function AppRouter() {
           }
         />
 
-        {/* Protect the course page so only logged-in users can view it */}
+        {/* Course page */}
         <Route
           path="/courses/:course_id"
           element={
@@ -54,10 +57,46 @@ function AppRouter() {
           }
         />
 
-        {/*
-        LATER PUT THIS IN WHEN WE ARE FINISHED WITH THE SANDBOX!!!!!!!
-
+        {/* Assignment detail (student/faculty) */}
         <Route
+          path="/assignments/:assignment_id"
+          element={
+            <Protected>
+              <AssignmentDetailPage />
+            </Protected>
+          }
+        />
+
+        {/* All assignments index (optional) */}
+        <Route
+          path="/stuassignment/*"
+          element={
+            <Protected>
+              <AssignmentsPage />
+            </Protected>
+          }
+        />
+
+        {/* Upload flows (protect if you want sign-in required) */}
+        <Route
+          path="/upload/test"
+          element={
+            <Protected>
+              <UploadTestFile />
+            </Protected>
+          }
+        />
+        <Route
+          path="/upload/student"
+          element={
+            <Protected>
+              <UploadStudentFile />
+            </Protected>
+          }
+        />
+
+        {/* Temporary sandbox route (unprotected per your comment, change if needed) */}
+        {/* <Route
           path="/assignment/*"
           element={
             <Protected>
@@ -66,9 +105,7 @@ function AppRouter() {
           }
         /> */}
         <Route path="/assignment/*" element={<SandboxApp />} />
-        <Route path="/stuassignment/*" element={<AssignmentsPage />} />
-        <Route path="/upload/test" element={<UploadFiles />} />
-        <Route path="/upload/student" element={<UploadStudentFiles />} />
+
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
@@ -83,4 +120,5 @@ createRoot(root).render(
     <AppRouter />
   </AuthProvider>
 );
+
 

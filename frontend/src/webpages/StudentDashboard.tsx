@@ -1,4 +1,3 @@
-/* ========== NEW (numeric IDs) ========== */
 import React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
@@ -8,11 +7,9 @@ import type { Course } from "../types/courses";
 export default function StudentDashboard() {
   const { userId, logout } = useAuth();
   const navigate = useNavigate();
-
-  // Coerce to number; fall back to 0 (harmless) if not present.
   const studentId = Number(userId ?? 0);
 
-  const [query, setQuery] = React.useState(""); // user types a number, we parse it
+  const [tag, setTag] = React.useState(""); // user types a course_tag (e.g., "COSC-410")
   const [mine, setMine] = React.useState<Course[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [msg, setMsg] = React.useState<string | null>(null);
@@ -44,21 +41,21 @@ export default function StudentDashboard() {
 
   async function onRegister(e: React.FormEvent) {
     e.preventDefault();
-    const trimmed = query.trim();
-    const courseIdNum = Number(trimmed);
-    if (!trimmed || !Number.isFinite(courseIdNum)) {
-      setMsg("Please enter a numeric Course ID");
+    const trimmed = tag.trim();
+    if (!trimmed) {
+      setMsg("Please enter a Course Tag (e.g., COSC-410)");
       return;
     }
 
     setMsg(null);
     try {
+      // backend accepts course_tag OR course_id; we use course_tag
       await fetchJson("/api/v1/registrations", {
         method: "POST",
-        body: JSON.stringify({ student_id: studentId, course_id: courseIdNum }),
+        body: JSON.stringify({ student_id: studentId, course_tag: trimmed }),
       });
       setMsg("Registered!");
-      setQuery("");
+      setTag("");
       await loadMyCourses();
     } catch (e: any) {
       setMsg(e?.message ?? "Registration failed");
@@ -75,21 +72,16 @@ export default function StudentDashboard() {
         <button onClick={onLogout}>Log out</button>
       </div>
 
-      <form
-        onSubmit={onRegister}
-        style={{ border: "1px solid #ddd", padding: 12, borderRadius: 8 }}
-      >
+      <form onSubmit={onRegister} style={{ border: "1px solid #ddd", padding: 12, borderRadius: 8 }}>
         <label htmlFor="course-search">Register for courses</label>
         <div style={{ display: "flex", gap: 8 }}>
           <input
             id="course-search"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            placeholder="Enter numeric Course ID (e.g., 4101)"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Enter Course Tag (e.g., COSC-410)"
+            value={tag}
+            onChange={(e) => setTag(e.target.value)}
           />
-          <button type="submit" disabled={!query.trim()}>
+          <button type="submit" disabled={!tag.trim()}>
             Register
           </button>
         </div>
@@ -107,14 +99,8 @@ export default function StudentDashboard() {
         <ul>
           {mine.map((c) => (
             <li key={c.id}>
-              <Link to={`/courses/${encodeURIComponent(c.course_id)}`}>
-                {c.name}
-              </Link>{" "}
-              <span style={{ color: "#666" }}>({c.course_id})</span>
-              <span style={{ marginLeft: 8, color: "#666" }}>
-                {/* Line 116 shows professor name for who is teaching course */}
-              — Instructor: {c.professor_name ?? `#${c.professor_id}`} 
-              </span>
+              <Link to={`/courses/${encodeURIComponent(c.course_tag)}`}>{c.name}</Link>{" "}
+              <span style={{ color: "#666" }}>({c.course_tag})</span>
             </li>
           ))}
         </ul>
@@ -130,3 +116,4 @@ export default function StudentDashboard() {
     </div>
   );
 }
+

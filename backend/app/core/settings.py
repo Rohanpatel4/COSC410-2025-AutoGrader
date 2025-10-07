@@ -8,7 +8,12 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./app.db"
 
 
-    CORS_ORIGINS: List[str] = ["http://localhost:5173"]
+    CORS_ORIGINS: List[str] = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    # add your LAN URL if Vite shows one in the terminal:
+    # "http://192.168.1.10:5173",
+]
 
     JUDGE0_URL: Optional[str] = None
     JUDGE0_ALLOWED_BASES: List[str] = [
