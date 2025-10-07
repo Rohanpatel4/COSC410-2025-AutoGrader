@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
 from typing import Optional
+from datetime import datetime
 
 from app.core.db import get_db
 from app.models.models import (
@@ -54,6 +55,28 @@ def _serialize_assignment(db: Session, a: Assignment) -> dict:
         "num_attempts": int(attempts),
     }
 
+def _parse_dt(v):
+    """Accepts None, datetime, 'YYYY-MM-DDTHH:MM', or 'YYYY-MM-DD HH:MM'."""
+    if v is None:
+        return None
+    if isinstance(v, datetime):
+        return v
+    if isinstance(v, str):
+        s = v.strip()
+        if not s:
+            return None
+        # primary: ISO8601 from <input type="datetime-local">
+        try:
+            return datetime.fromisoformat(s)
+        except ValueError:
+            pass
+        # fallback: space-separated
+        try:
+            return datetime.strptime(s, "%Y-%m-%d %H:%M")
+        except ValueError:
+            return None
+    return None
+
 # ---- list endpoints --------------------------------------------------------
 
 @router.get("", response_model=list[dict])
@@ -90,8 +113,8 @@ def create_assignment(payload: dict, db: Session = Depends(get_db)):
     title = (payload.get("title") or "").strip()
     description = payload.get("description") or None
     sub_limit = payload.get("sub_limit", None)
-    start = payload.get("start", None)
-    stop = payload.get("stop", None)
+    start = _parse_dt(payload.get("start", None))
+    stop = _parse_dt(payload.get("stop", None))
 
     if not isinstance(course_id, int):
         raise HTTPException(400, "course_id must be an integer")
@@ -106,15 +129,13 @@ def create_assignment(payload: dict, db: Session = Depends(get_db)):
         course_id=course_id,
         title=title,
         description=description,
-        sub_limit=sub_limit,
+        sub_limit=sub_limit if isinstance(sub_limit, int) else None,
     )
-    try:
-        if hasattr(a, "start"):
-            setattr(a, "start", start)
-        if hasattr(a, "stop"):
-            setattr(a, "stop", stop)
-    except Exception:
-        pass
+    # Only set if the columns exist (they do in your migration)
+    if hasattr(a, "start"):
+        a.start = start
+    if hasattr(a, "stop"):
+        a.stop = stop
 
     db.add(a)
     db.commit()
@@ -157,8 +178,7 @@ async def upload_test_file_for_assignment(
     except Exception as e:
         raise HTTPException(400, f"Failed to read test file: {e}")
 
-    # Simple rule: keep only the latest test row per assignment (optional)
-    # If you want multiple tests, remove this delete section.
+    # Replace any existing test rows for this assignment (simple policy)
     db.query(TestCase).filter(TestCase.assignment_id == assignment_id).delete()
 
     tc = TestCase(assignment_id=assignment_id, var_char=content)
@@ -219,20 +239,16 @@ async def submit_to_assignment(
     if not stu:
         raise HTTPException(404, "Student not found")
     if stu.role not in (RoleEnum.student,):
-        # You can relax this during dev if needed
         raise HTTPException(400, "Only students can submit")
 
-    # optional: ensure enrollment
+    # optional: ensure enrollment (relaxed in dev)
     reg = db.execute(
         select(StudentRegistration).where(
             StudentRegistration.student_id == student_id,
             StudentRegistration.course_id == a.course_id,
         )
     ).scalar_one_or_none()
-    # In dev you might allow missing enrollment; here we warn instead of block:
-    if not reg:
-        # raise HTTPException(403, "Student not registered for this course")
-        pass
+    # If not reg: allow for now.
 
     # fetch latest test code for this assignment
     tc = db.execute(
@@ -259,17 +275,15 @@ async def submit_to_assignment(
         client = get_judge0_client()
         token = client.create_submission(
             source_code=student_code,
-            language_id=71,   # Python 3.8.1 (align with your attempt_submission_test)
+            language_id=71,   # Python 3.8.1
             stdin=tc.var_char,
         )
         result = client.wait_for_completion(token, timeout=30)
     except Exception as e:
-        # Preserve friendly debug shape like your other route
         err_payload = e.args[0] if (hasattr(e, "args") and e.args and isinstance(e.args[0], dict)) else {"error": repr(e)}
         raise HTTPException(status_code=500, detail={"message": "Judge0 error", "judge0_debug": err_payload})
 
-    # toy grading rule (replace with your real rubric):
-    # if program produced any stdout and status is Accepted → 100 else 0
+    # toy grading rule:
     status_name = (result.get("status") or {}).get("description") or ""
     stdout = result.get("stdout") or ""
     grade = 100 if ("Accepted" in status_name and stdout.strip()) else 0
