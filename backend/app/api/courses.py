@@ -3,6 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func, and_
 
+from datetime import datetime
+
 from app.core.db import get_db
 from app.models.models import (
     Course,
@@ -16,7 +18,6 @@ from app.models.models import (
 
 router = APIRouter()
 
-
 # ---------- helpers ----------
 def _course_by_key(db: Session, key: str) -> Course | None:
     """Fetch a course by numeric ID or course_tag."""
@@ -29,6 +30,25 @@ def _course_by_key(db: Session, key: str) -> Course | None:
         .scalar_one_or_none()
     )
 
+def _parse_dt(v):
+    """Accept None, datetime, 'YYYY-MM-DDTHH:MM', or 'YYYY-MM-DD HH:MM'."""
+    if v is None:
+        return None
+    if isinstance(v, datetime):
+        return v
+    if isinstance(v, str):
+        s = v.strip()
+        if not s:
+            return None
+        try:
+            return datetime.fromisoformat(s)
+        except ValueError:
+            pass
+        try:
+            return datetime.strptime(s, "%Y-%m-%d %H:%M")
+        except ValueError:
+            return None
+    return None
 
 def _assignment_to_dict(
     a: Assignment,
@@ -50,7 +70,6 @@ def _assignment_to_dict(
         "num_attempts": num_attempts,
     }
     return payload
-
 
 # ---------- course CRUD / listing ----------
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -96,7 +115,6 @@ def create_course(
         "description": course.description,
     }
 
-
 @router.get("")
 def list_courses(
     professor: int | None = None,
@@ -135,7 +153,6 @@ def list_courses(
     ]
     return {"items": items, "nextCursor": None}
 
-
 @router.get("/{course_key}")
 def get_course(course_key: str, db: Session = Depends(get_db)):
     c = _course_by_key(db, course_key)
@@ -147,7 +164,6 @@ def get_course(course_key: str, db: Session = Depends(get_db)):
         "name": c.name,
         "description": c.description,
     }
-
 
 # ---------- faculty management ----------
 @router.get("/{course_key}/faculty")
@@ -171,7 +187,6 @@ def course_faculty(course_key: str, db: Session = Depends(get_db)):
     )
     return [{"id": u.id, "name": getattr(u, "username", None) or getattr(u, "name", None) or str(u.id)}
             for u in users if u.role == RoleEnum.faculty]
-
 
 @router.post("/{course_key}/faculty", status_code=status.HTTP_201_CREATED)
 def add_co_instructor(
@@ -211,7 +226,6 @@ def add_co_instructor(
     db.commit()
     return {"ok": True}
 
-
 @router.delete("/{course_key}/faculty/{faculty_id}")
 def remove_co_instructor(
     course_key: str,
@@ -234,7 +248,6 @@ def remove_co_instructor(
         raise HTTPException(404, "Link not found")
     db.commit()
     return {"ok": True}
-
 
 # ---------- students ----------
 @router.get("/{course_key}/students")
@@ -266,7 +279,6 @@ def course_students(course_key: str, db: Session = Depends(get_db)):
         for s in students
     ]
 
-
 @router.delete("/{course_key}/students/{student_id}")
 def remove_student_from_course(
     course_key: str,
@@ -293,7 +305,6 @@ def remove_student_from_course(
     db.commit()
     return {"ok": True}
 
-
 # ---------- assignments ----------
 @router.get("/{course_key}/assignments", response_model=list[dict])
 def list_assignments_for_course(course_key: str, db: Session = Depends(get_db)):
@@ -316,7 +327,6 @@ def list_assignments_for_course(course_key: str, db: Session = Depends(get_db)):
 
     return [_assignment_to_dict(a, attempts) for a in rows]
 
-
 @router.post("/{course_key}/assignments", response_model=dict, status_code=status.HTTP_201_CREATED)
 def create_assignment_for_course(
     course_key: str,
@@ -331,14 +341,15 @@ def create_assignment_for_course(
     if not c:
         raise HTTPException(404, "Course not found")
 
-    title = (payload.get("title") or "").trim() if hasattr(str, "trim") else (payload.get("title") or "").strip()
+    title = (payload.get("title") or "").strip()
     if not title:
         raise HTTPException(400, "title is required")
 
     description = (payload.get("description") or "") or None
     sub_limit = payload.get("sub_limit", None)
-    start = payload.get("start")
-    stop = payload.get("stop")
+
+    start = _parse_dt(payload.get("start"))
+    stop  = _parse_dt(payload.get("stop"))
 
     a = Assignment(
         course_id=c.id,
@@ -347,18 +358,16 @@ def create_assignment_for_course(
         sub_limit=sub_limit if isinstance(sub_limit, int) else None,
     )
 
-    # If you added start/stop columns via Alembic 0004, set them when present.
     if hasattr(a, "start"):
-        setattr(a, "start", start)
+        a.start = start
     if hasattr(a, "stop"):
-        setattr(a, "stop", stop)
+        a.stop = stop
 
     db.add(a)
     db.commit()
     db.refresh(a)
 
     return _assignment_to_dict(a, attempts_by_aid={})
-
 
 @router.delete("/{course_key}/assignments/{assignment_id}")
 def delete_assignment(
@@ -377,6 +386,7 @@ def delete_assignment(
     db.delete(a)
     db.commit()
     return {"ok": True}
+
 
 
 
