@@ -2,6 +2,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { fetchJson } from "../api/client";
 import "../styles/LoginPage.css";
 
 type Role = "student" | "faculty" | "admin";
@@ -23,32 +24,10 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      const res = await fetch("/api/v1/login", {
+      const data = await fetchJson("/api/v1/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        // keep dual-post to satisfy either backend shape
         body: JSON.stringify({ username: email, email, password, role }),
       });
-
-      // Bail out on non-2xx
-      if (!res.ok) {
-        // Try to extract a helpful message from the backend
-        let msg = `Login failed (HTTP ${res.status})`;
-        try {
-          const j = await res.clone().json();
-          if (j?.detail) msg = String(j.detail);
-        } catch {
-          try {
-            const t = await res.text();
-            if (t) msg = t;
-          } catch {}
-        }
-        throw new Error(msg);
-      }
-
-      // Only here do we treat it as success
-      let data: any = {};
-      try { data = await res.json(); } catch {}
 
       const auth = {
         userId: String(data.userId ?? data.user_id ?? "u1"),

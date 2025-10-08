@@ -117,7 +117,7 @@ export default function AssignmentDetailPage() {
       }
 
       setSubmitMsg(`Submitted. Grade: ${data?.grade ?? "—"}`);
-      setLastResult(data?.result ?? null);
+      setLastResult(data ?? null);
 
       // refresh attempts
       const list = await fetchJson<Attempt[]>(
@@ -180,6 +180,33 @@ export default function AssignmentDetailPage() {
                 )}
                 {submitMsg && <p style={{ color: "#334155" }}>{submitMsg}</p>}
               </form>
+
+              {/* Show grading results prominently */}
+              {lastResult?.grading && (
+                <div
+                  style={{
+                    marginTop: 12,
+                    padding: "16px",
+                    borderRadius: "8px",
+                    backgroundColor: lastResult.grading.passed ? "#f0fdf4" : "#fef2f2",
+                    border: `2px solid ${lastResult.grading.passed ? "#16a34a" : "#dc2626"}`,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: "24px",
+                      fontWeight: "bold",
+                      color: lastResult.grading.passed ? "#16a34a" : "#dc2626",
+                      marginBottom: "8px",
+                    }}
+                  >
+                    {lastResult.grading.passed ? "PASS" : "FAIL"}
+                  </div>
+                  <div style={{ fontSize: "14px", color: "#64748b" }}>
+                    {lastResult.grading.passed_tests} of {lastResult.grading.total_tests} tests passed
+                  </div>
+                </div>
+              )}
 
               {lastResult && (
                 <div style={{ marginTop: 12 }}>

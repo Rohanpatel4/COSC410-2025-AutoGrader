@@ -13,13 +13,13 @@ from app.models.models import User, RoleEnum
 # Canonical users you’ll keep in the DB after a wipe
 USERS = [
     # students
-    {"id": 201, "username": "alice@wofford.edu", "role": RoleEnum.student, "password": "secret"},
-    {"id": 202, "username": "bob@wofford.edu",   "role": RoleEnum.student, "password": "secret"},
+    {"id": 201, "username": "alice@wofford.edu", "name": "alice@wofford.edu", "role": RoleEnum.student, "password": "secret"},
+    {"id": 202, "username": "bob@wofford.edu",   "name": "bob@wofford.edu", "role": RoleEnum.student, "password": "secret"},
     # faculty
-    {"id": 301, "username": "prof.x@wofford.edu", "role": RoleEnum.faculty, "password": "secret"},
-    {"id": 302, "username": "prof.y@wofford.edu", "role": RoleEnum.faculty, "password": "secret"},
+    {"id": 301, "username": "prof.x@wofford.edu", "name": "prof.x@wofford.edu", "role": RoleEnum.faculty, "password": "secret"},
+    {"id": 302, "username": "prof.y@wofford.edu", "name": "prof.y@wofford.edu", "role": RoleEnum.faculty, "password": "secret"},
     # optional admin (uncomment if you want one)
-    # {"id": 101, "username": "admin@wofford.edu", "role": RoleEnum.admin, "password": "secret"},
+    # {"id": 101, "username": "admin@wofford.edu", "name": "admin@wofford.edu", "role": RoleEnum.admin, "password": "secret"},
 ]
 
 NON_USER_TABLES = [
@@ -75,6 +75,7 @@ def reseed_users(sess, users: list[dict], overwrite: bool = True):
         row = User(
             id=u["id"],
             username=u["username"],
+            name=u.get("name", u["username"]),  # Use name if provided, otherwise username
             role=u["role"],
             password_hash=hashed,
             created_at=now,

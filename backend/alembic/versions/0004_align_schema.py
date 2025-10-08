@@ -34,17 +34,24 @@ def upgrade():
         cols = _colnames(inspector, "users")
         # add username if missing
         if "username" not in cols:
-            op.add_column("users", sa.Column("username", sa.String(255), nullable=True, unique=True))
+            with op.batch_alter_table("users") as batch:
+                batch.add_column(sa.Column("username", sa.String(255), nullable=True))
+                # Add unique constraint separately
+                batch.create_unique_constraint("uq_users_username", ["username"])
             # copy from legacy 'name' if present
             if "name" in cols:
                 op.execute("UPDATE users SET username = name WHERE username IS NULL")
             # make it NOT NULL after backfill
             with op.batch_alter_table("users") as batch:
                 batch.alter_column("username", existing_type=sa.String(255), nullable=False)
+                # Drop the old name column since we've migrated to username
+                if "name" in cols:
+                    batch.drop_column("name")
 
         # add password_hash
         if "password_hash" not in cols:
-            op.add_column("users", sa.Column("password_hash", sa.String(255), nullable=True))
+            with op.batch_alter_table("users") as batch:
+                batch.add_column(sa.Column("password_hash", sa.String(255), nullable=True))
             # put a dummy default
             op.execute("UPDATE users SET password_hash = COALESCE(password_hash, '$2b$12$PLACEHOLDER') ")
             with op.batch_alter_table("users") as batch:
@@ -52,7 +59,8 @@ def upgrade():
 
         # add created_at (naive ts)
         if "created_at" not in cols:
-            op.add_column("users", sa.Column("created_at", sa.DateTime(), nullable=True))
+            with op.batch_alter_table("users") as batch:
+                batch.add_column(sa.Column("created_at", sa.DateTime(), nullable=True))
             op.execute("UPDATE users SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP)")
             with op.batch_alter_table("users") as batch:
                 batch.alter_column("created_at", existing_type=sa.DateTime(), nullable=False)

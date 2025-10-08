@@ -270,23 +270,21 @@ async def submit_to_assignment(
     except Exception as e:
         raise HTTPException(400, f"Failed to read submission: {e}")
 
-    # run via Judge0
+    # Import grading functions from the attempts module
+    from app.api.attempt_submission_test import _run_with_subprocess, _parse_pytest_output
+
+    # Run with the same grading logic as the sandbox
     try:
-        client = get_judge0_client()
-        token = client.create_submission(
-            source_code=student_code,
-            language_id=71,   # Python 3.8.1
-            stdin=tc.var_char,
-        )
-        result = client.wait_for_completion(token, timeout=30)
+        result = _run_with_subprocess(student_code, tc.var_char)
+        grading = result.get("grading", {})
     except Exception as e:
         err_payload = e.args[0] if (hasattr(e, "args") and e.args and isinstance(e.args[0], dict)) else {"error": repr(e)}
-        raise HTTPException(status_code=500, detail={"message": "Judge0 error", "judge0_debug": err_payload})
+        raise HTTPException(status_code=500, detail={"message": "Execution error", "error": err_payload})
 
-    # toy grading rule:
-    status_name = (result.get("status") or {}).get("description") or ""
-    stdout = result.get("stdout") or ""
-    grade = 100 if ("Accepted" in status_name and stdout.strip()) else 0
+    # Calculate grade based on test results
+    passed = grading.get("all_passed", False)
+    total_tests = grading.get("total_tests", 0)
+    grade = 100 if passed and total_tests > 0 else 0
 
     # persist attempt
     attempt = StudentSubmission(
@@ -303,9 +301,15 @@ async def submit_to_assignment(
         "assignment_id": assignment_id,
         "student_id": student_id,
         "grade": grade,
+        "grading": {
+            "passed": grading.get("all_passed", False),
+            "total_tests": grading.get("total_tests", 0),
+            "passed_tests": grading.get("passed_tests", 0),
+            "failed_tests": grading.get("failed_tests", 0),
+        },
         "result": {
             "status": result.get("status", {}),
-            "stdout": stdout,
+            "stdout": result.get("stdout", ""),
             "stderr": result.get("stderr") or "",
             "compile_output": result.get("compile_output") or "",
             "time": result.get("time", ""),
