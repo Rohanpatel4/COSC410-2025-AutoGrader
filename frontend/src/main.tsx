@@ -10,9 +10,6 @@ import CoursePage from "./webpages/CoursePage";
 import AssignmentsPage from "./webpages/AssignmentsPage";
 import AssignmentDetailPage from "./webpages/AssignmentDetailPage"; // ← NEW
 
-// Optional sandbox (still rough per your note)
-import SandboxApp from "./webpages/SandboxApp";
-
 // NEW upload pages
 import UploadTestFile from "./webpages/UploadTestFile";
 import UploadStudentFile from "./webpages/UploadStudentFile";
@@ -104,7 +101,6 @@ function AppRouter() {
             </Protected>
           }
         /> */}
-        <Route path="/assignment/*" element={<SandboxApp />} />
 
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
