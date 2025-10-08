@@ -97,11 +97,19 @@ def _parse_pytest_output(stdout: str, stderr: str) -> Dict[str, Any]:
     }
 
 def _run_with_subprocess(code: str, tests: str) -> Dict[str, Any]:
-    """Execute code using subprocess instead of Judge0 for more reliable execution."""
+    """Execute code using subprocess in a cross-platform way."""
     import subprocess
     import tempfile
     import os
-    import resource
+    import sys
+
+    # Try to import resource (Unix-only); be graceful on Windows
+    try:
+        import resource  # type: ignore
+        HAS_RESOURCE = True
+    except Exception:
+        resource = None  # type: ignore
+        HAS_RESOURCE = False
 
     # Create combined code
     combined_code = f"""import sys
@@ -119,7 +127,7 @@ def run_tests():
 
     # Get all test functions
     test_functions = [obj for name, obj in globals().items()
-                     if name.startswith('test_') and callable(obj)]
+                      if name.startswith('test_') and callable(obj)]
 
     for test_func in test_functions:
         try:
@@ -146,22 +154,24 @@ if __name__ == "__main__":
         temp_file = f.name
 
     try:
-        # Set resource limits for safety
         def set_limits():
-            # 5 second CPU time limit
+            # Only apply on Unix if resource is available
+            if not HAS_RESOURCE:
+                return
+            # 5s CPU, ~100MB RAM, no forking
             resource.setrlimit(resource.RLIMIT_CPU, (5, 5))
-            # 100MB memory limit
             resource.setrlimit(resource.RLIMIT_AS, (100 * 1024 * 1024, 100 * 1024 * 1024))
-            # No forking
             resource.setrlimit(resource.RLIMIT_NPROC, (0, 0))
 
-        # Run the code
+        # Use current interpreter so Windows works (no 'python3' assumption)
+        runner = [sys.executable, temp_file]
+
         result = subprocess.run(
-            ['python3', temp_file],
+            runner,
             capture_output=True,
             text=True,
             timeout=10,
-            preexec_fn=set_limits if os.name != 'nt' else None  # Only on Unix-like systems
+            preexec_fn=(set_limits if (HAS_RESOURCE and os.name != 'nt') else None)
         )
 
         result_dict = {
@@ -174,43 +184,36 @@ if __name__ == "__main__":
             "language_id_used": PYTHON_LANG_ID
         }
 
-        # Add grading analysis
         grading = _parse_pytest_output(result.stdout, result.stderr)
         result_dict["grading"] = grading
-
         return result_dict
 
     except subprocess.TimeoutExpired:
-        result_dict = {
+        return {
             "stdout": "",
             "stderr": "Timeout: Code execution took too long",
             "returncode": -1,
             "status": {"id": 5},  # Time Limit Exceeded
             "time": None,
             "memory": None,
-            "language_id_used": PYTHON_LANG_ID
+            "language_id_used": PYTHON_LANG_ID,
+            "grading": {"total_tests": 0, "passed_tests": 0, "failed_tests": 0, "all_passed": False, "has_tests": False}
         }
-        # No grading for timeout
-        result_dict["grading"] = {"total_tests": 0, "passed_tests": 0, "failed_tests": 0, "all_passed": False, "has_tests": False}
-        return result_dict
     except Exception as e:
-        result_dict = {
+        return {
             "stdout": "",
             "stderr": f"Execution error: {e}",
             "returncode": -1,
             "status": {"id": 13},  # Internal Error
             "time": None,
             "memory": None,
-            "language_id_used": PYTHON_LANG_ID
+            "language_id_used": PYTHON_LANG_ID,
+            "grading": {"total_tests": 0, "passed_tests": 0, "failed_tests": 0, "all_passed": False, "has_tests": False}
         }
-        # No grading for execution error
-        result_dict["grading"] = {"total_tests": 0, "passed_tests": 0, "failed_tests": 0, "all_passed": False, "has_tests": False}
-        return result_dict
     finally:
-        # Clean up temp file
         try:
             os.unlink(temp_file)
-        except:
+        except Exception:
             pass
 
 router = APIRouter(tags=["attempts"])
@@ -253,7 +256,7 @@ async def attempt_submission_test(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Submission conversion failed: {e}")
 
-    # 3) Run via subprocess (safer than Judge0)
+    # 3) Run via subprocess (local sandbox)
     try:
         result = _run_with_subprocess(student_code, test_case)
     except Exception as e:
@@ -294,3 +297,4 @@ async def attempt_submission_test(
             "raw": result if settings.DEBUG else None,
         },
     }
+
