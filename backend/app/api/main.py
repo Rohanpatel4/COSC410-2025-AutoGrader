@@ -1,18 +1,10 @@
 # backend/app/api/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
-from app.routers.main_db import router as db_router
-
 from app.core.db import Base, engine
 from app.core.settings import settings  # keep if you use it elsewhere
 
 # Routers
-from .files import router as files_router
-from .testsuites import router as testsuites_router
-from .submissions import router as submissions_router
-from .runtimes import router as runtimes_router
-from .runs import router as runs_router
 from .LoginPage import router as login_router
 from .judge0 import router as judge0_router
 from .attempt_submission_test import router as attempts_router
@@ -40,14 +32,8 @@ app.add_middleware(
 )
 
 # Routers (unchanged)
-app.include_router(files_router,       prefix="/api/v1/files",       tags=["files"])
-app.include_router(testsuites_router,  prefix="/api/v1/test-suites", tags=["test-suites"])
-app.include_router(submissions_router, prefix="/api/v1/submissions", tags=["submissions"])
-app.include_router(runtimes_router,    prefix="/api/v1/runtimes",    tags=["runtimes"])
-app.include_router(runs_router,        prefix="/api/v1/runs",        tags=["runs"])
 app.include_router(login_router,       prefix="/api/v1",             tags=["login"])
 app.include_router(judge0_router,      prefix="/api/v1/judge0",      tags=["judge0"])
-# app.include_router(db_router, prefix="/api/v1", tags=["db"])
 app.include_router(attempts_router,    prefix="/api/v1/attempts",    tags=["attempts"])
 app.include_router(courses_router,        prefix="/api/v1/courses",     tags=["courses"])
 app.include_router(registrations_router,  prefix="/api/v1",             tags=["registrations"])
