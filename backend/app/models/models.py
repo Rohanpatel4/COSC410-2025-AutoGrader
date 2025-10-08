@@ -110,7 +110,7 @@ class Assignment(Base):
     title: Mapped[str] = mapped_column(String(255))
     description: Mapped[str] = mapped_column(String(255))
     course_id: Mapped[int] = mapped_column(ForeignKey("courses.id"), nullable=False)
-    sub_limit: Mapped[int] = mapped_column(Integer)
+    sub_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # NEW
     start: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
     stop:  Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)

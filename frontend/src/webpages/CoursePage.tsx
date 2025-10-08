@@ -11,7 +11,7 @@ type Faculty = { id: number; name?: string };
 export default function CoursePage() {
   const { course_id = "" } = useParams<{ course_id: string }>();
   const navigate = useNavigate();
-  const { role } = useAuth();
+  const { role, userId } = useAuth();
   const isFaculty = role === "faculty";
 
   const [students, setStudents] = React.useState<Student[]>([]);
@@ -33,10 +33,11 @@ export default function CoursePage() {
     setLoading(true);
     setErr(null);
     try {
+      const studentIdParam = role === "student" && userId ? `?student_id=${userId}` : "";
       const [s, f, a] = await Promise.all([
         fetchJson<Student[]>(`/api/v1/courses/${course_id}/students`).catch(() => []),
         fetchJson<Faculty[]>(`/api/v1/courses/${course_id}/faculty`).catch(() => []),
-        fetchJson<Assignment[]>(`/api/v1/courses/${course_id}/assignments`).catch(() => []),
+        fetchJson<Assignment[]>(`/api/v1/courses/${course_id}/assignments${studentIdParam}`).catch(() => []),
       ]);
       setStudents(s);
       setFaculty(f);
@@ -51,7 +52,7 @@ export default function CoursePage() {
   React.useEffect(() => {
     loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [course_id]);
+  }, [course_id, userId, role]);
 
   async function createAssignment(e: React.FormEvent) {
     e.preventDefault();
@@ -72,17 +73,10 @@ export default function CoursePage() {
     }
 
     try {
-      // POST /api/v1/courses/:course_id/assignments or fallback to /assignments with course_id
-      // If you already have the course-scoped POST, use it. Otherwise do this:
-      const created = await fetchJson<Assignment>(`/api/v1/assignments`, {
+      // POST to the course-specific assignments endpoint
+      const created = await fetchJson<Assignment>(`/api/v1/courses/${encodeURIComponent(course_id)}/assignments`, {
         method: "POST",
-        body: JSON.stringify({ ...payload, course_id: isNaN(Number(course_id)) ? undefined : Number(course_id) }),
-      }).catch(async (errFromGlobal) => {
-        // try the course-scoped route if you wired that instead
-        return fetchJson<Assignment>(`/api/v1/courses/${encodeURIComponent(course_id)}/assignments`, {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
+        body: JSON.stringify(payload),
       });
 
       setAssignments((prev) => [created, ...prev]);

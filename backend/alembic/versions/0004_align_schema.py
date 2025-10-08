@@ -71,6 +71,10 @@ def upgrade():
         with op.batch_alter_table("assignments") as batch:
             if "sub_limit" not in a_cols:
                 batch.add_column(sa.Column("sub_limit", sa.Integer(), nullable=True))
+            else:
+                # If sub_limit exists but is not nullable, make it nullable
+                # Note: This is a simplified approach for SQLite
+                batch.alter_column("sub_limit", existing_type=sa.Integer(), nullable=True)
             if "start" not in a_cols:
                 batch.add_column(sa.Column("start", sa.DateTime(), nullable=True))
             if "stop" not in a_cols:

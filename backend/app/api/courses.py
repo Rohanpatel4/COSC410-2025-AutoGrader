@@ -307,7 +307,11 @@ def remove_student_from_course(
 
 # ---------- assignments ----------
 @router.get("/{course_key}/assignments", response_model=list[dict])
-def list_assignments_for_course(course_key: str, db: Session = Depends(get_db)):
+def list_assignments_for_course(
+    course_key: str,
+    student_id: int | None = None,
+    db: Session = Depends(get_db)
+):
     c = _course_by_key(db, course_key)
     if not c:
         return []
@@ -318,12 +322,22 @@ def list_assignments_for_course(course_key: str, db: Session = Depends(get_db)):
         .all()
     )
 
-    attempts = dict(
-        db.execute(
-            select(StudentSubmission.assignment_id, func.count())
-            .group_by(StudentSubmission.assignment_id)
-        ).all()
-    )
+    # If student_id is provided, count attempts per student, otherwise count all attempts
+    if student_id is not None:
+        attempts = dict(
+            db.execute(
+                select(StudentSubmission.assignment_id, func.count())
+                .where(StudentSubmission.student_id == student_id)
+                .group_by(StudentSubmission.assignment_id)
+            ).all()
+        )
+    else:
+        attempts = dict(
+            db.execute(
+                select(StudentSubmission.assignment_id, func.count())
+                .group_by(StudentSubmission.assignment_id)
+            ).all()
+        )
 
     return [_assignment_to_dict(a, attempts) for a in rows]
 
@@ -346,7 +360,20 @@ def create_assignment_for_course(
         raise HTTPException(400, "title is required")
 
     description = (payload.get("description") or "") or None
-    sub_limit = payload.get("sub_limit", None)
+
+    # Handle sub_limit: empty string or None means unlimited (None)
+    sub_limit_raw = payload.get("sub_limit", None)
+    if sub_limit_raw == "" or sub_limit_raw is None:
+        sub_limit = None
+    elif isinstance(sub_limit_raw, int):
+        sub_limit = sub_limit_raw
+    elif isinstance(sub_limit_raw, str):
+        try:
+            sub_limit = int(sub_limit_raw) if sub_limit_raw.strip() else None
+        except ValueError:
+            raise HTTPException(400, "sub_limit must be a valid integer or empty for unlimited")
+    else:
+        sub_limit = None
 
     start = _parse_dt(payload.get("start"))
     stop  = _parse_dt(payload.get("stop"))
@@ -355,7 +382,7 @@ def create_assignment_for_course(
         course_id=c.id,
         title=title,
         description=description,
-        sub_limit=sub_limit if isinstance(sub_limit, int) else None,
+        sub_limit=sub_limit,
     )
 
     if hasattr(a, "start"):

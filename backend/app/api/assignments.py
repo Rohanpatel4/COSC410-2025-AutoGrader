@@ -112,7 +112,21 @@ def create_assignment(payload: dict, db: Session = Depends(get_db)):
     course_id = payload.get("course_id")
     title = (payload.get("title") or "").strip()
     description = payload.get("description") or None
-    sub_limit = payload.get("sub_limit", None)
+
+    # Handle sub_limit: empty string or None means unlimited (None)
+    sub_limit_raw = payload.get("sub_limit", None)
+    if sub_limit_raw == "" or sub_limit_raw is None:
+        sub_limit = None
+    elif isinstance(sub_limit_raw, int):
+        sub_limit = sub_limit_raw
+    elif isinstance(sub_limit_raw, str):
+        try:
+            sub_limit = int(sub_limit_raw) if sub_limit_raw.strip() else None
+        except ValueError:
+            raise HTTPException(400, "sub_limit must be a valid integer or empty for unlimited")
+    else:
+        sub_limit = None
+
     start = _parse_dt(payload.get("start", None))
     stop = _parse_dt(payload.get("stop", None))
 
@@ -129,7 +143,7 @@ def create_assignment(payload: dict, db: Session = Depends(get_db)):
         course_id=course_id,
         title=title,
         description=description,
-        sub_limit=sub_limit if isinstance(sub_limit, int) else None,
+        sub_limit=sub_limit,
     )
     # Only set if the columns exist (they do in your migration)
     if hasattr(a, "start"):

@@ -50,6 +50,12 @@ export default function FacultyDashboard() {
   // Reload when the authenticated user changes (e.g., after navigation)
   React.useEffect(() => { loadMine(); }, [professorId]);
 
+  function generateRandomTag() {
+    // Generate a random 6-digit number
+    const randomCode = Math.floor(100000 + Math.random() * 900000);
+    setCourseTag(randomCode.toString());
+  }
+
   async function onCreate(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
@@ -69,7 +75,7 @@ export default function FacultyDashboard() {
       setMine((prev) => [created, ...prev]);
       setCourseTag(""); setName(""); setDescription("");
       setMsg("Course created!");
-      
+
     } catch (e: any) {
       setMsg(e?.message ?? "Create failed");
     }
@@ -136,6 +142,16 @@ export default function FacultyDashboard() {
       padding: "8px 12px",
       cursor: "pointer",
     } as React.CSSProperties,
+    secondaryBtn: {
+      background: "#f3f4f6",
+      color: "#374151",
+      border: "1px solid #d1d5db",
+      borderRadius: 6,
+      padding: "4px 8px",
+      cursor: "pointer",
+      fontSize: "12px",
+      marginLeft: "8px",
+    } as React.CSSProperties,
     courseItem: {
       display: "flex",
       alignItems: "center",
@@ -176,7 +192,12 @@ export default function FacultyDashboard() {
         <div style={styles.card}>
           <h2 style={{ marginTop: 0 }}>Create Course</h2>
           <form onSubmit={onCreate}>
-            <label htmlFor="c-tag" style={styles.label}>Course Tag</label>
+            <div style={{ display: "flex", alignItems: "center", marginBottom: 6 }}>
+              <label htmlFor="c-tag" style={styles.label}>Course Tag</label>
+              <button type="button" style={styles.secondaryBtn} onClick={generateRandomTag}>
+                Generate Tag
+              </button>
+            </div>
             <input
               id="c-tag"
               placeholder="e.g., COSC-410"
