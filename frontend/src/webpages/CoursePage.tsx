@@ -35,10 +35,18 @@ export default function CoursePage() {
     try {
       const studentIdParam = role === "student" && userId ? `?student_id=${userId}` : "";
       const [s, f, a] = await Promise.all([
+        fetchJson<Student[]>(`/api/v1/courses/${course_id}/students`),
+        fetchJson<Faculty[]>(`/api/v1/courses/${course_id}/faculty`),
+        fetchJson<Assignment[]>(`/api/v1/courses/${course_id}/assignments${studentIdParam}`),
+      ]);
+      /*
+      const [s, f, a] = await Promise.all([
         fetchJson<Student[]>(`/api/v1/courses/${course_id}/students`).catch(() => []),
         fetchJson<Faculty[]>(`/api/v1/courses/${course_id}/faculty`).catch(() => []),
         fetchJson<Assignment[]>(`/api/v1/courses/${course_id}/assignments${studentIdParam}`).catch(() => []),
       ]);
+      */
+
       setStudents(s);
       setFaculty(f);
       setAssignments(a);
@@ -157,6 +165,7 @@ export default function CoursePage() {
 
       {isFaculty && showCreate && (
         <form
+          noValidate
           onSubmit={createAssignment}
           style={{
             border: "1px solid #ddd",

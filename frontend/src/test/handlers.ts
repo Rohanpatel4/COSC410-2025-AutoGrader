@@ -1,175 +1,320 @@
+// src/test/handlers.ts
 import { http, HttpResponse } from "msw";
+import { setupServer } from "msw/node";
 
-// --- Mock data you can tweak ---
-let FILES = [
-  { id: "f_sub_1", name: "solution1.py", category: "SUBMISSION" },
-  { id: "f_tc_1",  name: "test_input_1.txt", category: "TEST_CASE" },
-];
+// ---- Types used in tests/UI ----
+type Course = {
+  id: number;
+  course_tag: string;
+  name: string;
+  description: string | null;
+  professor_id: number;
+};
 
-// test COURSES and REGISTRATIONS to see if they work. lines 10-15 are what I added in
-let COURSES = [
-  { id: "c1", course_id: "COSC-410", name: "Software Engineering", description: "SE", professor_id: "prof1", professor_name: "Prof. Ada" },
-  { id: "c2", course_id: "COSC-150", name: "Intro CS", professor_id: "prof1" },
-];
+type RosterStudent = { id: number; name?: string };
+type RosterFaculty = { id: number; name?: string };
 
-let REGISTRATIONS: Array<{ id: string; student_id: string; course_id: string }> = [];
+type Assignment = {
+  id: number;
+  title: string;
+  description?: string | null;
+  start?: string | null;
+  stop?: string | null;
+  num_attempts?: number;
+};
 
-let SUBMISSIONS = [{ id: "s1", name: "Submission One", file_ids: ["f_sub_1"] }];
-let TEST_SUITES  = [{ id: "ts1", name: "Suite One", file_ids: ["f_tc_1"] }];
-let RUNTIMES     = [{ id: "rt_py_3_11", name: "Python 3.11", language: "python", version: "3.11" }];
+type DB = {
+  // faculty dashboard
+  coursesByProfessor: Record<number, Course[]>;
+  courseByTag: Record<string, Course>;
+  nextCourseId: number;
 
+  // student dashboard
+  enrollmentsByStudent: Record<number, Course[]>;
 
+  // course page
+  facultyByCourseTag: Record<string, RosterFaculty[]>;
+  studentsByCourseTag: Record<string, RosterStudent[]>;
+  assignmentsByCourseTag: Record<string, Assignment[]>;
+  nextAssignmentId: number;
+};
 
-// (Optional) Simple auth gate
-function requireAuth(req: Request) {
-  const auth = req.headers.get("authorization");
-  if (!auth) return new HttpResponse("Unauthorized", { status: 401 });
-  return null;
+// ---- Seed ----
+const seed: DB = {
+  // Faculty Dashboard
+  coursesByProfessor: {
+    // professor_id 301 has one seeded course named "FirstCourse"
+    301: [
+      {
+        id: 1,
+        course_tag: "500",
+        name: "FirstCourse",
+        description: "seed",
+        professor_id: 301,
+      },
+    ],
+  },
+  courseByTag: {
+    "500": {
+      id: 1,
+      course_tag: "500",
+      name: "FirstCourse",
+      description: "seed",
+      professor_id: 301,
+    },
+  },
+  nextCourseId: 2,
+
+  // Student Dashboard (start empty; tests register)
+  enrollmentsByStudent: {
+    // e.g. 201: [ courseObj ]
+  },
+
+  // Course Page (seed a small roster + one assignment for tag 500)
+  facultyByCourseTag: {
+    "500": [{ id: 301, name: "Prof. Ada" }],
+  },
+  studentsByCourseTag: {
+    "500": [{ id: 201, name: "Student Sam" }],
+  },
+  assignmentsByCourseTag: {
+    "500": [
+      {
+        id: 9001,
+        title: "Seeded Assignment",
+        description: "Warm-up",
+        start: null,
+        stop: null,
+        num_attempts: 0,
+      },
+    ],
+  },
+  nextAssignmentId: 9002,
+};
+
+export const __db: DB = structuredClone(seed);
+
+export function resetDb() {
+  __db.coursesByProfessor = structuredClone(seed.coursesByProfessor);
+  __db.courseByTag = structuredClone(seed.courseByTag);
+  __db.enrollmentsByStudent = structuredClone(seed.enrollmentsByStudent);
+  __db.nextCourseId = seed.nextCourseId;
+
+  __db.facultyByCourseTag = structuredClone(seed.facultyByCourseTag);
+  __db.studentsByCourseTag = structuredClone(seed.studentsByCourseTag);
+  __db.assignmentsByCourseTag = structuredClone(seed.assignmentsByCourseTag);
+  __db.nextAssignmentId = seed.nextAssignmentId;
 }
 
+// Compat/test helpers
+export const __testDb = {
+  reset: resetDb,
+  state: __db,
+  getAll: (profId: number) => __db.coursesByProfessor[profId] ?? [],
+  getStudentCourses: (studentId: number) => __db.enrollmentsByStudent[studentId] ?? [],
+  getRoster: (tag: string) => ({
+    faculty: __db.facultyByCourseTag[tag] ?? [],
+    students: __db.studentsByCourseTag[tag] ?? [],
+  }),
+  getAssignments: (tag: string) => __db.assignmentsByCourseTag[tag] ?? [],
+};
+
+// Helpers
+function getProfessorIdFromUrl(url: URL): number | null {
+  const p = url.searchParams.get("professor_id");
+  if (!p) return null;
+  const n = Number(p);
+  return Number.isNaN(n) ? null : n;
+}
+
+const COURSES_URL = "**/api/v1/courses";
+const STUDENT_COURSES_URL = "**/api/v1/students/:id/courses";
+const REGISTRATIONS_URL = "**/api/v1/registrations";
+
+// Course page URL patterns
+const COURSE_STUDENTS_URL = "**/api/v1/courses/:course_id/students";
+const COURSE_FACULTY_URL = "**/api/v1/courses/:course_id/faculty";
+const COURSE_ASSIGNMENTS_URL = "**/api/v1/courses/:course_id/assignments";
+const ASSIGNMENT_TESTFILE_URL = "**/api/v1/assignments/:id/test-file";
+
 export const handlers = [
-  // --- Auth ---
-  http.post("*/api/v1/login", async () => {
-    return HttpResponse.json({ token: "test-token", userId: "u1", role: "student" });
-  }),
+  // =========================================================
+  // ---------- Faculty: Courses CRUD-ish (list/create) ------
+  // =========================================================
 
-  // --- Files (GET) ---
-  http.get("*/api/v1/files", ({ request }) => {
+  // GET /api/v1/courses?professor_id=301
+  http.get(COURSES_URL, ({ request }) => {
     const url = new URL(request.url);
-    const category = url.searchParams.get("category");
-    const data = category ? FILES.filter((f) => f.category === category) : FILES;
-    return HttpResponse.json(data);
-  }),
-  // Explicit relative-path match for tests using "/api/..."
-  http.get("/api/v1/files", ({ request }) => {
-    const url = new URL(request.url, "http://localhost"); // base to parse query
-    const category = url.searchParams.get("category");
-    const data = category ? FILES.filter((f) => f.category === category) : FILES;
-    return HttpResponse.json(data);
-  }),
-
-  // --- Files (POST: FormData "category" + "file" | "f") ---
-  http.post("*/api/v1/files", async ({ request }) => {
-    // const gate = requireAuth(request); if (gate) return gate;
-
-    const fd =
-      typeof (request as any).formData === "function"
-        ? await (request as any).formData()
-        : undefined;
-
-    // Accept either "file" or "f"
-    const uploaded = fd?.get?.("file") ?? fd?.get?.("f");
-    const name =
-      uploaded && typeof (uploaded as any).name === "string"
-        ? (uploaded as any).name
-        : "uploaded.bin";
-
-    const category = String(fd?.get?.("category") || "SUBMISSION");
-    const newFile = { id: `f_${Date.now()}`, name, category };
-    FILES.push(newFile);
-    return HttpResponse.json(newFile, { status: 201 });
-  }),
-  // Explicit relative-path match
-  http.post("/api/v1/files", async ({ request }) => {
-    const fd =
-      typeof (request as any).formData === "function"
-        ? await (request as any).formData()
-        : undefined;
-
-    // Accept either "file" or "f"
-    const uploaded = fd?.get?.("file") ?? fd?.get?.("f");
-    const name =
-      uploaded && typeof (uploaded as any).name === "string"
-        ? (uploaded as any).name
-        : "uploaded.bin";
-
-    const category = String(fd?.get?.("category") || "SUBMISSION");
-    const newFile = { id: `f_${Date.now()}`, name, category };
-    FILES.push(newFile);
-    return HttpResponse.json(newFile, { status: 201 });
+    const pid = getProfessorIdFromUrl(url);
+    if (!pid) {
+      return HttpResponse.json(
+        { message: "professor_id is required" },
+        { status: 400 }
+      );
+    }
+    const list = __db.coursesByProfessor[pid] ?? [];
+    return HttpResponse.json(list, { status: 200 });
   }),
 
-  // --- Submissions ---
-  http.get("*/api/v1/submissions", () => HttpResponse.json(SUBMISSIONS)),
-  http.get("/api/v1/submissions", () => HttpResponse.json(SUBMISSIONS)),
+  // POST /api/v1/courses?professor_id=301
+  http.post(COURSES_URL, async ({ request }) => {
+    const url = new URL(request.url);
+    const pid = getProfessorIdFromUrl(url);
+    if (!pid) {
+      return HttpResponse.json(
+        { message: "professor_id is required" },
+        { status: 400 }
+      );
+    }
 
-  http.post("*/api/v1/submissions", async ({ request }) => {
-    const body = await request.json();
-    const created = { id: `s_${Date.now()}`, ...body };
-    SUBMISSIONS.push(created);
-    return HttpResponse.json(created, { status: 201 });
-  }),
-  http.post("/api/v1/submissions", async ({ request }) => {
-    const body = await request.json();
-    const created = { id: `s_${Date.now()}`, ...body };
-    SUBMISSIONS.push(created);
-    return HttpResponse.json(created, { status: 201 });
-  }),
-
-  // --- Test Suites ---
-  http.get("*/api/v1/test-suites", () => HttpResponse.json(TEST_SUITES)),
-  http.get("/api/v1/test-suites", () => HttpResponse.json(TEST_SUITES)),
-
-  http.post("*/api/v1/test-suites", async ({ request }) => {
-    const body = await request.json();
-    const created = { id: `ts_${Date.now()}`, ...body };
-    TEST_SUITES.push(created);
-    return HttpResponse.json(created, { status: 201 });
-  }),
-  http.post("/api/v1/test-suites", async ({ request }) => {
-    const body = await request.json();
-    const created = { id: `ts_${Date.now()}`, ...body };
-    TEST_SUITES.push(created);
-    return HttpResponse.json(created, { status: 201 });
-  }),
-
-  // --- Runtimes ---
-  http.get("*/api/v1/runtimes", () => HttpResponse.json(RUNTIMES)),
-  http.get("/api/v1/runtimes", () => HttpResponse.json(RUNTIMES)),
-
-  http.post("*/api/v1/runtimes", async ({ request }) => {
-    const body = await request.json();
-    const created = { id: `rt_${Date.now()}`, ...body };
-    RUNTIMES.push(created);
-    return HttpResponse.json(created, { status: 201 });
-  }),
-  http.post("/api/v1/runtimes", async ({ request }) => {
-    const body = await request.json();
-    const created = { id: `rt_${Date.now()}`, ...body };
-    RUNTIMES.push(created);
-    return HttpResponse.json(created, { status: 201 });
-  }),
-
-  // --- Runs ---
-  http.post("*/api/v1/runs", async ({ request }) => {
-    const body = await request.json();
-    const run = { id: `run_${Date.now()}`, status: "CREATED", ...body };
-    return HttpResponse.json(run, { status: 201 });
-  }),
-  http.post("/api/v1/runs", async ({ request }) => {
-    const body = await request.json();
-    const run = { id: `run_${Date.now()}`, status: "CREATED", ...body };
-    return HttpResponse.json(run, { status: 201 });
-  }),
-
-  // Execute
-  http.post("*/api/v1/runs/:id/execute", async () => {
-    const result = {
-      id: "exec_1",
-      status: "COMPLETED",
-      summary: { passed: 5, failed: 0, errors: 0 },
-      logs: ["Started", "Running tests...", "All green"],
+    const body = (await request.json()) as {
+      course_tag?: string;
+      name?: string;
+      description?: string | null;
     };
-    return HttpResponse.json(result, { status: 200 });
-  }),
-  http.post("/api/v1/runs/:id/execute", async () => {
-    const result = {
-      id: "exec_1",
-      status: "COMPLETED",
-      summary: { passed: 5, failed: 0, errors: 0 },
-      logs: ["Started", "Running tests...", "All green"],
+
+    if (!body.course_tag?.trim() || !body.name?.trim()) {
+      return HttpResponse.json(
+        { message: "course_tag and name are required" },
+        { status: 400 }
+      );
+    }
+
+    const created: Course = {
+      id: __db.nextCourseId++,
+      course_tag: body.course_tag.trim(),
+      name: body.name.trim(),
+      description: body.description ?? null,
+      professor_id: pid,
     };
-    return HttpResponse.json(result, { status: 200 });
+
+    const list = (__db.coursesByProfessor[pid] ??= []);
+    list.unshift(created);
+    __db.courseByTag[created.course_tag] = created;
+
+    return HttpResponse.json(created, { status: 201 });
+  }),
+
+  // =========================================================
+  // ----------------- Student: My courses -------------------
+  // =========================================================
+
+  // GET /api/v1/students/:id/courses
+  http.get(STUDENT_COURSES_URL, ({ params }) => {
+    const raw = params.id as string;
+    const sid = Number(raw);
+    if (!sid || Number.isNaN(sid)) {
+      return HttpResponse.json({ message: "bad student id" }, { status: 400 });
+    }
+    const list = __db.enrollmentsByStudent[sid] ?? [];
+    return HttpResponse.json(list, { status: 200 });
+  }),
+
+  // POST /api/v1/registrations  body: { student_id, course_tag | course_id }
+  http.post(REGISTRATIONS_URL, async ({ request }) => {
+    const body = (await request.json()) as {
+      student_id?: number;
+      course_tag?: string;
+      course_id?: number;
+    };
+
+    const sid = Number(body.student_id);
+    const tag = body.course_tag?.trim();
+
+    if (!sid || Number.isNaN(sid) || (!tag && !body.course_id)) {
+      return HttpResponse.json(
+        { message: "student_id and course_tag (or course_id) are required" },
+        { status: 400 }
+      );
+    }
+
+    let course: Course | undefined;
+    if (tag) course = __db.courseByTag[tag];
+    else if (body.course_id) {
+      // find by id across all professors
+      const lists = Object.values(__db.coursesByProfessor);
+      course = lists.flat().find((c) => c.id === body.course_id);
+    }
+
+    if (!course) {
+      return HttpResponse.json(
+        { message: "course not found" },
+        { status: 404 }
+      );
+    }
+
+    const current = (__db.enrollmentsByStudent[sid] ??= []);
+    const exists = current.some((c) => c.id === course!.id);
+    if (!exists) current.unshift(course);
+
+    return HttpResponse.json({ ok: true }, { status: 201 });
+  }),
+
+  // =========================================================
+  // ------------------- Course Page APIs --------------------
+  // =========================================================
+
+  // GET /api/v1/courses/:course_id/students
+  http.get(COURSE_STUDENTS_URL, ({ params }) => {
+    const courseId = String(params.course_id ?? "");
+    const list = __db.studentsByCourseTag[courseId] ?? [];
+    return HttpResponse.json(list, { status: 200 });
+  }),
+
+  // GET /api/v1/courses/:course_id/faculty
+  http.get(COURSE_FACULTY_URL, ({ params }) => {
+    const courseId = String(params.course_id ?? "");
+    const list = __db.facultyByCourseTag[courseId] ?? [];
+    return HttpResponse.json(list, { status: 200 });
+  }),
+
+  // GET /api/v1/courses/:course_id/assignments(?student_id=…)
+  http.get(COURSE_ASSIGNMENTS_URL, ({ request, params }) => {
+    const courseId = String(params.course_id ?? "");
+    const url = new URL(request.url);
+    const studentId = url.searchParams.get("student_id");
+    let list = (__db.assignmentsByCourseTag[courseId] ?? []).map(a => ({ ...a }));
+
+    // If student-specific view matters, we could adjust num_attempts etc.
+    if (studentId) {
+      list = list.map(a => ({ ...a, num_attempts: a.num_attempts ?? 0 }));
+    }
+    return HttpResponse.json(list, { status: 200 });
+  }),
+
+  // POST /api/v1/courses/:course_id/assignments
+  http.post(COURSE_ASSIGNMENTS_URL, async ({ params, request }) => {
+    const courseId = String(params.course_id ?? "");
+    const body = (await request.json()) as Partial<Assignment>;
+    const title = (body.title ?? "").toString().trim();
+
+    if (!title) {
+      return HttpResponse.json({ message: "Title is required" }, { status: 400 });
+    }
+
+    const created: Assignment = {
+      id: __db.nextAssignmentId++,
+      title,
+      description: body.description ?? null,
+      start: (body as any).start ?? null,
+      stop: (body as any).stop ?? null,
+      num_attempts: 0,
+    };
+
+    const list = (__db.assignmentsByCourseTag[courseId] ??= []);
+    list.unshift(created);
+
+    return HttpResponse.json(created, { status: 201 });
+  }),
+
+  // POST /api/v1/assignments/:id/test-file (accept & ignore; used in CoursePage after create)
+  http.post(ASSIGNMENT_TESTFILE_URL, async () => {
+    return HttpResponse.text("ok", { status: 200 });
   }),
 ];
+
+// Export an MSW server for tests (kept for your current setup)
+export const server = setupServer(...handlers);
+
+
 

@@ -1,7 +1,7 @@
-import React, { createContext, useContext, useMemo, useState } from "react";
-import type { Role } from "../types/role";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 
-type Role = "faculty" | "student";
+export type Role = "faculty" | "student";
+
 type AuthState = { token: string | null; userId: string | null; role: Role | null };
 
 type Ctx = AuthState & {
@@ -9,27 +9,55 @@ type Ctx = AuthState & {
   logout: () => void;
 };
 
-const AuthContext = createContext<Ctx | undefined>(undefined);
+export const AuthContext = createContext<Ctx | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [token, setToken] = useState<string | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [role, setRole] = useState<Role | null>(null);
+const STORAGE_KEY = "auth";
+
+export function AuthProvider({
+  children,
+  /** lets tests (or SSR) seed auth without calling login() */
+  initial,
+}: {
+  children: React.ReactNode;
+  initial?: Partial<AuthState>;
+}) {
+  // initial state (tests can pass role/userId here)
+  const [token, setToken] = useState<string | null>(initial?.token ?? null);
+  const [userId, setUserId] = useState<string | null>(initial?.userId ?? null);
+  const [role, setRole] = useState<Role | null>(initial?.role ?? null);
+
+  // hydrate from localStorage (only if not already provided by initial)
+  useEffect(() => {
+    if (initial?.role || initial?.userId || initial?.token) return;
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<AuthState>;
+        setUserId(parsed.userId ?? null);
+        setRole((parsed.role as Role) ?? null);
+        setToken(parsed.token ?? null);
+      }
+    } catch {
+      // ignore
+    }
+  }, [initial?.role, initial?.userId, initial?.token]);
 
   const login = ({ userId, role, token = null }: { userId: string; role: Role; token?: string | null }) => {
     setUserId(userId);
     setRole(role);
     setToken(token);
-    // persist in local storage to avoid losing logged in state on refresh
-    localStorage.setItem("auth", JSON.stringify({ userId, role, token }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ userId, role, token }));
   };
 
   const logout = () => {
-    setUserId(null); setRole(null); setToken(null);
-    localStorage.removeItem("auth");
+    setUserId(null);
+    setRole(null);
+    setToken(null);
+    localStorage.removeItem(STORAGE_KEY);
   };
 
   const value = useMemo(() => ({ token, userId, role, login, logout }), [token, userId, role]);
+
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
@@ -39,8 +67,10 @@ export function useAuth() {
   return v;
 }
 
+/** Simple gate used in routing layouts; returns null when logged out. */
 export function Protected({ children }: { children: React.ReactNode }) {
   const { role } = useAuth();
-  if (!role) return null; // router will redirect
+  if (!role) return null;
   return <>{children}</>;
 }
+
