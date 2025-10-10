@@ -1,12 +1,46 @@
 # backend/app/api/attempt_submission_test.py
 from typing import Any, Dict
-import importlib, inspect
+import importlib, inspect, ast
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from starlette import status
 from app.core.settings import settings
 
 # ----- converter import (robust) -----
+def _validate_code_safety(tree: ast.AST) -> None:
+    """Validate that the AST doesn't contain dangerous constructs."""
+    dangerous_nodes = []
+
+    class SafetyVisitor(ast.NodeVisitor):
+        def visit_Call(self, node):
+            # Check for dangerous function calls
+            if isinstance(node.func, ast.Name):
+                if node.func.id in ['eval', 'exec', 'compile', '__import__', 'open']:
+                    dangerous_nodes.append(f"Call to dangerous function: {node.func.id}")
+            elif isinstance(node.func, ast.Attribute):
+                if isinstance(node.func.value, ast.Name):
+                    # Check for os.system, subprocess.call, etc.
+                    if node.func.value.id in ['os', 'subprocess', 'sys']:
+                        dangerous_nodes.append(f"Call to potentially dangerous method: {node.func.value.id}.{node.func.attr}")
+            self.generic_visit(node)
+
+        def visit_Import(self, node):
+            for alias in node.names:
+                if alias.name in ['os', 'subprocess', 'sys', 'shutil']:
+                    dangerous_nodes.append(f"Import of potentially dangerous module: {alias.name}")
+            self.generic_visit(node)
+
+        def visit_ImportFrom(self, node):
+            if node.module in ['os', 'subprocess', 'sys', 'shutil']:
+                dangerous_nodes.append(f"Import from potentially dangerous module: {node.module}")
+            self.generic_visit(node)
+
+    visitor = SafetyVisitor()
+    visitor.visit(tree)
+
+    if dangerous_nodes:
+        raise ValueError(f"Code contains dangerous constructs: {dangerous_nodes}")
+
 def _import_converter_module():
     candidates = [
         "app.services.file_converter",
@@ -102,6 +136,31 @@ def _run_with_subprocess(code: str, tests: str) -> Dict[str, Any]:
     import tempfile
     import os
     import sys
+
+    # Validate student code safety
+    try:
+        tree = ast.parse(code)
+        _validate_code_safety(tree)
+    except SyntaxError as e:
+        return {
+            "stdout": "",
+            "stderr": f"SyntaxError: {e}",
+            "returncode": 1,
+            "status": {"id": 6},  # Compilation error
+            "time": None,
+            "memory": None,
+            "language_id_used": PYTHON_LANG_ID
+        }
+    except ValueError as e:
+        return {
+            "stdout": "",
+            "stderr": str(e),
+            "returncode": 1,
+            "status": {"id": 6},  # Compilation error
+            "time": None,
+            "memory": None,
+            "language_id_used": PYTHON_LANG_ID
+        }
 
     # Try to import resource (Unix-only); be graceful on Windows
     try:

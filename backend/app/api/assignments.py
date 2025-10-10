@@ -11,8 +11,7 @@ from app.models.models import (
     StudentRegistration, User, RoleEnum
 )
 
-# (optional) reuse your Judge0 client
-from app.judge0_client import get_judge0_client
+# REMOVED: Judge0 client - using secure subprocess execution instead
 
 router = APIRouter()
 

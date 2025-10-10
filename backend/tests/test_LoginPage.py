@@ -83,9 +83,8 @@ def test_openapi_contains_login_path(test_app):
 @pytest.mark.parametrize(
     "email,password,role",
     [
-        ("student@wofford.edu", "12345", "student"),
-        ("faculty@wofford.edu", "67890", "faculty"),
-        ("admin@wofford.edu",   "admin", "admin"),
+        ("alice@wofford.edu", "secret", "student"),
+        ("prof.x@wofford.edu", "secret", "faculty"),
     ],
 )
 def test_login_success_variants(test_app, email, password, role):
@@ -99,14 +98,14 @@ def test_login_success_variants(test_app, email, password, role):
 # --- Tests: Failure cases -----------------------------------------------------
 
 def test_login_wrong_password(test_app):
-    payload = {"username": "student@wofford.edu", "password": "WRONG", "role": "student"}
+    payload = {"username": "alice@wofford.edu", "password": "WRONG", "role": "student"}
     r = test_app.post("/api/v1/login", json=payload)
     assert r.status_code == 401
     assert r.json()["detail"] == "Invalid username or password"
 
 def test_login_wrong_role(test_app):
     # correct creds but mismatched role
-    payload = {"username": "student@wofford.edu", "password": "12345", "role": "faculty"}
+    payload = {"username": "alice@wofford.edu", "password": "secret", "role": "faculty"}
     r = test_app.post("/api/v1/login", json=payload)
     assert r.status_code == 401
     assert r.json()["detail"] == "Invalid username or password"
@@ -116,3 +115,27 @@ def test_login_unknown_user(test_app):
     r = test_app.post("/api/v1/login", json=payload)
     assert r.status_code == 401
     assert r.json()["detail"] == "Invalid username or password"
+
+def test_login_missing_username(test_app):
+    payload = {"password": "secret", "role": "student"}
+    r = test_app.post("/api/v1/login", json=payload)
+    assert r.status_code == 400
+    assert "username, password, and role are required" in r.json()["detail"]
+
+def test_login_missing_password(test_app):
+    payload = {"username": "alice@wofford.edu", "role": "student"}
+    r = test_app.post("/api/v1/login", json=payload)
+    assert r.status_code == 400
+    assert "username, password, and role are required" in r.json()["detail"]
+
+def test_login_missing_role(test_app):
+    payload = {"username": "alice@wofford.edu", "password": "secret"}
+    r = test_app.post("/api/v1/login", json=payload)
+    assert r.status_code == 400
+    assert "username, password, and role are required" in r.json()["detail"]
+
+def test_login_invalid_role(test_app):
+    payload = {"username": "alice@wofford.edu", "password": "secret", "role": "invalid"}
+    r = test_app.post("/api/v1/login", json=payload)
+    assert r.status_code == 400
+    assert "Invalid role" in r.json()["detail"]

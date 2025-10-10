@@ -15,13 +15,9 @@ class Settings(BaseSettings):
     # "http://192.168.1.10:5173",
 ]
 
-    JUDGE0_URL: Optional[str] = None
-    JUDGE0_ALLOWED_BASES: List[str] = [
-        "http://localhost:2358",
-        "http://judge0:2358",
-    ]
+# REMOVED: Judge0 settings - using secure subprocess execution instead
 
-   
+
     DEBUG: bool = True  
 
 
@@ -52,24 +48,7 @@ class Settings(BaseSettings):
             return list(v)
         return [str(v)]
 
-    @field_validator("JUDGE0_URL", mode="after")
-    @classmethod
-    def _validate_judge0_url(cls, v, info):
-        """
-        Enforce allowlist when a URL is set; otherwise leave None to use defaults
-        inside the Judge0 client.
-        """
-        if v is None:
-            return v
-
-        v = v.rstrip("/")
-
-        allowed = info.data.get("JUDGE0_ALLOWED_BASES") or cls.model_fields["JUDGE0_ALLOWED_BASES"].default
-        if v not in allowed:
-            raise ValueError(
-                f"Disallowed JUDGE0_URL: {v}. Allowed values: {', '.join(allowed)}"
-            )
-        return v
+# REMOVED: Judge0 URL validator - using secure subprocess execution instead
 
     class Config:
         env_file = ".env"  

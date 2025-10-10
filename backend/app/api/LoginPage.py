@@ -1,7 +1,7 @@
 # backend/app/api/LoginPage.py
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from passlib.hash import bcrypt
+from passlib.hash import pbkdf2_sha256
 
 from app.core.db import get_db
 from app.models.models import User, RoleEnum
@@ -29,9 +29,9 @@ def login(payload: dict, db: Session = Depends(get_db)):
     if not user or user.role != role:
         raise HTTPException(401, "Invalid username or password")
 
-    # Check bcrypt
+    # Check password hash
     try:
-        if not bcrypt.verify(password, user.password_hash):
+        if not pbkdf2_sha256.verify(password, user.password_hash):
             raise HTTPException(401, "Invalid username or password")
     except Exception:
         raise HTTPException(401, "Invalid username or password")

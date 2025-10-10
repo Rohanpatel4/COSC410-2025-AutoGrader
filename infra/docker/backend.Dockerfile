@@ -7,4 +7,4 @@ COPY backend /app
 RUN mkdir -p /app/data
 ENV DATABASE_URL=sqlite:///./data/app.db
 EXPOSE 8000
-CMD ["python","-m","app.main"]
+CMD ["python","-m","app.api.main"]

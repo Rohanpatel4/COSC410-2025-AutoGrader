@@ -5,7 +5,7 @@ from datetime import datetime
 from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 
-from passlib.hash import bcrypt  # pip install "passlib[bcrypt]"
+from passlib.hash import pbkdf2_sha256
 
 from app.core.db import engine, Base
 from app.models.models import User, RoleEnum
@@ -70,8 +70,8 @@ def reseed_users(sess, users: list[dict], overwrite: bool = True):
 
     now = datetime.utcnow()
     for u in users:
-        # hash password with bcrypt
-        hashed = bcrypt.hash(u["password"])
+        # hash password with pbkdf2_sha256
+        hashed = pbkdf2_sha256.hash(u["password"])
         row = User(
             id=u["id"],
             username=u["username"],
