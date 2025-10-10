@@ -84,6 +84,7 @@ const UploadStudentFile: React.FC = () => {
       <input
         type="file"
         accept=".py"
+        aria-label="Student code file"
         onChange={(e) => setFile(e.target.files?.[0] || null)}
         style={{ marginTop: 20, marginRight: 10 }}
       />
