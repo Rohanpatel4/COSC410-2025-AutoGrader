@@ -5,7 +5,7 @@ import { setupServer } from "msw/node";
 // ---- Types used in tests/UI ----
 type Course = {
   id: number;
-  course_tag: string;
+  course_tag: string; // NOTE: in your app, the :course_id route param is the tag (e.g., "500")
   name: string;
   description: string | null;
   professor_id: number;
@@ -16,12 +16,17 @@ type RosterFaculty = { id: number; name?: string };
 
 type Assignment = {
   id: number;
+  course_id: number;            // ADDED: used by AssignmentsPage list
   title: string;
   description?: string | null;
+  sub_limit?: number | null;    // ADDED: used by AssignmentsPage list
   start?: string | null;
   stop?: string | null;
   num_attempts?: number;
 };
+
+type Attempt = { id: number; grade: number | null };
+type AttemptsByAsgStudent = Record<number, Record<number, Attempt[]>>;
 
 type DB = {
   // faculty dashboard
@@ -35,8 +40,13 @@ type DB = {
   // course page
   facultyByCourseTag: Record<string, RosterFaculty[]>;
   studentsByCourseTag: Record<string, RosterStudent[]>;
-  assignmentsByCourseTag: Record<string, Assignment[]>;
+  assignmentsByCourseTag: Record<string, Assignment[]>; // keyed by course_tag ("500")
   nextAssignmentId: number;
+
+  // assignment detail page
+  assignmentById: Record<number, Assignment>;
+  attemptsByAsgStudent: AttemptsByAsgStudent;
+  nextAttemptId: number;
 };
 
 // ---- Seed ----
@@ -81,8 +91,10 @@ const seed: DB = {
     "500": [
       {
         id: 9001,
+        course_id: 1,           // tie back to Course.id
         title: "Seeded Assignment",
         description: "Warm-up",
+        sub_limit: 3,
         start: null,
         stop: null,
         num_attempts: 0,
@@ -90,6 +102,22 @@ const seed: DB = {
     ],
   },
   nextAssignmentId: 9002,
+  assignmentById: {
+    9001: {
+      id: 9001,
+      course_id: 1,
+      title: "Seeded Assignment",
+      description: "Warm-up",
+      sub_limit: 3,
+      start: null,
+      stop: null,
+      num_attempts: 0,
+    },
+  },
+  attemptsByAsgStudent: {
+    // e.g. 9001: { 201: [ { id: 1, grade: 95 } ] }
+  },
+  nextAttemptId: 1,
 };
 
 export const __db: DB = structuredClone(seed);
@@ -104,6 +132,10 @@ export function resetDb() {
   __db.studentsByCourseTag = structuredClone(seed.studentsByCourseTag);
   __db.assignmentsByCourseTag = structuredClone(seed.assignmentsByCourseTag);
   __db.nextAssignmentId = seed.nextAssignmentId;
+  
+  __db.assignmentById = structuredClone(seed.assignmentById);
+  __db.attemptsByAsgStudent = structuredClone(seed.attemptsByAsgStudent);
+  __db.nextAttemptId = seed.nextAttemptId;
 }
 
 // Compat/test helpers
@@ -117,6 +149,11 @@ export const __testDb = {
     students: __db.studentsByCourseTag[tag] ?? [],
   }),
   getAssignments: (tag: string) => __db.assignmentsByCourseTag[tag] ?? [],
+  getAssignment: (id: number) => __db.assignmentById[id],
+  setAssignment: (id: number, patch: Partial<Assignment>) => {
+    if (!__db.assignmentById[id]) return;
+    __db.assignmentById[id] = { ...__db.assignmentById[id], ...patch };
+  },
 };
 
 // Helpers
@@ -136,6 +173,14 @@ const COURSE_STUDENTS_URL = "**/api/v1/courses/:course_id/students";
 const COURSE_FACULTY_URL = "**/api/v1/courses/:course_id/faculty";
 const COURSE_ASSIGNMENTS_URL = "**/api/v1/courses/:course_id/assignments";
 const ASSIGNMENT_TESTFILE_URL = "**/api/v1/assignments/:id/test-file";
+
+// Assignment detail page
+const ASSIGNMENT_DETAIL_URL = "**/api/v1/assignments/:id";
+const ASSIGNMENT_ATTEMPTS_URL = "**/api/v1/assignments/:id/attempts";
+const ASSIGNMENT_SUBMIT_URL = "**/api/v1/assignments/:id/submit";
+
+// Global assignments (AssignmentsPage)
+const ASSIGNMENTS_URL = "**/api/v1/assignments";
 
 export const handlers = [
   // =========================================================
@@ -256,24 +301,24 @@ export const handlers = [
 
   // GET /api/v1/courses/:course_id/students
   http.get(COURSE_STUDENTS_URL, ({ params }) => {
-    const courseId = String(params.course_id ?? "");
-    const list = __db.studentsByCourseTag[courseId] ?? [];
+    const tag = String(params.course_id ?? "");
+    const list = __db.studentsByCourseTag[tag] ?? [];
     return HttpResponse.json(list, { status: 200 });
   }),
 
   // GET /api/v1/courses/:course_id/faculty
   http.get(COURSE_FACULTY_URL, ({ params }) => {
-    const courseId = String(params.course_id ?? "");
-    const list = __db.facultyByCourseTag[courseId] ?? [];
+    const tag = String(params.course_id ?? "");
+    const list = __db.facultyByCourseTag[tag] ?? [];
     return HttpResponse.json(list, { status: 200 });
   }),
 
   // GET /api/v1/courses/:course_id/assignments(?student_id=…)
   http.get(COURSE_ASSIGNMENTS_URL, ({ request, params }) => {
-    const courseId = String(params.course_id ?? "");
+    const tag = String(params.course_id ?? "");
     const url = new URL(request.url);
     const studentId = url.searchParams.get("student_id");
-    let list = (__db.assignmentsByCourseTag[courseId] ?? []).map(a => ({ ...a }));
+    let list = (__db.assignmentsByCourseTag[tag] ?? []).map(a => ({ ...a }));
 
     // If student-specific view matters, we could adjust num_attempts etc.
     if (studentId) {
@@ -284,7 +329,7 @@ export const handlers = [
 
   // POST /api/v1/courses/:course_id/assignments
   http.post(COURSE_ASSIGNMENTS_URL, async ({ params, request }) => {
-    const courseId = String(params.course_id ?? "");
+    const tag = String(params.course_id ?? "");
     const body = (await request.json()) as Partial<Assignment>;
     const title = (body.title ?? "").toString().trim();
 
@@ -292,17 +337,23 @@ export const handlers = [
       return HttpResponse.json({ message: "Title is required" }, { status: 400 });
     }
 
+    // map tag → Course to get numeric id
+    const course = __db.courseByTag[tag];
     const created: Assignment = {
       id: __db.nextAssignmentId++,
+      course_id: course ? course.id : 0,
       title,
       description: body.description ?? null,
+      sub_limit: body.sub_limit ?? null,
       start: (body as any).start ?? null,
       stop: (body as any).stop ?? null,
       num_attempts: 0,
     };
 
-    const list = (__db.assignmentsByCourseTag[courseId] ??= []);
+    const list = (__db.assignmentsByCourseTag[tag] ??= []);
     list.unshift(created);
+    
+    __db.assignmentById[created.id] = created;
 
     return HttpResponse.json(created, { status: 201 });
   }),
@@ -311,10 +362,98 @@ export const handlers = [
   http.post(ASSIGNMENT_TESTFILE_URL, async () => {
     return HttpResponse.text("ok", { status: 200 });
   }),
+
+  // ==========================================================
+  // ------------------- Assignment Detail --------------------
+  // ==========================================================
+  http.get(ASSIGNMENT_DETAIL_URL, ({ params }) => {
+    const id = Number(params.id);
+    const asg = __db.assignmentById[id];
+    if (!asg) return HttpResponse.json({ message: "not found" }, { status: 404 });
+    return HttpResponse.json(asg, { status: 200 });
+  }),
+
+  // GET /api/v1/assignments/:id/attempts?student_id=201
+  http.get(ASSIGNMENT_ATTEMPTS_URL, ({ request, params }) => {
+    const id = Number(params.id);
+    const url = new URL(request.url);
+    const sid = Number(url.searchParams.get("student_id") || 0);
+    if (!sid) return HttpResponse.json({ message: "student required" }, { status: 400 });
+
+    const list = __db.attemptsByAsgStudent[id]?.[sid] ?? [];
+    return HttpResponse.json(list, { status: 200 });
+  }),
+
+  // POST /api/v1/assignments/:id/submit  (multipart)
+  http.post(ASSIGNMENT_SUBMIT_URL, async ({ request, params }) => {
+    const id = Number(params.id);
+    const asg = __db.assignmentById[id];
+    if (!asg) {
+      return HttpResponse.json({ detail: "assignment not found" }, { status: 404 });
+    }
+
+  // Try to read multipart, but don't let parsing block the request.
+    let sid = 0;
+    let file: unknown = null;
+    try {
+      const form = await request.formData();
+      sid = Number(form.get("student_id") || 0);
+      file = form.get("submission");
+    } catch {
+  // Fall back to the student in your tests
+      sid = 201;
+    }
+
+  // Window check (mirror UI)
+  const now = Date.now();
+  const startOk = asg.start ? now >= new Date(asg.start).getTime() : true;
+  const stopOk  = asg.stop  ? now <= new Date(asg.stop).getTime()  : true;
+  if (!(startOk && stopOk)) {
+    return HttpResponse.json({ detail: "window closed" }, { status: 403 });
+  }
+
+  // Limit check
+  if (asg.sub_limit != null && asg.sub_limit >= 0) {
+    const existing = __db.attemptsByAsgStudent[id]?.[sid] ?? [];
+    if (existing.length >= asg.sub_limit) {
+      return HttpResponse.json({ detail: "limit reached" }, { status: 429 });
+    }
+  }
+
+  // Fake grading + persist attempt
+  const grade = 95;
+  const attempt = { id: __db.nextAttemptId++, grade };
+  const slot = (__db.attemptsByAsgStudent[id] ??= {});
+  const list = (slot[sid] ??= []);
+  list.unshift(attempt);
+
+  const grading = { passed: true, passed_tests: 3, total_tests: 3 };
+  return HttpResponse.json(
+    { ok: true, grade, grading },
+    { status: 201, headers: { "Content-Type": "application/json" } }
+  );
+}),
+
+  // =========================================================
+  // ---------------- Global Assignments list ----------------
+  // =========================================================
+  // GET /api/v1/assignments  → flatten all course assignments
+  http.get(ASSIGNMENTS_URL, () => {
+    // ensure each item has a valid course_id
+    const flattened = Object.entries(__db.assignmentsByCourseTag).flatMap(
+      ([tag, list]) => {
+        const course = __db.courseByTag[tag];
+        const courseId = course ? course.id : 0;
+        return list.map(a => ({ ...a, course_id: a.course_id ?? courseId }));
+      }
+    );
+    return HttpResponse.json(flattened, { status: 200 });
+  }),
 ];
 
 // Export an MSW server for tests (kept for your current setup)
 export const server = setupServer(...handlers);
+
 
 
 

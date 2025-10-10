@@ -164,6 +164,7 @@ export default function AssignmentDetailPage() {
                 <input
                   type="file"
                   accept=".py"
+                  aria-label="Submit your code"
                   onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                   disabled={nowBlocked || limitReached}
                 />
