@@ -1,0 +1,50 @@
+from pydantic import BaseModel, Field, ConfigDict, field_serializer
+from typing import List, Optional
+from datetime import datetime
+from enum import Enum
+import json
+
+class FileCategory(str, Enum):
+    TEST_CASE = "TEST_CASE"
+    SUBMISSION = "SUBMISSION"
+
+class RunStatus(str, Enum):
+    QUEUED = "QUEUED"
+    RUNNING = "RUNNING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+
+class CourseCreate(BaseModel):
+    course_tag: str
+    name: str
+    description: Optional[str] 
+    
+
+class CourseRead(BaseModel):
+    id: int
+    course_tag: str
+    name: str
+    description: Optional[str] 
+    
+    class Config:
+        from_attributes = True
+
+class AssignmentCreate(BaseModel):
+    course_id: int
+    title: str
+    description: Optional[str] 
+    sub_limit: Optional[int] = None
+    start: int
+    stop: int
+
+class AssignmentRead(BaseModel):
+    id: int
+    course_id: int
+    title: str
+    description: Optional[str] 
+    sub_limit: Optional[int] = None
+    start: int
+    stop: int
+
+    class Config:
+        from_attributes = True
