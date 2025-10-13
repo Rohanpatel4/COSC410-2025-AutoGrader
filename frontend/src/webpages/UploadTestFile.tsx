@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { BASE } from "../api/client";
 import { useNavigate, useLocation } from "react-router-dom";
 
@@ -14,18 +14,32 @@ const UploadTestFile: React.FC = () => {
   const [assignmentId, setAssignmentId] = useState<string>(
     String(location?.state?.assignment_id ?? "")
   );
-  const [file, setFile] = useState<File | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+
+  // read the chosen file directly at submit time to avoid state timing issues
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setMsg("Uploading test file…");
 
-    if (!assignmentId.trim()) return setMsg("Missing assignment_id");
-    if (!file) return setMsg("Please choose a test file");
-    if (!file.name.toLowerCase().endsWith(".py")) {
-      return setMsg("Only .py files are accepted.");
+    // always read latest file from the input
+    const file = fileInputRef.current?.files?.[0] ?? null;
+
+    // custom validation (remove native `required` so this can run)
+    if (!assignmentId.trim()) {
+      setMsg("Missing assignment_id");
+      return;
     }
+    if (!file) {
+      setMsg("Please choose a test file");
+      return;
+    }
+    if (!file.name.toLowerCase().endsWith(".py")) {
+      setMsg("Only .py files are accepted.");
+      return;
+    }
+
+    setMsg("Uploading test file…");
 
     const fd = new FormData();
     fd.append("file", file);
@@ -42,8 +56,14 @@ const UploadTestFile: React.FC = () => {
         return;
       }
 
+      // Give tests a moment to assert the message before navigation swaps the view
       setMsg("Test uploaded. Redirecting to student submission…");
-      navigate("/upload/student", { state: { assignment_id: assignmentId }, replace: true });
+      setTimeout(() => {
+        navigate("/upload/student", {
+          state: { assignment_id: assignmentId },
+          replace: true,
+        });
+      }, 10);
     } catch (err: any) {
       setMsg(err?.message || "Network error");
     }
@@ -60,15 +80,18 @@ const UploadTestFile: React.FC = () => {
           value={assignmentId}
           onChange={(e) => setAssignmentId(e.target.value)}
           placeholder="e.g., 1"
-          required
+          // no `required` so our custom validation can run in tests
         />
       </label>
 
+      <label htmlFor="test-file">Test file</label>
       <input
+        id="test-file"
+        ref={fileInputRef}
         type="file"
-        accept=".py"
-        onChange={(e) => setFile(e.target.files?.[0] || null)}
+        accept=".py, text/x-python, application/x-python, text/plain, */*"
       />
+
       <button type="submit">Upload Test File</button>
       <p>{msg}</p>
     </form>
