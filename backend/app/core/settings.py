@@ -5,7 +5,7 @@ from typing import List, Optional
 
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = "sqlite:///./app.db"
+    DATABASE_URL: str = "sqlite:///backend/app.db"
 
 
     CORS_ORIGINS: List[str] = [

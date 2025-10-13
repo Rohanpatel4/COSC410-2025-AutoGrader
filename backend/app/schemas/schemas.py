@@ -1,9 +1,10 @@
-from pydantic import BaseModel, Field, ConfigDict, field_serializer
-from typing import List, Optional
+# backend/app/api/schemas.py
+from pydantic import BaseModel, ConfigDict
+from typing import Optional
 from datetime import datetime
 from enum import Enum
-import json
 
+# Keep these if you actually use them elsewhere; harmless to leave.
 class FileCategory(str, Enum):
     TEST_CASE = "TEST_CASE"
     SUBMISSION = "SUBMISSION"
@@ -19,57 +20,87 @@ class RoleEnum(str, Enum):
     faculty = "faculty"
     admin = "admin"
 
+# ---------- USERS ----------
 class UserCreate(BaseModel):
     username: str
-    name: str
     role: RoleEnum
+    # Your model stores a hash; keep API as-is for now (or switch to plain password if you add server-side hashing)
     password_hash: str
     created_at: datetime
 
 class UserRead(BaseModel):
     id: int
     username: str
-    name: str
     role: RoleEnum
-    password_hash: str
     created_at: datetime
+    model_config = ConfigDict(from_attributes=True)  # Pydantic v2 style
 
-
-    class Config:
-        from_attributes = True
-
+# ---------- COURSES ----------
+# models.py: description is NOT nullable -> required in schemas
 class CourseCreate(BaseModel):
     course_tag: str
     name: str
-    description: Optional[str] 
-    
+    description: str
 
 class CourseRead(BaseModel):
     id: int
     course_tag: str
     name: str
-    description: Optional[str] 
-    
-    class Config:
-        from_attributes = True
+    description: str
+    model_config = ConfigDict(from_attributes=True)
 
+# ---------- ASSIGNMENTS ----------
+# models.py: description NOT nullable; start/stop are nullable
 class AssignmentCreate(BaseModel):
     course_id: int
     title: str
-    description: Optional[str] 
+    description: str
     sub_limit: Optional[int] = None
-    start: datetime
-    stop: datetime
+    start: Optional[datetime] = None
+    stop: Optional[datetime] = None
 
 class AssignmentRead(BaseModel):
     id: int
     course_id: int
     title: str
-    description: Optional[str] 
+    description: str
     sub_limit: Optional[int] = None
-    start: datetime
-    stop: datetime
+    start: Optional[datetime] = None
+    stop: Optional[datetime] = None
+    model_config = ConfigDict(from_attributes=True)
 
-    class Config:
-        from_attributes = True
+# ---------- TEST CASES ----------
+class TestCaseCreate(BaseModel):
+    assignment_id: int
+    var_char: str
+
+class TestCaseRead(BaseModel):
+    id: int
+    assignment_id: int
+    var_char: str
+    model_config = ConfigDict(from_attributes=True)
+
+# ---------- STUDENT SUBMISSIONS ----------
+class StudentSubmissionCreate(BaseModel):
+    student_id: int
+    assignment_id: int
+
+class StudentSubmissionRead(BaseModel):
+    id: int
+    student_id: int
+    assignment_id: int
+    grade: Optional[int] = None
+    model_config = ConfigDict(from_attributes=True)
+
+# ---------- STUDENT REGISTRATIONS ----------
+class StudentRegistrationCreate(BaseModel):
+    student_id: int
+    course_id: int
+
+class StudentRegistrationRead(BaseModel):
+    id: int
+    student_id: int
+    course_id: int
+    model_config = ConfigDict(from_attributes=True)
+
 

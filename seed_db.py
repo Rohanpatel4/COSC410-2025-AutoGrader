@@ -17,10 +17,10 @@ from backend.app.models.models import User, RoleEnum
 
 # Users to seed
 USERS = [
-    {"id": 201, "username": "alice@wofford.edu", "name": "alice@wofford.edu", "role": RoleEnum.student, "password": "secret"},
-    {"id": 202, "username": "bob@wofford.edu", "name": "bob@wofford.edu", "role": RoleEnum.student, "password": "secret"},
-    {"id": 301, "username": "prof.x@wofford.edu", "name": "prof.x@wofford.edu", "role": RoleEnum.faculty, "password": "secret"},
-    {"id": 302, "username": "prof.y@wofford.edu", "name": "prof.y@wofford.edu", "role": RoleEnum.faculty, "password": "secret"},
+    {"id": 201, "username": "alice@wofford.edu", "role": RoleEnum.student, "password": "secret"},
+    {"id": 202, "username": "bob@wofford.edu", "role": RoleEnum.student, "password": "secret"},
+    {"id": 301, "username": "prof.x@wofford.edu", "role": RoleEnum.faculty, "password": "secret"},
+    {"id": 302, "username": "prof.y@wofford.edu", "role": RoleEnum.faculty, "password": "secret"},
 ]
 
 def main():
@@ -40,7 +40,6 @@ def main():
             user = User(
                 id=u["id"],
                 username=u["username"],
-                name=u["name"],
                 role=u["role"],
                 password_hash=hashed,
                 created_at=now,
@@ -53,3 +52,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
