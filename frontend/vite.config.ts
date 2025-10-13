@@ -9,6 +9,7 @@ export default defineConfig({
       "/api": {
         target: 'http://backend:8000', // FastAPI backend
         changeOrigin: true,
+        rewrite: (p) => p,  // <= keep "/api" intact
       },
     },
   },
