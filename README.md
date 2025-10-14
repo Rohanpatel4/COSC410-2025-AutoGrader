@@ -1,5 +1,24 @@
 # Offline Sandbox (MVP)
 
+## For inspect_db.py, seed_db.py, and rebuilding frontend
+```bash
+# this to run inspect_db, make sure docker container is running when you do
+# run all of these from the project root
+docker compose exec backend sh -lc \
+  'python /app/inspect_db.py --url sqlite:///backend/app.db --limit 10'
+
+# if you make changes to the frontend
+# first save, then rebuild(run command below), then test before you push it (obviously)
+# also note that when you pull frontend changes from the repo, run this command first thing
+docker compose up --build -d frontend
+
+# seed_db
+# there's probably a better way to do this, but this method works
+docker-compose cp seed_db.py backend:/app/seed_db.py # first copy it
+docker-compose exec backend python seed_db.py # then run with exec
+
+
+
 ## Run locally
 ```bash
 # Backend
