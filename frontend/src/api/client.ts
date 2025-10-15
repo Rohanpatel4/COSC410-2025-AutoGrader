@@ -7,11 +7,12 @@ function join(base: string, path: string) {
   return base.replace(/\/+$/, "") + path;
 }
 
-function getToken(): string | null {
+function getAuthFromStorage(): { token: string | null; userId: string | null; role: string | null } {
   try {
-    return JSON.parse(localStorage.getItem("auth") || "null")?.token ?? null;
+    const a = JSON.parse(localStorage.getItem("auth") || "null");
+    return { token: a?.token ?? null, userId: a?.userId ?? null, role: a?.role ?? null };
   } catch {
-    return null;
+    return { token: null, userId: null, role: null };
   }
 }
 
@@ -19,18 +20,18 @@ export async function fetchJson<T = unknown>(
   path: string,
   init?: RequestInit
 ): Promise<T> {
-  // Ensure caller passes paths like "/api/..." so proxy picks them up in dev
   if (!path.startsWith("/")) {
     throw new Error(`fetchJson path must start with '/': received "${path}"`);
   }
 
-  const token = getToken();
+  const { token, userId, role } = getAuthFromStorage();
 
   const res = await fetch(join(BASE, path), {
-    // Only set JSON header here; callers can override/extend via init.headers
     headers: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(userId ? { "X-User-Id": String(userId) } : {}),
+      ...(role ? { "X-User-Role": String(role) } : {}),
       ...(init?.headers || {}),
     },
     ...init,
@@ -40,13 +41,11 @@ export async function fetchJson<T = unknown>(
     const text = await res.text();
     try {
       const j = JSON.parse(text);
-      // FastAPI puts message in detail
       throw new Error(j.detail ?? j.error ?? res.statusText);
     } catch {
       throw new Error(text || res.statusText);
     }
   }
-  // If no JSON body, this will throw—adjust per your API if needed
   return (await res.json()) as T;
 }
 
@@ -76,4 +75,5 @@ export async function uploadFile<T = unknown>(
   return (await res.json()) as T;
 }
 
-export { BASE }; // export if other modules need to inspect it
+export { BASE };
+

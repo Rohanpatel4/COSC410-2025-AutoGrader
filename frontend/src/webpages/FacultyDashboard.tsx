@@ -22,23 +22,15 @@ export default function FacultyDashboard() {
   }
 
   async function loadMine() {
-    // Don't fetch until we have a real professor id
     if (!professorId || Number.isNaN(professorId)) return;
     setLoading(true);
     setMsg(null);
     try {
-      // Use the same param name as the create endpoint so filtering works consistently
-      const res = await fetchJson<any>(`/api/v1/courses?professor_id=${encodeURIComponent(professorId)}`);
-      let items: Course[] = [];
-      if (Array.isArray(res)) {
-        items = res as Course[];
-      } else if (Array.isArray(res?.items)) {
-        items = res.items as Course[];
-      }
+      // NEW: path-based filter like students: /api/v1/courses/faculty/{id}
+      const items = await fetchJson<Course[]>(
+        `/api/v1/courses/faculty/${encodeURIComponent(professorId)}`
+      );
       setMine(items);
-      if (items.length === 0 && !Array.isArray(res?.items) && !Array.isArray(res)) {
-        setMsg("Unexpected response format; showing 0 courses.");
-      }
     } catch (e: any) {
       setMsg(e?.message ?? "Failed to load courses");
       setMine([]);
@@ -47,11 +39,9 @@ export default function FacultyDashboard() {
     }
   }
 
-  // Reload when the authenticated user changes (e.g., after navigation)
   React.useEffect(() => { loadMine(); }, [professorId]);
 
   function generateRandomTag() {
-    // Generate a random 6-digit number
     const randomCode = Math.floor(100000 + Math.random() * 900000);
     setCourseTag(randomCode.toString());
   }
@@ -64,7 +54,8 @@ export default function FacultyDashboard() {
       return;
     }
     try {
-      const created = await fetchJson<Course>(`/api/v1/courses?professor_id=${professorId}`, {
+      // NEW: no professor_id query; backend auto-links creator via headers
+      const created = await fetchJson<Course>(`/api/v1/courses`, {
         method: "POST",
         body: JSON.stringify({
           course_tag: courseTag.trim(),
@@ -75,11 +66,11 @@ export default function FacultyDashboard() {
       setMine((prev) => [created, ...prev]);
       setCourseTag(""); setName(""); setDescription("");
       setMsg("Course created!");
-
     } catch (e: any) {
       setMsg(e?.message ?? "Create failed");
     }
   }
+
   const styles = {
     header: {
       display: "flex",
@@ -254,3 +245,4 @@ export default function FacultyDashboard() {
     </div>
   );
 }
+

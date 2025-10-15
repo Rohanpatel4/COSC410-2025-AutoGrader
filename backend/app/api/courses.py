@@ -1,19 +1,19 @@
 # backend/app/api/courses.py
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session
-from sqlalchemy import select, func, and_
-
 from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Header, Query, status
+from sqlalchemy import and_, func, select
+from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.models.models import (
-    Course,
-    User,
-    RoleEnum,
-    user_course_association,
-    StudentRegistration,
     Assignment,
+    Course,
+    RoleEnum,
+    StudentRegistration,
     StudentSubmission,
+    User,
+    user_course_association,
 )
 
 router = APIRouter()
@@ -25,10 +25,8 @@ def _course_by_key(db: Session, key: str) -> Course | None:
         c = db.get(Course, int(key))
         if c:
             return c
-    return (
-        db.execute(select(Course).where(Course.course_tag == key))
-        .scalar_one_or_none()
-    )
+    return db.execute(select(Course).where(Course.course_tag == key)).scalar_one_or_none()
+
 
 def _parse_dt(v):
     """Accept None, datetime, 'YYYY-MM-DDTHH:MM', or 'YYYY-MM-DD HH:MM'."""
@@ -50,16 +48,15 @@ def _parse_dt(v):
             return None
     return None
 
+
 def _assignment_to_dict(
     a: Assignment,
     attempts_by_aid: dict[int, int] | None = None,
 ) -> dict:
-    # Derive attempts if provided, else 0
     num_attempts = 0
     if attempts_by_aid is not None:
         num_attempts = int(attempts_by_aid.get(a.id, 0))
-
-    payload = {
+    return {
         "id": a.id,
         "course_id": a.course_id,
         "title": a.title,
@@ -69,13 +66,27 @@ def _assignment_to_dict(
         "stop": getattr(a, "stop", None),
         "num_attempts": num_attempts,
     }
-    return payload
+
+
+# Identity helper (reads headers set by the frontend fetch helper)
+def get_identity(
+    x_user_id: int | None = Header(default=None, convert_underscores=False),
+    x_user_role: str | None = Header(default=None, convert_underscores=False),
+) -> tuple[int | None, RoleEnum | None]:
+    if not x_user_id or not x_user_role:
+        return None, None
+    try:
+        role = RoleEnum(x_user_role)
+    except ValueError:
+        return None, None
+    return x_user_id, role
+
 
 # ---------- course CRUD / listing ----------
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_course(
     payload: dict,  # { course_tag, name, description? }
-    professor_id: int = Query(..., alias="professor_id"),
+    ident=Depends(get_identity),
     db: Session = Depends(get_db),
 ):
     tag = (payload.get("course_tag") or "").strip()
@@ -86,28 +97,25 @@ def create_course(
         raise HTTPException(400, "course_tag and name are required")
 
     # Duplicate tag check
-    exists = (
-        db.execute(select(Course).where(Course.course_tag == tag))
-        .scalar_one_or_none()
-    )
+    exists = db.execute(select(Course).where(Course.course_tag == tag)).scalar_one_or_none()
     if exists:
         raise HTTPException(409, "Course tag already exists")
 
     course = Course(course_tag=tag, name=name, description=description)
     db.add(course)
-    db.commit()
-    db.refresh(course)
+    db.flush()  # get course.id without committing yet
 
-    # Link professor if valid faculty
-    prof = db.get(User, professor_id)
-    if prof and prof.role == RoleEnum.faculty:
+    # Auto-link creator if they are faculty
+    user_id, role = ident
+    if role == RoleEnum.faculty and user_id:
         db.execute(
             user_course_association.insert().values(
-                user_id=prof.id, course_id=course.id
+                user_id=user_id, course_id=course.id
             )
         )
-        db.commit()
 
+    db.commit()
+    db.refresh(course)
     return {
         "id": course.id,
         "course_tag": course.course_tag,
@@ -115,9 +123,11 @@ def create_course(
         "description": course.description,
     }
 
+
 @router.get("")
 def list_courses(
-    professor: int | None = None,
+    # Back-compat: allow query param filtering if provided
+    professor_id: int | None = Query(None, alias="professor_id"),
     q: str | None = None,
     limit: int = Query(100, ge=1, le=200),
     db: Session = Depends(get_db),
@@ -127,12 +137,12 @@ def list_courses(
     """
     rows = db.execute(select(Course)).scalars().all()
 
-    if professor is not None:
+    if professor_id is not None:
         course_ids = [
             cid
             for (cid,) in db.execute(
                 select(user_course_association.c.course_id).where(
-                    user_course_association.c.user_id == professor
+                    user_course_association.c.user_id == professor_id
                 )
             ).all()
         ]
@@ -153,6 +163,28 @@ def list_courses(
     ]
     return {"items": items, "nextCursor": None}
 
+
+# NEW: path-based faculty listing (mirrors students' explicit path style)
+@router.get("/faculty/{faculty_id}", response_model=list[dict])
+def faculty_courses(faculty_id: int, db: Session = Depends(get_db)):
+    rows = (
+        db.execute(
+            select(Course)
+            .join(
+                user_course_association,
+                user_course_association.c.course_id == Course.id,
+            )
+            .where(user_course_association.c.user_id == faculty_id)
+        )
+        .scalars()
+        .all()
+    )
+    return [
+        {"id": c.id, "course_tag": c.course_tag, "name": c.name, "description": c.description}
+        for c in rows
+    ]
+
+
 @router.get("/{course_key}")
 def get_course(course_key: str, db: Session = Depends(get_db)):
     c = _course_by_key(db, course_key)
@@ -164,6 +196,7 @@ def get_course(course_key: str, db: Session = Depends(get_db)):
         "name": c.name,
         "description": c.description,
     }
+
 
 # ---------- faculty management ----------
 @router.get("/{course_key}/faculty")
@@ -180,13 +213,16 @@ def course_faculty(course_key: str, db: Session = Depends(get_db)):
             )
         ).all()
     ]
-    users = (
-        db.execute(select(User).where(User.id.in_(prof_ids)))
-        .scalars()
-        .all()
-    )
-    return [{"id": u.id, "name": getattr(u, "username", None) or getattr(u, "name", None) or str(u.id)}
-            for u in users if u.role == RoleEnum.faculty]
+    users = db.execute(select(User).where(User.id.in_(prof_ids))).scalars().all()
+    return [
+        {
+            "id": u.id,
+            "name": getattr(u, "username", None) or getattr(u, "name", None) or str(u.id),
+        }
+        for u in users
+        if u.role == RoleEnum.faculty
+    ]
+
 
 @router.post("/{course_key}/faculty", status_code=status.HTTP_201_CREATED)
 def add_co_instructor(
@@ -206,7 +242,6 @@ def add_co_instructor(
     if not u or u.role != RoleEnum.faculty:
         raise HTTPException(404, "Faculty user not found")
 
-    # already linked?
     exists = db.execute(
         select(user_course_association).where(
             and_(
@@ -225,6 +260,7 @@ def add_co_instructor(
     )
     db.commit()
     return {"ok": True}
+
 
 @router.delete("/{course_key}/faculty/{faculty_id}")
 def remove_co_instructor(
@@ -249,6 +285,7 @@ def remove_co_instructor(
     db.commit()
     return {"ok": True}
 
+
 # ---------- students ----------
 @router.get("/{course_key}/students")
 def course_students(course_key: str, db: Session = Depends(get_db)):
@@ -266,11 +303,7 @@ def course_students(course_key: str, db: Session = Depends(get_db)):
         return []
 
     student_ids = [sid for (sid,) in reg_rows]
-    students = (
-        db.execute(select(User).where(User.id.in_(student_ids)))
-        .scalars()
-        .all()
-    )
+    students = db.execute(select(User).where(User.id.in_(student_ids))).scalars().all()
     return [
         {
             "id": s.id,
@@ -278,6 +311,7 @@ def course_students(course_key: str, db: Session = Depends(get_db)):
         }
         for s in students
     ]
+
 
 @router.delete("/{course_key}/students/{student_id}")
 def remove_student_from_course(
@@ -305,22 +339,19 @@ def remove_student_from_course(
     db.commit()
     return {"ok": True}
 
+
 # ---------- assignments ----------
 @router.get("/{course_key}/assignments", response_model=list[dict])
 def list_assignments_for_course(
     course_key: str,
     student_id: int | None = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     c = _course_by_key(db, course_key)
     if not c:
         return []
 
-    rows = (
-        db.execute(select(Assignment).where(Assignment.course_id == c.id))
-        .scalars()
-        .all()
-    )
+    rows = db.execute(select(Assignment).where(Assignment.course_id == c.id)).scalars().all()
 
     # If student_id is provided, count attempts per student, otherwise count all attempts
     if student_id is not None:
@@ -340,6 +371,7 @@ def list_assignments_for_course(
         )
 
     return [_assignment_to_dict(a, attempts) for a in rows]
+
 
 @router.post("/{course_key}/assignments", response_model=dict, status_code=status.HTTP_201_CREATED)
 def create_assignment_for_course(
@@ -376,7 +408,7 @@ def create_assignment_for_course(
         sub_limit = None
 
     start = _parse_dt(payload.get("start"))
-    stop  = _parse_dt(payload.get("stop"))
+    stop = _parse_dt(payload.get("stop"))
 
     a = Assignment(
         course_id=c.id,
@@ -384,7 +416,6 @@ def create_assignment_for_course(
         description=description,
         sub_limit=sub_limit,
     )
-
     if hasattr(a, "start"):
         a.start = start
     if hasattr(a, "stop"):
@@ -395,6 +426,7 @@ def create_assignment_for_course(
     db.refresh(a)
 
     return _assignment_to_dict(a, attempts_by_aid={})
+
 
 @router.delete("/{course_key}/assignments/{assignment_id}")
 def delete_assignment(
@@ -413,6 +445,7 @@ def delete_assignment(
     db.delete(a)
     db.commit()
     return {"ok": True}
+
 
 
 

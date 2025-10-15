@@ -17,8 +17,6 @@ docker compose up --build -d frontend
 docker-compose cp seed_db.py backend:/app/seed_db.py # first copy it
 docker-compose exec backend python seed_db.py # then run with exec
 
-
-
 ## Run locally
 ```bash
 # Backend
