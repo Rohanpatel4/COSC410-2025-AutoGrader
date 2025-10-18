@@ -1,9 +1,10 @@
 # backend/app/api/assignments.py
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
-from sqlalchemy import select, func
+from sqlalchemy import select, func, and_
 from typing import Optional
 from datetime import datetime
+from collections import defaultdict
 
 from app.core.db import get_db
 from app.models.models import (
@@ -330,6 +331,152 @@ async def submit_to_assignment(
         },
     }
 
+@router.get("/{assignment_id}/grades", response_model=dict)
+def grades_for_assignment(assignment_id: int, db: Session = Depends(get_db)):
+    """
+    Faculty view: all students registered in this assignment’s course,
+    their attempts for this assignment (id, grade), and their best grade.
+    """
+    a = db.get(Assignment, assignment_id)
+    if not a:
+        raise HTTPException(404, "Assignment not found")
+
+    # enrolled students (role=student)
+    stu_rows = db.execute(
+        select(User.id, User.username)
+        .join(StudentRegistration, StudentRegistration.student_id == User.id)
+        .where(
+            StudentRegistration.course_id == a.course_id,
+            User.role == RoleEnum.student,
+        )
+        .order_by(User.username.asc())
+    ).all()
+
+    students = [{"student_id": sid, "username": uname} for (sid, uname) in stu_rows]
+    stu_ids = [sid for (sid, _uname) in stu_rows]
+    if not stu_ids:
+        return {
+            "assignment": {"id": a.id, "title": a.title},
+            "students": [],
+        }
+
+    # attempts for this assignment by these students
+    att_rows = db.execute(
+        select(
+            StudentSubmission.student_id,
+            StudentSubmission.id,
+            StudentSubmission.grade
+        )
+        .where(
+            and_(
+                StudentSubmission.assignment_id == assignment_id,
+                StudentSubmission.student_id.in_(stu_ids),
+            )
+        )
+        .order_by(StudentSubmission.student_id.asc(), StudentSubmission.id.asc())
+    ).all()
+
+    attempts_by_student: dict[int, list[dict]] = defaultdict(list)
+    best_by_student: dict[int, int | None] = {}
+
+    for sid, sub_id, grade in att_rows:
+        attempts_by_student[sid].append({"id": sub_id, "grade": grade})
+        if grade is not None:
+            if sid not in best_by_student:
+                best_by_student[sid] = grade
+            else:
+                best_by_student[sid] = max(best_by_student[sid], grade)
+
+    out_students = []
+    for s in students:
+        sid = s["student_id"]
+        atts = attempts_by_student.get(sid, [])
+        best = best_by_student.get(sid, None)
+        out_students.append({
+            "student_id": sid,
+            "username": s["username"],
+            "attempts": atts,
+            "best": best,
+        })
+
+    return {
+        "assignment": {"id": a.id, "title": a.title},
+        "students": out_students,
+    }
+
+@router.get("/gradebook/by-course/{course_key}", response_model=dict)
+def gradebook_for_course(course_key: str, db: Session = Depends(get_db)):
+    """
+    Return a full grade matrix for a course:
+      - assignments: [{id, title}]
+      - students: [{student_id, username, grades: {<assignment_id_as_string>: best_grade|null}}]
+    """
+    c = _course_by_key(db, course_key)
+    if not c:
+        raise HTTPException(404, "Course not found")
+
+    # columns
+    assigns = db.execute(
+        select(Assignment.id, Assignment.title)
+        .where(Assignment.course_id == c.id)
+        .order_by(Assignment.id.asc())
+    ).all()
+    assignments = [{"id": aid, "title": title} for (aid, title) in assigns]
+    a_ids = [a["id"] for a in assignments]
+
+    # rows
+    stu_rows = db.execute(
+        select(User.id, User.username)
+        .join(StudentRegistration, StudentRegistration.student_id == User.id)
+        .where(
+            StudentRegistration.course_id == c.id,
+            User.role == RoleEnum.student,
+        )
+        .order_by(User.username.asc())
+    ).all()
+    students = [{"student_id": sid, "username": uname} for (sid, uname) in stu_rows]
+    s_ids = [s["student_id"] for s in students]
+
+    if not a_ids or not s_ids:
+        return {
+            "course": {"id": c.id, "name": c.name, "course_tag": c.course_tag},
+            "assignments": assignments,
+            "students": [],
+        }
+
+    # best grade per (student, assignment)
+    best_rows = db.execute(
+        select(
+            StudentSubmission.student_id,
+            StudentSubmission.assignment_id,
+            func.max(StudentSubmission.grade)
+        )
+        .where(
+            StudentSubmission.assignment_id.in_(a_ids),
+            StudentSubmission.student_id.in_(s_ids),
+        )
+        .group_by(StudentSubmission.student_id, StudentSubmission.assignment_id)
+    ).all()
+
+    best_map: dict[tuple[int, int], int | None] = {}
+    for sid, aid, best in best_rows:
+        best_map[(sid, aid)] = best
+
+    out_students = []
+    for s in students:
+        sid = s["student_id"]
+        grades = {str(aid): best_map.get((sid, aid), None) for aid in a_ids}
+        out_students.append({
+            "student_id": sid,
+            "username": s["username"],
+            "grades": grades,
+        })
+
+    return {
+        "course": {"id": c.id, "name": c.name, "course_tag": c.course_tag},
+        "assignments": assignments,
+        "students": out_students,
+    }
 
 
 
