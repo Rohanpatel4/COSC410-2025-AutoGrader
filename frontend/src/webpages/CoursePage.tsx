@@ -157,9 +157,14 @@ export default function CoursePage() {
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <h2 style={{ margin: 0 }}>Assignments</h2>
         {isFaculty && (
-          <button onClick={() => setShowCreate((v) => !v)}>
-            {showCreate ? "Cancel" : "Create Assignment"}
-          </button>
+          <>
+            <button onClick={() => setShowCreate((v) => !v)}>
+              {showCreate ? "Cancel" : "Create Assignment"}
+            </button>
+            <button onClick={() => navigate(`/courses/${encodeURIComponent(course_id)}/gradebook`)}>
+              View Gradebook
+            </button>
+          </>
         )}
       </div>
 

@@ -9,6 +9,7 @@ import FacultyDashboard from "./webpages/FacultyDashboard";
 import CoursePage from "./webpages/CoursePage";
 import AssignmentsPage from "./webpages/AssignmentsPage";
 import AssignmentDetailPage from "./webpages/AssignmentDetailPage"; // ← NEW
+import GradebookPage from "./webpages/GradebookPage";
 
 // NEW upload pages
 import UploadTestFile from "./webpages/UploadTestFile";
@@ -50,6 +51,16 @@ function AppRouter() {
           element={
             <Protected>
               <CoursePage />
+            </Protected>
+          }
+        />
+
+        {/* Course gradebook (faculty) */}
+        <Route
+          path="/courses/:course_id/gradebook"
+          element={
+            <Protected>
+              <GradebookPage />
             </Protected>
           }
         />

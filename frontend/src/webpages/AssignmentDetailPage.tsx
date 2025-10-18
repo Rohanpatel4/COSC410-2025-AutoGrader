@@ -7,6 +7,11 @@ import type { Assignment } from "../types/assignments";
 
 type Attempt = { id: number; grade: number | null };
 
+type FacAttempt = { id: number; grade: number | null };
+type FacRow = { student_id: number; username: string; attempts: FacAttempt[]; best: number | null };
+type FacPayload = { assignment: { id: number; title: string }; students: FacRow[] };
+
+
 export default function AssignmentDetailPage() {
   // ✅ match your route: /assignments/:assignment_id
   const { assignment_id } = useParams<{ assignment_id: string }>();
@@ -21,6 +26,11 @@ export default function AssignmentDetailPage() {
   const [file, setFile] = React.useState<File | null>(null);
   const [submitMsg, setSubmitMsg] = React.useState<string | null>(null);
   const [lastResult, setLastResult] = React.useState<any>(null);
+
+  const [facRows, setFacRows] = React.useState<FacRow[] | null>(null);
+  const [facLoading, setFacLoading] = React.useState(false);
+  const [facErr, setFacErr] = React.useState<string | null>(null);
+
 
   async function loadAll() {
     if (!assignment_id) return; // guard
@@ -40,6 +50,23 @@ export default function AssignmentDetailPage() {
         ).catch(() => []);
         setAttempts(list || []);
       }
+
+      if (!isStudent && assignment_id) {
+        setFacLoading(true);
+        setFacErr(null);
+        try {
+          const data = await fetchJson<FacPayload>(
+            `/api/v1/assignments/${encodeURIComponent(assignment_id)}/grades`
+          );
+          setFacRows(data.students || []);
+        } catch (e: any) {
+          setFacErr(e?.message ?? "Failed to load grades");
+          setFacRows([]);
+        } finally {
+          setFacLoading(false);
+        }
+    }
+
     } catch (e: any) {
       setErr(e?.message ?? "Failed to load assignment");
     } finally {
@@ -248,10 +275,85 @@ export default function AssignmentDetailPage() {
           )}
 
           {!isStudent && (
-            <p style={{ color: "#64748b" }}>
-              (Faculty view here could show a gradebook later.)
-            </p>
-          )}
+  <div style={{ marginTop: 16 }}>
+    <h2>Grades (this assignment)</h2>
+    {facLoading && <p>Loading grades…</p>}
+    {facErr && <p style={{ color: "crimson" }}>{facErr}</p>}
+
+    {!facLoading && !facErr && (facRows?.length ?? 0) === 0 && (
+      <p>No enrolled students or no data yet.</p>
+    )}
+
+    {!facLoading && !facErr && (facRows?.length ?? 0) > 0 && (
+      <div style={{ overflowX: "auto" }}>
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            minWidth: 600,
+          }}
+        >
+          <thead>
+            <tr>
+              <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #e2e8f0" }}>
+                Student
+              </th>
+              {(() => {
+                const maxAttempts =
+                  facRows?.reduce((m, r) => Math.max(m, r.attempts.length), 0) ?? 0;
+                const headers = [];
+                for (let i = 0; i < maxAttempts; i++) {
+                  headers.push(
+                    <th
+                      key={`h-${i}`}
+                      style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #e2e8f0" }}
+                    >
+                      Attempt {i + 1}
+                    </th>
+                  );
+                }
+                headers.push(
+                  <th
+                    key="best"
+                    style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #e2e8f0" }}
+                  >
+                    Best
+                  </th>
+                );
+                return headers;
+              })()}
+            </tr>
+          </thead>
+          <tbody>
+            {facRows!.map((row) => {
+              const maxAttempts =
+                facRows?.reduce((m, r) => Math.max(m, r.attempts.length), 0) ?? 0;
+              return (
+                <tr key={row.student_id}>
+                  <td style={{ padding: 8, borderBottom: "1px solid #f1f5f9" }}>
+                    {row.username}
+                  </td>
+                  {[...Array(maxAttempts)].map((_, i) => {
+                    const att = row.attempts[i];
+                    return (
+                      <td key={i} style={{ padding: 8, borderBottom: "1px solid #f1f5f9" }}>
+                        {att ? (att.grade ?? "—") : "—"}
+                      </td>
+                    );
+                  })}
+                  <td style={{ padding: 8, borderBottom: "1px solid #f1f5f9", fontWeight: 600 }}>
+                    {row.best == null ? "—" : row.best}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    )}
+  </div>
+)}
+
         </>
       )}
     </div>
