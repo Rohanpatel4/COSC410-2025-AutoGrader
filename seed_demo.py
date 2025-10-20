@@ -2,16 +2,23 @@
 """
 Seed demo data for the gradebook & assignment views without touching base users.
 
-Usage:
-  python -m scripts.seed_demo create           # create demo course + data
-  python -m scripts.seed_demo clear            # delete ONLY demo data
-  python -m scripts.seed_demo create --with-extra-students  # also add seed-only users
+Usage (run from project root, following your README style):
+  docker-compose cp seed_demo.py backend:/app/seed_demo.py
+  docker-compose exec backend python seed_demo.py create
+  docker-compose exec backend python seed_demo.py create --with-extra-students
+  docker-compose exec backend python seed_demo.py clear
 
-Works with the existing DB and models.
+What it does:
+  - Creates course tag SEED-COSC410
+  - Links faculty (301 prof.x, 302 prof.y) to that course
+  - Enrolls students (201 alice, 202 bob) + optional seed-only students
+  - Creates 3 assignments with a stub TestCase
+  - Inserts multiple attempts with grades for a nice-looking grid
+  - `clear` removes ONLY the demo course, its data, and seed-only users
 """
 
 import sys, os, argparse
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))  # project root in sys.path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))       # project root
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'backend'))  # backend imports
 
 from datetime import datetime, timedelta
@@ -22,7 +29,7 @@ from sqlalchemy import select, delete
 from backend.app.core.db import engine, Base
 from backend.app.models.models import (
     User, RoleEnum, Course, Assignment, TestCase,
-    StudentRegistration, StudentSubmission
+    StudentRegistration, StudentSubmission, user_course_association
 )
 
 SEED_COURSE_TAG = "SEED-COSC410"
@@ -36,6 +43,7 @@ SEED_ONLY_USERNAMES = [
 ALICE_ID = 201
 BOB_ID   = 202
 PROF_X   = 301
+PROF_Y   = 302
 
 def _ensure_course(session):
     course = session.execute(
@@ -47,6 +55,24 @@ def _ensure_course(session):
     session.add(course)
     session.flush()
     return course
+
+def _link_faculty_to_course(session, course_id, faculty_ids=(PROF_X, PROF_Y)):
+    # Safely insert rows into the association table if missing
+    for fid in faculty_ids:
+        u = session.get(User, fid)
+        if not u or u.role != RoleEnum.faculty:
+            continue
+        exists = session.execute(
+            select(user_course_association.c.user_id)
+            .where(
+                user_course_association.c.user_id == fid,
+                user_course_association.c.course_id == course_id
+            )
+        ).first()
+        if not exists:
+            session.execute(
+                user_course_association.insert().values(user_id=fid, course_id=course_id)
+            )
 
 def _ensure_seed_only_users(session):
     created = []
@@ -65,20 +91,20 @@ def _ensure_seed_only_users(session):
     return created
 
 def _enroll_students(session, course_id, extra_students=False):
-    # pick base students (201, 202) if present
+    # Pick base students (201, 202) if present
     sids = []
     for sid in (ALICE_ID, BOB_ID):
         u = session.get(User, sid)
         if u and u.role == RoleEnum.student:
             sids.append(u.id)
 
-    # optionally add seed-only students
+    # Optionally add seed-only students
     if extra_students:
         for uname in SEED_ONLY_USERNAMES:
             u = session.execute(select(User).where(User.username == uname)).scalar_one()
             sids.append(u.id)
 
-    # enroll
+    # Enroll
     for sid in sids:
         exists = session.execute(
             select(StudentRegistration).where(
@@ -89,25 +115,21 @@ def _enroll_students(session, course_id, extra_students=False):
         if not exists:
             session.add(StudentRegistration(student_id=sid, course_id=course_id))
 
-    # also ensure at least one faculty is associated (optional for your UI)
-    # (Your faculty association is modeled via user_course_association for professors.
-    # If you need that link, you can add it separately; not required for gradebook queries.)
-
     return sids
 
 def _create_assignments(session, course_id):
     now = datetime.utcnow()
     assigns = [
         ("Warmup: Functions", "Basic Python functions", now - timedelta(days=5), now + timedelta(days=10)),
-        ("Lists & Loops", "Practice with lists",       now - timedelta(days=4), now + timedelta(days=9)),
-        ("Recursion",       "Recursive thinking",      now - timedelta(days=2), now + timedelta(days=7)),
+        ("Lists & Loops",     "Practice with lists",    now - timedelta(days=4), now + timedelta(days=9)),
+        ("Recursion",         "Recursive thinking",     now - timedelta(days=2), now + timedelta(days=7)),
     ]
     out = []
     for title, desc, start, stop in assigns:
         a = Assignment(course_id=course_id, title=title, description=desc, sub_limit=None, start=start, stop=stop)
         session.add(a)
         session.flush()
-        # minimal test file so /submit wouldn't 409 if you try it
+        # Minimal test file so /submit wouldn't 409 if you try it
         tc = TestCase(assignment_id=a.id, var_char="def test_stub():\n    assert True")
         session.add(tc)
         out.append(a)
@@ -119,7 +141,9 @@ def _create_fake_attempts(session, assignment_ids, student_ids):
       - varied per assignment and per student
       - multiple attempts for at least one student/assignment
     """
-    # Simple matrix of grades for determinism
+    if not assignment_ids or not student_ids:
+        return
+
     demo = [
         # (student_id, assignment_id, [grades... as attempts])
         (student_ids[0], assignment_ids[0], [100, 100]),
@@ -134,7 +158,6 @@ def _create_fake_attempts(session, assignment_ids, student_ids):
     # If we have more than 2 students, give them some grades too
     for sid in student_ids[2:]:
         for aid in assignment_ids:
-            # two attempts per assignment
             demo.append((sid, aid, [65, 85]))
 
     for sid, aid, grades in demo:
@@ -143,14 +166,21 @@ def _create_fake_attempts(session, assignment_ids, student_ids):
 
 def create_demo(session, with_extra_students=False):
     course = _ensure_course(session)
+
+    # Link faculty to course so they can see it on dashboard
+    _link_faculty_to_course(session, course.id, faculty_ids=(PROF_X, PROF_Y))
+
+    # Freshness guard
     assigns = session.execute(select(Assignment).where(Assignment.course_id == course.id)).scalars().all()
     if assigns:
-        print(f"[skip] Demo course {SEED_COURSE_TAG} already has assignments; clear first if you want a fresh state.")
+        print(f"[skip] Demo course {SEED_COURSE_TAG} already has assignments; run 'clear' first for fresh state.")
         return
 
+    # Optionally create seed-only students
     if with_extra_students:
         _ensure_seed_only_users(session)
 
+    # Enroll students and create data
     student_ids = _enroll_students(session, course.id, extra_students=with_extra_students)
     assignments = _create_assignments(session, course.id)
     _create_fake_attempts(session, [a.id for a in assignments], student_ids)
@@ -173,7 +203,15 @@ def clear_demo(session):
         session.execute(delete(TestCase).where(TestCase.assignment_id.in_(a_ids)))
         session.execute(delete(Assignment).where(Assignment.id.in_(a_ids)))
 
+    # Remove student enrollments
     session.execute(delete(StudentRegistration).where(StudentRegistration.course_id == course.id))
+
+    # Remove faculty-course links (explicit, even if FK ON DELETE CASCADE is set)
+    session.execute(
+        delete(user_course_association).where(user_course_association.c.course_id == course.id)
+    )
+
+    # Finally remove the course
     session.delete(course)
     print(f"[ok] Cleared demo course {SEED_COURSE_TAG} and related data.")
 

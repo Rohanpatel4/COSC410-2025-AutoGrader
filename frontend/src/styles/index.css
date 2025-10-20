@@ -11,7 +11,7 @@ body {
 }
 
 /* Mild defaults you can reuse anywhere */
-.container { max-width: 520px; margin: 6rem auto; padding: 0 1rem; }
+.container { max-width: 60%; margin: 6rem auto; padding: 0 1rem; }
 button {
   padding: 10px 14px;
   border: 1px solid #c9c9c9;

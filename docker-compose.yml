@@ -12,14 +12,15 @@ services:
     ports:
       - "2358:2358"
     privileged: true
-    # Additional capabilities needed for isolate
     cap_add:
       - SYS_ADMIN
       - SYS_PTRACE
     security_opt:
       - apparmor:unconfined
+    # Judge0 needs executable tmpfs work dirs
     tmpfs:
-      - /tmp:rw,noexec,nosuid,size=100m
+      - /tmp:rw,exec,nosuid,size=100m
+      - /box:rw,exec,nosuid,size=512m
     <<: *default-logging
     restart: always
     networks:
@@ -34,25 +35,30 @@ services:
     volumes:
       - ./judge0-v1.13.1/judge0.conf:/judge0.conf:ro
     privileged: true
-    # Additional capabilities needed for isolate
     cap_add:
       - SYS_ADMIN
       - SYS_PTRACE
     security_opt:
       - apparmor:unconfined
+    # Workers use the same tmpfs layout as the API
     tmpfs:
-      - /tmp:rw,noexec,nosuid,size=100m
+      - /tmp:rw,exec,nosuid,size=100m
+      - /box:rw,exec,nosuid,size=512m
     <<: *default-logging
     restart: always
     networks:
       - app-network
+    depends_on:
+      - db
+      - redis
 
   db:
     image: postgres:16.2
     environment:
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_USER=postgres
-      - POSTGRES_DB=postgres
+      # Match judge0.conf so Judge0 can connect without drama
+      - POSTGRES_PASSWORD=Rqh4mF33BYZSb3WmRL4S3yntyGwzNY95
+      - POSTGRES_USER=judge0
+      - POSTGRES_DB=judge0
     volumes:
       - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
       - data:/var/lib/postgresql/data/
@@ -80,7 +86,8 @@ services:
     environment:
       - DATABASE_URL=sqlite:///./backend/app.db
       - CORS_ORIGINS=["http://localhost:5173"]
-    ports: ["8000:8000"]
+    ports:
+      - "8000:8000"
     volumes:
       - ./backend:/app/backend
       - storage_data:/app/storage
@@ -101,7 +108,8 @@ services:
       dockerfile: infra/docker/frontend.Dockerfile
     environment:
       - VITE_API_URL=/api
-    ports: ["5173:80"]
+    ports:
+      - "5173:80"
     depends_on:
       backend:
         condition: service_healthy
@@ -115,3 +123,4 @@ volumes:
 networks:
   app-network:
     driver: bridge
+

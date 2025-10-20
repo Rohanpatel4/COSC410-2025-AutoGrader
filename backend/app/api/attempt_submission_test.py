@@ -136,115 +136,52 @@ def _parse_pytest_output(stdout: str, stderr: str) -> Dict[str, Any]:
     }
 
 # ----- Judge0 integration -----
-JUDGE0_BASE_URL = "http://judge0:2358"  # Use Docker network name
 
 async def _submit_to_judge0(source_code: str, language_id: int, stdin: str = "") -> Dict[str, Any]:
-    """Submit code directly to Judge0 as source_code"""
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        # Submit the combined code directly as source_code
-        payload = {
-            "source_code": base64.b64encode(source_code.encode('utf-8')).decode(),
-            "language_id": language_id,
-            "stdin": base64.b64encode(stdin.encode()).decode(),
-            "base64_encoded": True
-        }
+    """
+    Submit a single source_code to Judge0 and WAIT for result.
+    No base64. No polling. Judge0 returns the finished result.
+    """
+    params = {"base64_encoded": "false", "wait": "true"}  # << key fix
+    payload = {
+        "language_id": language_id,
+        "source_code": source_code,
+        "stdin": stdin,
+    }
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        r = await client.post(f"{settings.JUDGE0_URL.rstrip('/')}/submissions",
+                              params=params, json=payload)
+        r.raise_for_status()
+        return r.json()
 
-        print(f"JUDGE0 DEBUG: Submitting combined code directly as source_code")
-        print(f"JUDGE0 DEBUG: Source code length: {len(source_code)}")
-        try:
-            response = await client.post(f"{JUDGE0_BASE_URL}/submissions", json=payload)
-            response.raise_for_status()
-            result = response.json()
-            print(f"JUDGE0 DEBUG: Submission successful, token: {result.get('token')}")
-            return result
-        except Exception as e:
-            print(f"JUDGE0 DEBUG: Submission failed: {e}")
-            if hasattr(e, 'response') and e.response:
-                print(f"JUDGE0 DEBUG: Response content: {e.response.text}")
-            raise
-
-async def _submit_tarfile_to_judge0(tar_data: bytes, language_id: int, stdin: str = "") -> Dict[str, Any]:
-    """Submit tarfile to Judge0 with multiple files"""
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        # Prepare multipart form data
-        files = {
-            'source_file': ('source.tar', io.BytesIO(tar_data), 'application/x-tar')
-        }
-        data = {
-            'language_id': str(language_id),
-            'stdin': base64.b64encode(stdin.encode()).decode(),
-            'base64_encoded': 'true'
-        }
-
-        print(f"JUDGE0 DEBUG: Submitting uncompressed tarfile to Judge0")
-        print(f"JUDGE0 DEBUG: Tarfile size: {len(tar_data)} bytes")
-
-        try:
-            response = await client.post(
-                f"{JUDGE0_BASE_URL}/submissions",
-                files=files,
-                data=data
-            )
-            response.raise_for_status()
-            result = response.json()
-            print(f"JUDGE0 DEBUG: Tarfile submission successful, token: {result.get('token')}")
-            return result
-        except Exception as e:
-            print(f"JUDGE0 DEBUG: Tarfile submission failed: {e}")
-            if hasattr(e, 'response') and e.response:
-                print(f"JUDGE0 DEBUG: Response content: {e.response.text}")
-            raise
-
-async def _get_judge0_result(token: str) -> Dict[str, Any]:
-    """Poll Judge0 for submission result."""
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        # Poll for up to 30 seconds (10 attempts with 3s delay)
-        for attempt in range(10):
-            print(f"JUDGE0 DEBUG: Polling attempt {attempt + 1}/10 for token {token}")
-            response = await client.get(f"{JUDGE0_BASE_URL}/submissions/{token}?base64_encoded=true")
-            response.raise_for_status()
-            result = response.json()
-
-            status_id = result.get("status", {}).get("id", 0)
-            print(f"JUDGE0 DEBUG: Status ID: {status_id}")
-
-            # Check if processing is complete (status.id >= 3 means finished)
-            if status_id >= 3:
-                print(f"JUDGE0 DEBUG: Execution complete, returning result")
-                return result
-
-            await asyncio.sleep(3)
-
-        print(f"JUDGE0 DEBUG: Timeout waiting for result")
-        # Return last result even if not complete
-        return result
+async def _submit_files_to_judge0(files: list[dict], language_id: int, stdin: str = "", args: str = "") -> Dict[str, Any]:
+    """
+    Submit multiple files to Judge0 using the JSON 'files' array.
+    Each dict: {"name": "main.py", "content": "<code>"}
+    """
+    params = {"base64_encoded": "false", "wait": "true"}
+    payload = {
+        "language_id": language_id,
+        "files": files,
+        "stdin": stdin,
+        "command_line_arguments": args,
+    }
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        r = await client.post(f"{settings.JUDGE0_URL.rstrip('/')}/submissions",
+                              params=params, json=payload)
+        r.raise_for_status()
+        return r.json()
 
 async def _run_with_judge0(code: str, tests: str) -> Dict[str, Any]:
-    """Execute code using Judge0 with box directory (tarfile) approach."""
-    print(f"JUDGE0 DEBUG: Starting Judge0 execution with box directory")
-
-    # Validate student code safety first
+    # Validate student code safety
     try:
         tree = ast.parse(code)
         _validate_code_safety(tree)
-        print("JUDGE0 DEBUG: Code validation passed")
-    except SyntaxError as e:
-        print(f"JUDGE0 DEBUG: SyntaxError in student code: {e}")
+    except (SyntaxError, ValueError) as e:
+        msg = f"SyntaxError: {e}" if isinstance(e, SyntaxError) else str(e)
         return {
             "stdout": "",
-            "stderr": f"SyntaxError: {e}",
-            "returncode": 1,
-            "status": {"id": 6, "description": "Compilation Error"},
-            "time": None,
-            "memory": None,
-            "language_id_used": PYTHON_LANG_ID,
-            "grading": {"total_tests": 0, "passed_tests": 0, "failed_tests": 0, "all_passed": False, "has_tests": False}
-        }
-    except ValueError as e:
-        print(f"JUDGE0 DEBUG: Security violation in student code: {e}")
-        return {
-            "stdout": "",
-            "stderr": str(e),
+            "stderr": msg,
             "returncode": 1,
             "status": {"id": 6, "description": "Compilation Error"},
             "time": None,
@@ -253,8 +190,8 @@ async def _run_with_judge0(code: str, tests: str) -> Dict[str, Any]:
             "grading": {"total_tests": 0, "passed_tests": 0, "failed_tests": 0, "all_passed": False, "has_tests": False}
         }
 
-    # Create the combined script directly
-    combined_code = f'''import sys
+    # Build combined Python program (student + tests + harness)
+    combined_code = f"""import sys
 
 # Student code
 {code}
@@ -262,15 +199,11 @@ async def _run_with_judge0(code: str, tests: str) -> Dict[str, Any]:
 # Test code
 {tests}
 
-# Simple test runner
 def run_tests():
     passed = 0
     failed = 0
-
-    # Get all test functions from global namespace
     test_functions = [obj for name, obj in globals().items()
                       if name.startswith('test_') and callable(obj)]
-
     for test_func in test_functions:
         try:
             test_func()
@@ -279,123 +212,37 @@ def run_tests():
         except Exception as e:
             print(f"FAILED: {{test_func.__name__}} - {{e}}")
             failed += 1
-
-    print(f"\\n=== Test Results ===")
+    print("\\n=== Test Results ===")
     print(f"Passed: {{passed}}")
     print(f"Failed: {{failed}}")
     print(f"Total: {{passed + failed}}")
-    return passed, failed
 
 if __name__ == "__main__":
     run_tests()
-'''
-
-    # Create the combined script with student code and tests
-    combined_code = f'''import sys
-
-# Student code
-{code}
-
-# Test code
-{tests}
-
-# Simple test runner
-def run_tests():
-    passed = 0
-    failed = 0
-
-    # Get all test functions from global namespace
-    test_functions = [obj for name, obj in globals().items()
-                      if name.startswith('test_') and callable(obj)]
-
-    for test_func in test_functions:
-        try:
-            test_func()
-            print(f"PASSED: {{test_func.__name__}}")
-            passed += 1
-        except Exception as e:
-            print(f"FAILED: {{test_func.__name__}} - {{e}}")
-            failed += 1
-
-    print(f"\\n=== Test Results ===")
-    print(f"Passed: {{passed}}")
-    print(f"Failed: {{failed}}")
-    print(f"Total: {{passed + failed}}")
-    return passed, failed
-
-if __name__ == "__main__":
-    run_tests()
-'''
-
-    print(f"JUDGE0 DEBUG: Created combined script with length: {len(combined_code)}")
+"""
 
     try:
-        # Use source_code approach with Python language ID
-        print("JUDGE0 DEBUG: Using source_code approach...")
-        submission = await _submit_to_judge0(combined_code, PYTHON_LANG_ID)
-        print(f"JUDGE0 DEBUG: Source code submission successful, token: {submission.get('token')}")
-        print(f"JUDGE0 DEBUG: Submission response: {submission}")
+        data = await _submit_to_judge0(combined_code, PYTHON_LANG_ID)
+        stdout = data.get("stdout") or ""
+        stderr = data.get("stderr") or ""
+        compile_output = data.get("compile_output") or ""
+        status_obj = data.get("status") or {}
 
-        if "token" not in submission:
-            raise Exception(f"No token received from Judge0. Response: {submission}")
+        grading = _parse_pytest_output(stdout, stderr)
 
-        token = submission["token"]
-
-        # Get result
-        print("JUDGE0 DEBUG: Getting result from Judge0...")
-        result = await _get_judge0_result(token)
-        print(f"JUDGE0 DEBUG: Result received: {result}")
-
-        # Decode base64 responses
-        stdout = result.get("stdout", "")
-        stderr = result.get("stderr", "")
-        compile_output = result.get("compile_output", "")
-        message = result.get("message", "")
-
-        if stdout:
-            try:
-                stdout = base64.b64decode(stdout).decode()
-            except:
-                pass
-
-        if stderr:
-            try:
-                stderr = base64.b64decode(stderr).decode()
-            except:
-                pass
-
-        if compile_output:
-            try:
-                compile_output = base64.b64decode(compile_output).decode()
-            except:
-                pass
-
-        if message:
-            try:
-                message = base64.b64decode(message).decode()
-                print(f"JUDGE0 DEBUG: Decoded message: {message}")
-                if message and not stderr:
-                    stderr = message
-            except:
-                print(f"JUDGE0 DEBUG: Raw message: {message}")
-
-        result_dict = {
+        return {
             "stdout": stdout,
             "stderr": stderr,
             "compile_output": compile_output,
-            "returncode": 0 if result.get("status", {}).get("id") == 3 else 1,
-            "status": result.get("status", {"id": 13, "description": "Internal Error"}),
-            "time": result.get("time"),
-            "memory": result.get("memory"),
-            "language_id_used": PYTHON_LANG_ID
+            "returncode": 0 if status_obj.get("id") == 3 else 1,
+            "status": status_obj,
+            "time": data.get("time"),
+            "memory": data.get("memory"),
+            "language_id_used": PYTHON_LANG_ID,
+            "grading": grading,
         }
 
-        grading = _parse_pytest_output(stdout, stderr)
-        result_dict["grading"] = grading
-        return result_dict
-
     except Exception as e:
-        print(f"JUDGE0 DEBUG: Exception: {e}")
         return {
             "stdout": "",
             "stderr": f"Judge0 error: {e}",
@@ -406,6 +253,7 @@ if __name__ == "__main__":
             "language_id_used": PYTHON_LANG_ID,
             "grading": {"total_tests": 0, "passed_tests": 0, "failed_tests": 0, "all_passed": False, "has_tests": False}
         }
+
 
 def _run_with_subprocess(code: str, tests: str) -> Dict[str, Any]:
     """Execute code using subprocess in a cross-platform way."""
