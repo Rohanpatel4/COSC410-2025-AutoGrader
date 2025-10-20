@@ -285,11 +285,11 @@ async def submit_to_assignment(
         raise HTTPException(400, f"Failed to read submission: {e}")
 
     # Import grading functions from the attempts module
-    from app.api.attempt_submission_test import _run_with_subprocess, _parse_pytest_output
+    from app.api.attempt_submission_test import _run_with_judge0, _parse_pytest_output
 
-    # Run with the same grading logic as the sandbox
+    # Run with Judge0 sandbox
     try:
-        result = _run_with_subprocess(student_code, tc.var_char)
+        result = await _run_with_judge0(student_code, tc.var_char)
         grading = result.get("grading", {})
     except Exception as e:
         err_payload = e.args[0] if (hasattr(e, "args") and e.args and isinstance(e.args[0], dict)) else {"error": repr(e)}
