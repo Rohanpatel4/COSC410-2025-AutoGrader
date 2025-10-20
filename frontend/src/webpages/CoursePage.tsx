@@ -13,6 +13,8 @@ export default function CoursePage() {
   const navigate = useNavigate();
   const { role, userId } = useAuth();
   const isFaculty = role === "faculty";
+  const [course, setCourse] = React.useState<{ id: number; title: string; description?: string } | null>(null);
+
 
   const [students, setStudents] = React.useState<Student[]>([]);
   const [faculty, setFaculty] = React.useState<Faculty[]>([]);
@@ -30,37 +32,43 @@ export default function CoursePage() {
   const [testFile, setTestFile] = React.useState<File | null>(null);
 
   async function loadAll() {
-    setLoading(true);
-    setErr(null);
-    try {
-      const studentIdParam = role === "student" && userId ? `?student_id=${userId}` : "";
-      const [s, f, a] = await Promise.all([
-        fetchJson<Student[]>(`/api/v1/courses/${course_id}/students`),
-        fetchJson<Faculty[]>(`/api/v1/courses/${course_id}/faculty`),
-        fetchJson<Assignment[]>(`/api/v1/courses/${course_id}/assignments${studentIdParam}`),
-      ]);
-      /*
-      const [s, f, a] = await Promise.all([
-        fetchJson<Student[]>(`/api/v1/courses/${course_id}/students`).catch(() => []),
-        fetchJson<Faculty[]>(`/api/v1/courses/${course_id}/faculty`).catch(() => []),
-        fetchJson<Assignment[]>(`/api/v1/courses/${course_id}/assignments${studentIdParam}`).catch(() => []),
-      ]);
-      */
+  // Don’t wipe old data
+  setErr(null);
+  setLoading(true);
 
-      setStudents(s);
-      setFaculty(f);
-      setAssignments(a);
-    } catch (e: any) {
-      setErr(e?.message ?? "Failed to load course page");
-    } finally {
-      setLoading(false);
-    }
+  try {
+    const studentIdParam =
+      role === "student" && userId ? `?student_id=${userId}` : "";
+
+    const [courseData, s, f, a] = await Promise.all([
+      fetchJson<{ id: number; title: string; description?: string }>(
+        `/api/v1/courses/${course_id}`
+      ),
+      fetchJson<Student[]>(`/api/v1/courses/${course_id}/students`),
+      fetchJson<Faculty[]>(`/api/v1/courses/${course_id}/faculty`),
+      fetchJson<Assignment[]>(
+        `/api/v1/courses/${course_id}/assignments${studentIdParam}`
+      ),
+    ]);
+
+    // ✅ Update all data once fetch completes
+    setCourse(courseData);
+    setStudents(s);
+    setFaculty(f);
+    setAssignments(a);
+  } catch (e: any) {
+    setErr(e?.message ?? "Failed to load course page");
+  } finally {
+    // ✅ Only mark loading as false, don’t reset course
+    setLoading(false);
   }
+}
+
 
   React.useEffect(() => {
     loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [course_id, userId, role]);
+  }, [course_id]);
 
   async function createAssignment(e: React.FormEvent) {
     e.preventDefault();
@@ -77,6 +85,11 @@ export default function CoursePage() {
 
     if (!payload.title) {
       setErr("Title is required.");
+      return;
+    }
+
+    if (!payload.description) {
+      setErr("desc is required.");
       return;
     }
 
@@ -125,6 +138,18 @@ export default function CoursePage() {
       <div style={{ marginBottom: 12 }}>
         <Link to="/my">← Back to dashboard</Link>
       </div>
+    {course && (
+  <div style={{ marginBottom: 24 }}>
+    <h1 style={{ marginBottom: 4 }}>{course.title}</h1>
+    <p style={{ color: "#555", fontSize: "1rem" }}>
+      {course.description || "No description provided."}
+    </p>
+    {loading && (
+      <p style={{ color: "#888", fontStyle: "italic" }}>Refreshing data…</p>
+    )}
+  </div>
+)}
+
 
       {err && <p style={{ color: "crimson" }}>{err}</p>}
       {loading && <p>Loading…</p>}
