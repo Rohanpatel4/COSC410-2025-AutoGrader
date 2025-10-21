@@ -1,7 +1,8 @@
 import pytest
 from fastapi.testclient import TestClient
 from app.api.main import app
-from app.models.models import Course, StudentRegistration
+from app.models.models import Course, user_course_association
+# StudentRegistration DEPRECATED - now using user_course_association
 
 client = TestClient(app)
 
@@ -96,12 +97,13 @@ def test_get_student_courses():
         db.add(course)
         db.commit()
 
-        # Create registration
-        registration = StudentRegistration(
-            student_id=202,  # bob from seed data
-            course_id=course.id
+        # Create enrollment via user_course_association
+        db.execute(
+            user_course_association.insert().values(
+                user_id=202,  # bob from seed data
+                course_id=course.id
+            )
         )
-        db.add(registration)
         db.commit()
 
         # Get student courses

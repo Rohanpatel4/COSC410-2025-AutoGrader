@@ -93,14 +93,17 @@ class StudentSubmissionRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 # ---------- STUDENT REGISTRATIONS ----------
-class StudentRegistrationCreate(BaseModel):
-    student_id: int
-    course_id: int
+# DEPRECATED: StudentRegistration has been consolidated into user_course_association
+# All enrollment (both faculty and students) now use user_course_association
+# Use users.role to distinguish between faculty and students
+# class StudentRegistrationCreate(BaseModel):
+#     student_id: int
+#     course_id: int
 
-class StudentRegistrationRead(BaseModel):
-    id: int
-    student_id: int
-    course_id: int
-    model_config = ConfigDict(from_attributes=True)
+# class StudentRegistrationRead(BaseModel):
+#     id: int
+#     student_id: int
+#     course_id: int
+#     model_config = ConfigDict(from_attributes=True)
 
 

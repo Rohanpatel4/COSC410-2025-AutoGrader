@@ -1,7 +1,7 @@
 # backend/app/api/courses.py
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Header, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Header, Query, Request, status
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
@@ -10,7 +10,7 @@ from app.models.models import (
     Assignment,
     Course,
     RoleEnum,
-    StudentRegistration,
+    # StudentRegistration,  # DEPRECATED - now using user_course_association for all enrollments
     StudentSubmission,
     User,
     user_course_association,
@@ -85,6 +85,7 @@ def get_identity(
 # ---------- course CRUD / listing ----------
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_course(
+    request: Request,
     payload: dict,  # { course_tag, name, description? }
     ident=Depends(get_identity),
     db: Session = Depends(get_db),
@@ -106,8 +107,27 @@ def create_course(
     db.flush()  # get course.id without committing yet
 
     # Auto-link creator if they are faculty
+    # Try to get user identity from dependency or request headers
     user_id, role = ident
-    if role == RoleEnum.faculty and user_id:
+    
+    # If dependency didn't work, extract from request headers directly
+    if not user_id:
+        x_user_id = request.headers.get("x-user-id") or request.headers.get("X-User-Id")
+        x_user_role = request.headers.get("x-user-role") or request.headers.get("X-User-Role")
+        
+        if x_user_id:
+            try:
+                user_id = int(x_user_id)
+                if x_user_role:
+                    try:
+                        role = RoleEnum(x_user_role)
+                    except ValueError:
+                        pass  # Invalid role, keep as None
+            except (ValueError, TypeError):
+                pass  # Invalid user_id format
+    
+    # Associate faculty creator with the course in the same transaction
+    if user_id and role == RoleEnum.faculty:
         db.execute(
             user_course_association.insert().values(
                 user_id=user_id, course_id=course.id
@@ -293,23 +313,22 @@ def course_students(course_key: str, db: Session = Depends(get_db)):
     if not c:
         raise HTTPException(404, "Not found")
 
-    reg_rows = db.execute(
-        select(StudentRegistration.student_id).where(
-            StudentRegistration.course_id == c.id
+    # Query user_course_association and filter by role=student
+    student_rows = db.execute(
+        select(User)
+        .join(user_course_association, user_course_association.c.user_id == User.id)
+        .where(
+            user_course_association.c.course_id == c.id,
+            User.role == RoleEnum.student
         )
-    ).all()
+    ).scalars().all()
 
-    if not reg_rows:
-        return []
-
-    student_ids = [sid for (sid,) in reg_rows]
-    students = db.execute(select(User).where(User.id.in_(student_ids))).scalars().all()
     return [
         {
             "id": s.id,
             "name": getattr(s, "username", None) or getattr(s, "name", None) or str(s.id),
         }
-        for s in students
+        for s in student_rows
     ]
 
 
@@ -323,19 +342,19 @@ def remove_student_from_course(
     if not c:
         raise HTTPException(404, "Course not found")
 
+    # Delete from user_course_association
     res = db.execute(
-        select(StudentRegistration).where(
+        user_course_association.delete().where(
             and_(
-                StudentRegistration.course_id == c.id,
-                StudentRegistration.student_id == student_id,
+                user_course_association.c.course_id == c.id,
+                user_course_association.c.user_id == student_id,
             )
         )
-    ).scalar_one_or_none()
+    )
+    
+    if res.rowcount == 0:
+        raise HTTPException(404, "Enrollment not found")
 
-    if not res:
-        raise HTTPException(404, "Registration not found")
-
-    db.delete(res)
     db.commit()
     return {"ok": True}
 

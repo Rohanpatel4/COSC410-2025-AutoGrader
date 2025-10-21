@@ -211,6 +211,7 @@ def run_tests():
             passed += 1
         except Exception as e:
             print(f"FAILED: {{test_func.__name__}} - {{e}}")
+
             failed += 1
     print("\\n=== Test Results ===")
     print(f"Passed: {{passed}}")
@@ -481,4 +482,5 @@ async def attempt_submission_test(
             "raw": result if settings.DEBUG else None,
         },
     }
+
 

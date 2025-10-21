@@ -9,7 +9,8 @@ from collections import defaultdict
 from app.core.db import get_db
 from app.models.models import (
     Assignment, Course, StudentSubmission, TestCase,
-    StudentRegistration, User, RoleEnum
+    # StudentRegistration,  # DEPRECATED - now using user_course_association for all enrollments
+    User, RoleEnum, user_course_association
 )
 
 # REMOVED: Judge0 client - using secure subprocess execution instead
@@ -255,14 +256,16 @@ async def submit_to_assignment(
     if stu.role not in (RoleEnum.student,):
         raise HTTPException(400, "Only students can submit")
 
-    # optional: ensure enrollment (relaxed in dev)
-    reg = db.execute(
-        select(StudentRegistration).where(
-            StudentRegistration.student_id == student_id,
-            StudentRegistration.course_id == a.course_id,
+    # optional: ensure enrollment via user_course_association (relaxed in dev)
+    enrollment = db.execute(
+        select(user_course_association).where(
+            and_(
+                user_course_association.c.user_id == student_id,
+                user_course_association.c.course_id == a.course_id,
+            )
         )
-    ).scalar_one_or_none()
-    # If not reg: allow for now.
+    ).first()
+    # If not enrollment: allow for now.
 
     # fetch latest test code for this assignment
     tc = db.execute(
@@ -341,12 +344,12 @@ def grades_for_assignment(assignment_id: int, db: Session = Depends(get_db)):
     if not a:
         raise HTTPException(404, "Assignment not found")
 
-    # enrolled students (role=student)
+    # enrolled students (role=student) from user_course_association
     stu_rows = db.execute(
         select(User.id, User.username)
-        .join(StudentRegistration, StudentRegistration.student_id == User.id)
+        .join(user_course_association, user_course_association.c.user_id == User.id)
         .where(
-            StudentRegistration.course_id == a.course_id,
+            user_course_association.c.course_id == a.course_id,
             User.role == RoleEnum.student,
         )
         .order_by(User.username.asc())
@@ -424,12 +427,12 @@ def gradebook_for_course(course_key: str, db: Session = Depends(get_db)):
     assignments = [{"id": aid, "title": title} for (aid, title) in assigns]
     a_ids = [a["id"] for a in assignments]
 
-    # rows
+    # rows - query from user_course_association
     stu_rows = db.execute(
         select(User.id, User.username)
-        .join(StudentRegistration, StudentRegistration.student_id == User.id)
+        .join(user_course_association, user_course_association.c.user_id == User.id)
         .where(
-            StudentRegistration.course_id == c.id,
+            user_course_association.c.course_id == c.id,
             User.role == RoleEnum.student,
         )
         .order_by(User.username.asc())

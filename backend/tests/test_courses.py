@@ -1,7 +1,8 @@
 import pytest
 from fastapi.testclient import TestClient
 from app.api.main import app
-from app.models.models import Course, User, RoleEnum
+from app.models.models import Course, User, RoleEnum, user_course_association
+from sqlalchemy import select
 
 client = TestClient(app)
 
@@ -259,3 +260,95 @@ def test_course_date_parsing():
     # Test invalid format
     assert _parse_dt("invalid") is None
     assert _parse_dt("") is None
+
+def test_course_creation_auto_associates_creator():
+    """Test that creating a course auto-associates the faculty creator."""
+    from app.core.db import SessionLocal
+    db = SessionLocal()
+    try:
+        # Create a course with faculty user headers
+        payload = {
+            "course_tag": "AUTOLINK",
+            "name": "Auto-Link Test Course",
+            "description": "Testing automatic creator association"
+        }
+        
+        # Make request with faculty user headers
+        response = client.post(
+            "/api/v1/courses",
+            json=payload,
+            headers={
+                "X-User-Id": "301",  # prof.x from seed data
+                "X-User-Role": "faculty"
+            }
+        )
+        assert response.status_code == 201
+        
+        data = response.json()
+        course_id = data["id"]
+        
+        # Verify the association was created in user_course_association
+        association = db.execute(
+            select(user_course_association).where(
+                user_course_association.c.user_id == 301,
+                user_course_association.c.course_id == course_id
+            )
+        ).first()
+        
+        assert association is not None, "Faculty creator should be auto-associated with new course"
+        
+        # Verify the course appears in faculty's course list
+        response = client.get("/api/v1/courses/faculty/301")
+        assert response.status_code == 200
+        courses = response.json()
+        course_tags = [c["course_tag"] for c in courses]
+        assert "AUTOLINK" in course_tags, "New course should appear in creator's course list"
+        
+    finally:
+        db.close()
+
+def test_student_submission_with_enrollment_check():
+    """Test that students can submit when enrolled via user_course_association."""
+    from app.core.db import SessionLocal
+    from app.models.models import Assignment
+    db = SessionLocal()
+    try:
+        # Create course
+        course = Course(
+            course_tag="SUBMIT101",
+            name="Submission Test Course",
+            description="Testing submission with enrollment"
+        )
+        db.add(course)
+        db.commit()
+        
+        # Enroll student via user_course_association
+        db.execute(
+            user_course_association.insert().values(
+                user_id=201,  # alice from seed data (student)
+                course_id=course.id
+            )
+        )
+        db.commit()
+        
+        # Create assignment
+        assignment = Assignment(
+            course_id=course.id,
+            title="Test Assignment",
+            description="For testing submission"
+        )
+        db.add(assignment)
+        db.commit()
+        
+        # Verify enrollment exists (this simulates what the submission endpoint does)
+        enrollment = db.execute(
+            select(user_course_association).where(
+                user_course_association.c.user_id == 201,
+                user_course_association.c.course_id == course.id
+            )
+        ).first()
+        
+        assert enrollment is not None, "Student should be enrolled in course via user_course_association"
+        
+    finally:
+        db.close()

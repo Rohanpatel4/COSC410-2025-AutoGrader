@@ -66,8 +66,10 @@ from app.core.db import Base
 user_course_association = Table(
     "user_course_association",
     Base.metadata,
-    Column("user_id", ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
-    Column("course_id", ForeignKey("courses.id", ondelete="CASCADE"), primary_key=True),
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+    Column("course_id", ForeignKey("courses.id", ondelete="CASCADE"), nullable=False),
+    UniqueConstraint("user_id", "course_id", name="uq_user_course"),
 )
 
 class RoleEnum(str, enum.Enum):
@@ -136,9 +138,12 @@ class StudentSubmission(Base):
     student: Mapped["User"] = relationship()
     assignment: Mapped["Assignment"] = relationship()
 
-class StudentRegistration(Base):
-    __tablename__ = "student_registrations"
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    student_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    course_id: Mapped[int] = mapped_column(ForeignKey("courses.id"), nullable=False)
-    __table_args__ = (UniqueConstraint("student_id", "course_id", name="uq_student_course"),)
+# DEPRECATED: StudentRegistration has been consolidated into user_course_association
+# All enrollment (both faculty and students) now use user_course_association
+# Use users.role to distinguish between faculty and students
+# class StudentRegistration(Base):
+#     __tablename__ = "student_registrations"
+#     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+#     student_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+#     course_id: Mapped[int] = mapped_column(ForeignKey("courses.id"), nullable=False)
+#     __table_args__ = (UniqueConstraint("student_id", "course_id", name="uq_student_course"),)

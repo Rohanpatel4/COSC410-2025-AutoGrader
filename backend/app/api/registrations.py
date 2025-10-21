@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy import select, and_
 from app.core.db import get_db
-from app.models.models import Course, User, StudentRegistration
+from app.models.models import Course, User, RoleEnum, user_course_association
+# StudentRegistration is DEPRECATED - now using user_course_association for all enrollments
 
 router = APIRouter()
 
@@ -32,31 +33,38 @@ def register(payload: dict, db: Session = Depends(get_db)):
     if not course:
         raise HTTPException(404, "Invalid course")
 
-    # Check duplicate
+    # Check duplicate - query user_course_association
     exists = db.execute(
-        select(StudentRegistration).where(
-            StudentRegistration.student_id == student_id,
-            StudentRegistration.course_id == course.id,
+        select(user_course_association).where(
+            and_(
+                user_course_association.c.user_id == student_id,
+                user_course_association.c.course_id == course.id,
+            )
         )
-    ).scalar_one_or_none()
+    ).first()
     if exists:
         raise HTTPException(409, "Already registered")
 
-    reg = StudentRegistration(student_id=student_id, course_id=course.id)
-    db.add(reg)
+    # Insert into user_course_association
+    result = db.execute(
+        user_course_association.insert().values(
+            user_id=student_id, 
+            course_id=course.id
+        )
+    )
     db.commit()
-    db.refresh(reg)
 
-    return {"id": reg.id, "student_id": student_id, "course_id": course.id}
+    # Get the inserted id
+    inserted_id = result.lastrowid
+    return {"id": inserted_id, "student_id": student_id, "course_id": course.id}
 
 @router.get("/students/{student_id}/courses", response_model=list[dict])
 def student_courses(student_id: int, db: Session = Depends(get_db)):
-    regs = db.execute(
-        select(StudentRegistration).where(StudentRegistration.student_id == student_id)
+    # Query courses from user_course_association
+    courses = db.execute(
+        select(Course)
+        .join(user_course_association, user_course_association.c.course_id == Course.id)
+        .where(user_course_association.c.user_id == student_id)
     ).scalars().all()
-    if not regs:
-        return []
-
-    course_ids = [r.course_id for r in regs]
-    courses = db.execute(select(Course).where(Course.id.in_(course_ids))).scalars().all()
+    
     return [{"id": c.id, "course_tag": c.course_tag, "name": c.name, "description": c.description} for c in courses]
