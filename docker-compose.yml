@@ -5,80 +5,6 @@ x-logging: &default-logging
       max-size: 100M
 
 services:
-  judge0:
-    image: judge0/judge0:latest
-    volumes:
-      - ./judge0-v1.13.1/judge0.conf:/judge0.conf:ro
-    ports:
-      - "2358:2358"
-    privileged: true
-    cap_add:
-      - SYS_ADMIN
-      - SYS_PTRACE
-    security_opt:
-      - apparmor:unconfined
-    # Judge0 needs executable tmpfs work dirs
-    tmpfs:
-      - /tmp:rw,exec,nosuid,size=100m
-      - /box:rw,exec,nosuid,size=512m
-    <<: *default-logging
-    restart: always
-    networks:
-      - app-network
-    depends_on:
-      - db
-      - redis
-
-  workers:
-    image: judge0/judge0:latest
-    command: ["./scripts/workers"]
-    volumes:
-      - ./judge0-v1.13.1/judge0.conf:/judge0.conf:ro
-    privileged: true
-    cap_add:
-      - SYS_ADMIN
-      - SYS_PTRACE
-    security_opt:
-      - apparmor:unconfined
-    # Workers use the same tmpfs layout as the API
-    tmpfs:
-      - /tmp:rw,exec,nosuid,size=100m
-      - /box:rw,exec,nosuid,size=512m
-    <<: *default-logging
-    restart: always
-    networks:
-      - app-network
-    depends_on:
-      - db
-      - redis
-
-  db:
-    image: postgres:16.2
-    environment:
-      # Match judge0.conf so Judge0 can connect without drama
-      - POSTGRES_PASSWORD=Rqh4mF33BYZSb3WmRL4S3yntyGwzNY95
-      - POSTGRES_USER=judge0
-      - POSTGRES_DB=judge0
-    volumes:
-      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
-      - data:/var/lib/postgresql/data/
-    <<: *default-logging
-    restart: always
-    networks:
-      - app-network
-
-  redis:
-    image: redis:7.2.4
-    command:
-      - "bash"
-      - "-c"
-      - 'docker-entrypoint.sh --appendonly no --requirepass "$$REDIS_PASSWORD"'
-    env_file: judge0-v1.13.1/judge0.conf
-    <<: *default-logging
-    restart: always
-    networks:
-      - app-network
-
   backend:
     build:
       context: .
@@ -99,8 +25,8 @@ services:
       start_period: 30s
     networks:
       - app-network
-    depends_on:
-      - judge0
+    <<: *default-logging
+    restart: always
 
   frontend:
     build:
@@ -115,12 +41,14 @@ services:
         condition: service_healthy
     networks:
       - app-network
+    <<: *default-logging
+    restart: always
 
 volumes:
   storage_data:
-  data:
 
 networks:
   app-network:
     driver: bridge
+
 

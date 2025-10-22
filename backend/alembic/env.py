@@ -25,7 +25,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/..")
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/../app")
 
 from app.core.db import Base  # <-- adjust if your Base is elsewhere
-from app.models import models  # ensures all models are imported
+from app.models import models as _models  # ensures all models are imported
 
 target_metadata = Base.metadata
 
