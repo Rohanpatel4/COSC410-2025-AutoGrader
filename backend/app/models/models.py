@@ -94,7 +94,8 @@ class User(Base):
 class Course(Base):
     __tablename__ = "courses"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    course_tag: Mapped[str] = mapped_column(String(255))
+    course_code: Mapped[str] = mapped_column(String(255))
+    enrollment_key: Mapped[str] = mapped_column(String(255))
     name: Mapped[str] = mapped_column(String(255))
     description: Mapped[str] = mapped_column(String(255))
 

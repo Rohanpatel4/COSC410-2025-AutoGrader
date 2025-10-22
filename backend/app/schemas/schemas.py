@@ -38,13 +38,15 @@ class UserRead(BaseModel):
 # ---------- COURSES ----------
 # models.py: description is NOT nullable -> required in schemas
 class CourseCreate(BaseModel):
-    course_tag: str
+    course_code: str
+    enrollment_key: str
     name: str
     description: str
 
 class CourseRead(BaseModel):
     id: int
-    course_tag: str
+    course_code: str
+    enrollment_key: str
     name: str
     description: str
     model_config = ConfigDict(from_attributes=True)
