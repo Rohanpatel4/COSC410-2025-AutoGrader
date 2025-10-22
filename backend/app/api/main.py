@@ -11,8 +11,6 @@ from .courses import router as courses_router
 from .registrations import router as registrations_router
 from .assignments import router as assignments_router
 
-# Init DB
-Base.metadata.create_all(bind=engine)
 
 # App
 app = FastAPI(title="AutoGrader API", version="1.0.0")

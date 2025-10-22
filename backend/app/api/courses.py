@@ -70,8 +70,8 @@ def _assignment_to_dict(
 
 # Identity helper (reads headers set by the frontend fetch helper)
 def get_identity(
-    x_user_id: int | None = Header(default=None, convert_underscores=False),
-    x_user_role: str | None = Header(default=None, convert_underscores=False),
+    x_user_id: int | None = Header(default=None),
+    x_user_role: str | None = Header(default=None),
 ) -> tuple[int | None, RoleEnum | None]:
     if not x_user_id or not x_user_role:
         return None, None
@@ -85,7 +85,6 @@ def get_identity(
 # ---------- course CRUD / listing ----------
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_course(
-    request: Request,
     payload: dict,  # { course_tag, name, description? }
     ident=Depends(get_identity),
     db: Session = Depends(get_db),
@@ -102,32 +101,16 @@ def create_course(
     if exists:
         raise HTTPException(409, "Course tag already exists")
 
+    # Create the course
     course = Course(course_tag=tag, name=name, description=description)
     db.add(course)
     db.flush()  # get course.id without committing yet
 
-    # Auto-link creator if they are faculty
-    # Try to get user identity from dependency or request headers
+    # Auto-link faculty creator to the course
     user_id, role = ident
     
-    # If dependency didn't work, extract from request headers directly
-    if not user_id:
-        x_user_id = request.headers.get("x-user-id") or request.headers.get("X-User-Id")
-        x_user_role = request.headers.get("x-user-role") or request.headers.get("X-User-Role")
-        
-        if x_user_id:
-            try:
-                user_id = int(x_user_id)
-                if x_user_role:
-                    try:
-                        role = RoleEnum(x_user_role)
-                    except ValueError:
-                        pass  # Invalid role, keep as None
-            except (ValueError, TypeError):
-                pass  # Invalid user_id format
-    
-    # Associate faculty creator with the course in the same transaction
     if user_id and role == RoleEnum.faculty:
+        # Associate faculty creator with the course in the same transaction
         db.execute(
             user_course_association.insert().values(
                 user_id=user_id, course_id=course.id
@@ -136,6 +119,7 @@ def create_course(
 
     db.commit()
     db.refresh(course)
+    
     return {
         "id": course.id,
         "course_tag": course.course_tag,

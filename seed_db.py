@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Simple script to seed the database with test users.
-Run this from the project root.
+Run this from the project root after running Alembic migrations.
 """
 
 import sys
@@ -12,7 +12,7 @@ from sqlalchemy.orm import sessionmaker
 from passlib.hash import pbkdf2_sha256
 from datetime import datetime
 
-from backend.app.core.db import engine, Base
+from backend.app.core.db import engine
 from backend.app.models.models import User, RoleEnum
 
 # Users to seed
@@ -24,10 +24,8 @@ USERS = [
 ]
 
 def main():
-    print("Creating database tables...")
-    Base.metadata.create_all(bind=engine)
-
     print("Seeding users...")
+
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     with SessionLocal() as session:
         # Clear existing users
@@ -52,4 +50,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
