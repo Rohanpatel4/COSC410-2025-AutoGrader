@@ -21,15 +21,33 @@ services:
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=100m
     <<: *default-logging
-    restart: always
+    #restart: always
     networks:
       - app-network
     depends_on:
       - db
       - redis
+  piston:
+    image: ghcr.io/engineer-man/piston:3.1.1
+    platform: linux/amd64
+    restart: unless-stopped
+    privileged: true
+    user: root
+    working_dir: /piston
+    volumes:
+      - piston_data:/piston/packages
+      - piston_isolate:/piston/isolate
+      - piston_tmp:/tmp
+    environment:
+      - NODE_ENV=production
+    networks:
+      - app-network
+
+
 
   workers:
-    image: judge0/judge0:latest
+    #image: judge0/judge0:latest
+    image: ghcr.io/engineer-man/piston:latest
     command: ["./scripts/workers"]
     volumes:
       - ./judge0-v1.13.1/judge0.conf:/judge0.conf:ro
@@ -80,6 +98,7 @@ services:
     environment:
       - DATABASE_URL=sqlite:///./backend/app.db
       - CORS_ORIGINS=["http://localhost:5173"]
+      - PISTON_URL=http://piston:2000
     ports: ["8000:8000"]
     volumes:
       - ./backend:/app/backend
@@ -93,7 +112,8 @@ services:
     networks:
       - app-network
     depends_on:
-      - judge0
+      - judge0 
+      - piston
 
   frontend:
     build:
@@ -111,6 +131,9 @@ services:
 volumes:
   storage_data:
   data:
+  piston_data:
+  piston_isolate:
+  piston_tmp:
 
 networks:
   app-network:

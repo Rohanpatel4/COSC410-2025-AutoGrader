@@ -7,7 +7,7 @@ from typing import List, Optional
 class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./app.db"
 
-
+    PISTON_URL: str = "http://piston:2000"
 
     CORS_ORIGINS: List[str] = [
     "http://localhost:5173",

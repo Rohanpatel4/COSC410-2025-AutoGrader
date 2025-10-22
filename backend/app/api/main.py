@@ -10,6 +10,8 @@ from .attempt_submission_test import router as attempts_router
 from .courses import router as courses_router
 from .registrations import router as registrations_router
 from .assignments import router as assignments_router
+from .test_piston import router as test_piston_router
+
 
 # Init DB
 Base.metadata.create_all(bind=engine)
@@ -36,6 +38,7 @@ app.include_router(attempts_router,    prefix="/api/v1/attempts",    tags=["atte
 app.include_router(courses_router,        prefix="/api/v1/courses",     tags=["courses"])
 app.include_router(registrations_router,  prefix="/api/v1",             tags=["registrations"])
 app.include_router(assignments_router,    prefix="/api/v1/assignments", tags=["assignments"])
+app.include_router(test_piston_router)
 
 # Run the server when executed as a module
 if __name__ == "__main__":
