@@ -5,80 +5,46 @@ x-logging: &default-logging
       max-size: 100M
 
 services:
-  judge0:
-    image: judge0/judge0:latest
-    volumes:
-      - ./judge0-v1.13.1/judge0.conf:/judge0.conf:ro
-    ports:
-      - "2358:2358"
+  # ===================== Inner Docker daemon (rootless; no --privileged) =====================
+  dind:
+    image: docker:27-dind-rootless
     privileged: true
-    cap_add:
-      - SYS_ADMIN
-      - SYS_PTRACE
-    security_opt:
-      - apparmor:unconfined
-    # Judge0 needs executable tmpfs work dirs
-    tmpfs:
-      - /tmp:rw,exec,nosuid,size=100m
-      - /box:rw,exec,nosuid,size=512m
-    <<: *default-logging
-    restart: always
-    networks:
-      - app-network
-    depends_on:
-      - db
-      - redis
-
-  workers:
-    image: judge0/judge0:latest
-    command: ["./scripts/workers"]
-    volumes:
-      - ./judge0-v1.13.1/judge0.conf:/judge0.conf:ro
-    privileged: true
-    cap_add:
-      - SYS_ADMIN
-      - SYS_PTRACE
-    security_opt:
-      - apparmor:unconfined
-    # Workers use the same tmpfs layout as the API
-    tmpfs:
-      - /tmp:rw,exec,nosuid,size=100m
-      - /box:rw,exec,nosuid,size=512m
-    <<: *default-logging
-    restart: always
-    networks:
-      - app-network
-    depends_on:
-      - db
-      - redis
-
-  db:
-    image: postgres:16.2
-    environment:
-      # Match judge0.conf so Judge0 can connect without drama
-      - POSTGRES_PASSWORD=Rqh4mF33BYZSb3WmRL4S3yntyGwzNY95
-      - POSTGRES_USER=judge0
-      - POSTGRES_DB=judge0
-    volumes:
-      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
-      - data:/var/lib/postgresql/data/
-    <<: *default-logging
-    restart: always
-    networks:
-      - app-network
-
-  redis:
-    image: redis:7.2.4
     command:
-      - "bash"
-      - "-c"
-      - 'docker-entrypoint.sh --appendonly no --requirepass "$$REDIS_PASSWORD"'
-    env_file: judge0-v1.13.1/judge0.conf
-    <<: *default-logging
-    restart: always
+      - "--host=tcp://0.0.0.0:2375"
+      - "--host=unix:///run/user/1000/docker.sock"
+      - "--storage-driver=overlay2"
+      - "--iptables=false"
+    environment:
+      DOCKER_TLS_CERTDIR: ""        # dev only: disable TLS for simplicity
+      DOCKER_DRIVER: overlay2
+    tmpfs:
+      - /tmp:rw,nosuid,size=256m
+    ports:
+      - "127.0.0.1:12735:2375"      # optional: talk to inner daemon from host for debugging
+    volumes:
+      - dind-data:/var/lib/docker   # inner daemon image/layer cache
     networks:
       - app-network
+    <<: *default-logging
+    restart: always
 
+  # ===================== Runner (talks to inner daemon; great for manual tests) =====================
+  runner:
+    build:
+      context: ./runner
+      dockerfile: Dockerfile
+    environment:
+      DOCKER_HOST: tcp://dind:2375   # points CLI to the inner daemon
+    volumes:
+      - runner-tmp:/runner/tmp       # shared scratch for submissions/tests
+    depends_on:
+      - dind
+    networks:
+      - app-network
+    <<: *default-logging
+    restart: always
+
+  # ===================== Backend (FastAPI) =====================
   backend:
     build:
       context: .
@@ -86,22 +52,28 @@ services:
     environment:
       - DATABASE_URL=sqlite:///./backend/app.db
       - CORS_ORIGINS=["http://localhost:5173"]
+      - DOCKER_HOST=tcp://dind:2375         # let backend call the inner Docker daemon
+      - PYTHONUNBUFFERED=1
     ports:
       - "8000:8000"
     volumes:
-      - ./backend:/app/backend
+      - ./backend:/app/backend               # your current bind mount
       - storage_data:/app/storage
+      - runner-tmp:/runner/tmp               # share the scratch area with runner & inner jobs
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/docs'); print('ok')"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 30s
+    depends_on:
+      - dind                                 # used to depend on judge0; now depends on inner Docker
     networks:
       - app-network
-    depends_on:
-      - judge0
+    <<: *default-logging
+    restart: always
 
+  # ===================== Frontend (unchanged) =====================
   frontend:
     build:
       context: .
@@ -115,12 +87,18 @@ services:
         condition: service_healthy
     networks:
       - app-network
+    <<: *default-logging
+    restart: always
 
+# ===================== Volumes =====================
 volumes:
-  storage_data:
-  data:
+  storage_data:        # you already had this for backend storage
+  dind-data:           # inner daemon's image cache/layers
+  runner-tmp:          # job scratch shared by backend/runner
 
+# ===================== Network =====================
 networks:
   app-network:
     driver: bridge
+
 
