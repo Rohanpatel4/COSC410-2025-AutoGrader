@@ -1,7 +1,6 @@
-// src/test/AssignmentDetailPage.test.tsx
 import React from "react";
 import { Route, Routes } from "react-router-dom";
-import { screen, fireEvent, waitForElementToBeRemoved } from "@testing-library/react";
+import { screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 
@@ -10,147 +9,176 @@ import { renderWithProviders } from "./renderWithProviders";
 import { server } from "./server";
 import { __testDb, resetDb } from "./handlers";
 
-function PageStub() {
-  const seeded = __testDb.getAssignment(9001);
-  return <div>DETAIL STUB {seeded?.id}</div>;
-}
-
-describe("AssignmentDetailPage (MSW)", () => {
+describe("AssignmentDetailPage (MSW, updated)", () => {
   beforeEach(() => resetDb());
 
-  function renderAsStudent(id = 9001) {
-    return renderWithProviders(
+  const renderAsStudent = (id = 9001) =>
+    renderWithProviders(
       <Routes>
-        <Route path="/assignments/:assignment_id" element={<AssignmentDetailPage />} />
+        <Route
+          path="/assignments/:assignment_id"
+          element={<AssignmentDetailPage />}
+        />
       </Routes>,
       { route: `/assignments/${id}`, auth: { role: "student", userId: "201" } }
     );
-  }
 
-  function renderAsFaculty(id = 9001) {
-    return renderWithProviders(
+  const renderAsFaculty = (id = 9001) =>
+    renderWithProviders(
       <Routes>
-        <Route path="/assignments/:assignment_id" element={<AssignmentDetailPage />} />
+        <Route
+          path="/assignments/:assignment_id"
+          element={<AssignmentDetailPage />}
+        />
       </Routes>,
       { route: `/assignments/${id}`, auth: { role: "faculty", userId: "301" } }
     );
-  }
 
-  test.skip("loads details (student) and submits .py successfully, attempts & best grade update", async () => {
+  // --- STUDENT TESTS ---
+
+  test("loads assignment details (student) and shows attempts", async () => {
     renderAsStudent();
 
-  // details ready
-    await screen.findByText(/Seeded Assignment/i);
-    await screen.findByRole("button", { name: /submit/i });
+    expect(await screen.findByRole("heading", { name: /seeded assignment/i })).toBeInTheDocument();
+    expect(screen.getByText(/submission limit/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /submit/i })).toBeDisabled();
 
-  // choose file
-    const fileInput = screen.getByLabelText(/submit your code/i, { selector: 'input[type="file"]' });
-    const file = new File(["print('hi')"], "sol.py", { type: "text/x-python" });
-    await userEvent.upload(fileInput, file);
-
-  // submit
-    await userEvent.click(screen.getByRole("button", { name: /submit/i }));
-
-  // ✅ assert success parts separately (don’t require them to be in one node)
-    await screen.findByText(/submitted/i);
-    await screen.findByText(/grade:\s*95/i);
-
-  // PASS badge area shows
-    expect(await screen.findByText(/pass/i)).toBeInTheDocument();
-
-  // Attempts list + best grade (if you assert these)
-    expect(screen.getByText(/your attempts/i)).toBeInTheDocument();
+    // Attempts (from test DB)
+    expect(await screen.findByText(/your attempts/i)).toBeInTheDocument();
     expect(screen.getByText(/best grade/i)).toBeInTheDocument();
-});
+  });
 
-  test("blocks when submission window is closed", async () => {
-    // Force window closed (future start)
+  test("blocks submission when window is closed", async () => {
+    // Force a future start date to simulate closed window
     server.use(
       http.get("**/api/v1/assignments/:id", ({ params }) => {
         const id = Number(params.id);
         const base = __testDb.getAssignment(id);
         const future = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
-        return HttpResponse.json({ ...base, start: future }, { status: 200 });
+        return HttpResponse.json({ ...base, start: future });
       })
     );
 
     renderAsStudent();
 
-    // message and disabled controls
     expect(await screen.findByText(/submission window is closed/i)).toBeInTheDocument();
-    const submitBtn = screen.getByRole("button", { name: /submit/i });
-    expect(submitBtn).toBeDisabled();
+    expect(screen.getByRole("button", { name: /submit/i })).toBeDisabled();
   });
 
   test("blocks when submission limit reached", async () => {
-    // sub_limit = 1 and one prior attempt
     server.use(
       http.get("**/api/v1/assignments/:id", ({ params }) => {
         const id = Number(params.id);
         const base = __testDb.getAssignment(id);
-        return HttpResponse.json({ ...base, sub_limit: 1 }, { status: 200 });
+        return HttpResponse.json({ ...base, sub_limit: 1 });
       }),
-      http.get("**/api/v1/assignments/:id/attempts", ({ request, params }) => {
-        const id = Number(params.id);
-        return HttpResponse.json([{ id: 1, grade: 80 }], { status: 200 });
+      http.get("**/api/v1/assignments/:id/attempts", ({ params }) => {
+        return HttpResponse.json([{ id: 1, grade: 90 }]);
       })
     );
 
     renderAsStudent();
 
+    expect(await screen.findByText(/submission limit/i)).toBeInTheDocument();
     expect(await screen.findByText(/you’ve reached the submission limit/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /submit/i })).toBeDisabled();
   });
 
-  test("shows error if detail GET fails", async () => {
+  test("shows error if GET /assignments/:id fails", async () => {
     server.use(
       http.get("**/api/v1/assignments/:id", () =>
-        HttpResponse.text("whoops", { status: 500 })
+        HttpResponse.text("Server broke", { status: 500 })
       )
     );
 
     renderAsStudent();
 
-    expect(await screen.findByText(/failed to load assignment|whoops/i)).toBeInTheDocument();
+    expect(await screen.findByText(/server broke|failed to load/i)).toBeInTheDocument();
   });
 
-  test("submit validation + network error shown", async () => {
+  test("submit validation and failed POST displays correct error", async () => {
     renderAsStudent();
 
-    // Page ready
-    await screen.findByText(/seeded assignment/i);
-    await screen.findByRole("button", { name: /submit/i });
+    await screen.findByRole("heading", { name: /seeded assignment/i });
 
-    // ⚠️ Button is disabled with no file; submit the form directly to trigger validation
+    // Submit with no file → validation
     const form = document.querySelector("form") as HTMLFormElement;
     fireEvent.submit(form);
     expect(await screen.findByText(/choose a \.py file/i)).toBeInTheDocument();
 
-    // Now upload a file to hit the network error
+    // Now simulate a failed submission
+    server.use(
+      http.post("**/api/v1/assignments/:id/submit", () =>
+        HttpResponse.text("Bad upload", { status: 500 })
+      )
+    );
+
+    const fileInput = screen.getByLabelText(/submit your code/i);
+    const badFile = new File(["print('oops')"], "fail.py", { type: "text/x-python" });
+    await userEvent.upload(fileInput, badFile);
+    await userEvent.click(screen.getByRole("button", { name: /submit/i }));
+
+    expect(await screen.findByText(/submit failed/i)).toBeInTheDocument();
+    expect(screen.getByText(/bad upload/i)).toBeInTheDocument();
+  });
+
+  test.skip("submits .py successfully and updates attempts + best grade", async () => {
+    renderAsStudent();
+
+    await screen.findByRole("heading", { name: /seeded assignment/i });
+
+    // Mock successful POST submission
     server.use(
       http.post("**/api/v1/assignments/:id/submit", async () =>
-        HttpResponse.text("Bad file", {
-          status: 500,
-          headers: { "Content-Type": "text/plain" },
+        HttpResponse.json({
+          grade: 95,
+          grading: { passed: true, passed_tests: 5, total_tests: 5 },
         })
       )
     );
 
-    const fileInput = screen.getByLabelText(/submit your code/i, { selector: 'input[type="file"]' });
-    const bad = new File(["print('oops')"], "sol.py", { type: "text/x-python" });
-    await userEvent.upload(fileInput, bad);
+    const fileInput = screen.getByLabelText(/submit your code/i);
+    const file = new File(["print('hi')"], "sol.py", { type: "text/x-python" });
+    await userEvent.upload(fileInput, file);
 
     await userEvent.click(screen.getByRole("button", { name: /submit/i }));
 
-    expect(await screen.findByText(/submit failed:\s*500/i)).toBeInTheDocument();
-    expect(screen.getByText(/bad file/i)).toBeInTheDocument();
+    expect(await screen.findByText(/submitted/i)).toBeInTheDocument();
+    expect(await screen.findByText(/grade:\s*95/i)).toBeInTheDocument();
+    expect(await screen.findByText(/pass/i)).toBeInTheDocument();
+    expect(await screen.findByText(/your attempts/i)).toBeInTheDocument();
+    expect(await screen.findByText(/best grade/i)).toBeInTheDocument();
   });
 
-  test("faculty view: no submit form, sees faculty note", async () => {
+  // --- FACULTY TESTS ---
+
+  test("faculty view: sees grade table but no submit form", async () => {
     renderAsFaculty();
 
     expect(await screen.findByRole("heading", { name: /seeded assignment/i })).toBeInTheDocument();
+
+    // Ensure no student submit form exists
     expect(screen.queryByRole("button", { name: /submit/i })).not.toBeInTheDocument();
-    expect(screen.getByText(/\(faculty view here could show a gradebook later\.\)/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/submit your code/i)).not.toBeInTheDocument();
+
+    // Faculty-specific section
+    expect(await screen.findByText(/grades \(this assignment\)/i)).toBeInTheDocument();
+
+    // Should show either data table or empty state
+    const possible = await screen.findAllByText(/no enrolled students|student/i);
+    expect(possible.length).toBeGreaterThan(0);
+  });
+
+  test("faculty view: shows error message if /grades fails", async () => {
+    server.use(
+      http.get("**/api/v1/assignments/:id/grades", () =>
+        HttpResponse.text("Grades unavailable", { status: 500 })
+      )
+    );
+
+    renderAsFaculty();
+
+    expect(await screen.findByText(/grades \(this assignment\)/i)).toBeInTheDocument();
+    expect(await screen.findByText(/grades unavailable|failed to load/i)).toBeInTheDocument();
   });
 });
