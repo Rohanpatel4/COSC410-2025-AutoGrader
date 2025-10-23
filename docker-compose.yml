@@ -7,25 +7,49 @@ x-logging: &default-logging
 services:
   # ===================== Inner Docker daemon (rootless; no --privileged) =====================
   dind:
-    image: docker:27-dind-rootless
+    image: docker:27-dind
     privileged: true
     command:
       - "--host=tcp://0.0.0.0:2375"
-      - "--host=unix:///run/user/1000/docker.sock"
       - "--storage-driver=overlay2"
-      - "--iptables=false"
     environment:
-      DOCKER_TLS_CERTDIR: ""        # dev only: disable TLS for simplicity
+      DOCKER_TLS_CERTDIR: ""
       DOCKER_DRIVER: overlay2
-    tmpfs:
-      - /tmp:rw,nosuid,size=256m
     ports:
-      - "127.0.0.1:12735:2375"      # optional: talk to inner daemon from host for debugging
+      - "127.0.0.1:12735:2375"  # Docker daemon API
+      - "2358:2358"              # Judge0 API (forwarded from inner Docker)
     volumes:
-      - dind-data:/var/lib/docker   # inner daemon image/layer cache
+      - dind-data:/var/lib/docker
+      - ./infra/judge0:/workspace/j0:ro
     networks:
       - app-network
-    <<: *default-logging
+    restart: always
+
+  # ===================== Judge0 bootstrap inside DinD =====================
+  j0ctl:
+    image: docker:27-cli
+    depends_on:
+      - dind
+    environment:
+      DOCKER_HOST: tcp://dind:2375
+    volumes:
+      - ./infra/judge0:/workspace/j0:ro
+    command:
+      - /bin/sh
+      - -c
+      - |
+        echo "[j0ctl] Waiting for DinD to be ready..."
+        sleep 5
+        echo "[j0ctl] Booting Judge0 inside DinD..."
+        docker compose -f /workspace/j0/docker-compose.yml up -d
+        echo "[j0ctl] Judge0 stack started. Checking status:"
+        docker compose -f /workspace/j0/docker-compose.yml ps
+        echo "[j0ctl] ✓ Judge0 should be accessible at http://localhost:2358"
+        echo "[j0ctl] Note: Inner stack publishes 2358:2358, forwarded through DinD"
+        echo "[j0ctl] Keeping container alive..."
+        tail -f /dev/null
+    networks:
+      - app-network
     restart: always
 
   # ===================== Runner (talks to inner daemon; great for manual tests) =====================
@@ -54,6 +78,7 @@ services:
       - CORS_ORIGINS=["http://localhost:5173"]
       - DOCKER_HOST=tcp://dind:2375         # let backend call the inner Docker daemon
       - PYTHONUNBUFFERED=1
+      - JUDGE0_URL=http://dind:2358
     ports:
       - "8000:8000"
     volumes:
@@ -68,6 +93,7 @@ services:
       start_period: 30s
     depends_on:
       - dind                                 # used to depend on judge0; now depends on inner Docker
+      - j0ctl                                # ensure Judge0 is started inside DinD
     networks:
       - app-network
     <<: *default-logging
@@ -101,4 +127,4 @@ networks:
   app-network:
     driver: bridge
 
-
+  
