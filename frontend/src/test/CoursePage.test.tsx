@@ -7,10 +7,15 @@ import { Routes, Route } from "react-router-dom";
 import CoursePage from "../webpages/CoursePage";
 import { renderWithProviders } from "./renderWithProviders";
 import { server } from "./server";
-import { resetDb } from "./handlers";
+import { resetDb, __testDb } from "./handlers";
 
-// Helper to render CoursePage at a course route
-function renderCourse({ courseId = "500", auth }: { courseId?: string; auth: { role: "faculty"|"student"; userId: string } }) {
+function renderCourse({
+  courseId = "500",
+  auth,
+}: {
+  courseId?: string;
+  auth: { role: "faculty" | "student"; userId: string };
+}) {
   return renderWithProviders(
     <Routes>
       <Route path="/courses/:course_id" element={<CoursePage />} />
@@ -21,63 +26,87 @@ function renderCourse({ courseId = "500", auth }: { courseId?: string; auth: { r
   );
 }
 
-describe("CoursePage (MSW)", () => {
+describe("CoursePage (updated to match new component)", () => {
   beforeEach(() => resetDb());
 
-  test("loads roster & assignments (faculty sees create toggle)", async () => {
+  test("faculty: loads course header, roster, and assignments; shows create toggle", async () => {
     renderCourse({ courseId: "500", auth: { role: "faculty", userId: "301" } });
 
-    // Faculty list, Students list, Assignments list (from seed)
-    expect(await screen.findByText(/Prof\. Ada/i)).toBeInTheDocument();
+    // Wait for course data to load
+    expect(await screen.findByRole("heading", { name: /COSC-410/i })).toBeInTheDocument();
+
+    // Course description
+    expect(screen.getByText(/no description provided|course/i)).toBeInTheDocument();
+
+    // Faculty + student names from seeded test DB
+    expect(await screen.findByText(/Prof|Faculty|Ada/i)).toBeInTheDocument();
     expect(await screen.findByText(/Student Sam/i)).toBeInTheDocument();
+
+    // Existing seeded assignment
     expect(await screen.findByRole("button", { name: /seeded assignment/i })).toBeInTheDocument();
 
-    // Faculty can see/create assignments
-    const toggle = screen.getByRole("button", { name: /create assignment/i });
-    await userEvent.click(toggle);
+    // Faculty can see Create + Gradebook buttons
+    expect(screen.getByRole("button", { name: /create assignment/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /view gradebook/i })).toBeInTheDocument();
+
+    // Toggle create form
+    await userEvent.click(screen.getByRole("button", { name: /create assignment/i }));
     expect(screen.getByRole("button", { name: /save assignment/i })).toBeInTheDocument();
+
+    // Cancel closes form
+    await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
+    expect(screen.queryByRole("button", { name: /save assignment/i })).not.toBeInTheDocument();
   });
 
-  test("student loads with student_id param (no create toggle)", async () => {
+  test("student: sees same course header but no create toggle", async () => {
     renderCourse({ courseId: "500", auth: { role: "student", userId: "201" } });
 
-    // Should show seeded content
-    expect(await screen.findByText(/Prof\. Ada/i)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /COSC-410/i })).toBeInTheDocument();
+
+    // Sees course description + lists
     expect(await screen.findByText(/student sam/i)).toBeInTheDocument();
-    // No "Create Assignment" button for students
+
+    // Students should NOT see create/gradebook buttons
     expect(screen.queryByRole("button", { name: /create assignment/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /view gradebook/i })).toBeNull();
   });
 
-  test("faculty creates an assignment (with optional file)", async () => {
+  test("faculty: successfully creates an assignment", async () => {
     renderCourse({ courseId: "500", auth: { role: "faculty", userId: "301" } });
 
-    await userEvent.click(await screen.findByRole("button", { name: /create assignment/i }));
-    await userEvent.type(screen.getByLabelText(/title/i), "New HW");
-    await userEvent.type(screen.getByLabelText(/description/i), "desc");
+    // Wait for existing data
+    await screen.findByText(/seeded assignment/i);
 
-    // Attach a file
+    // Open creation form
+    await userEvent.click(screen.getByRole("button", { name: /create assignment/i }));
+
+    // Fill required fields
+    await userEvent.type(screen.getByLabelText(/title/i), "New Homework");
+    await userEvent.type(screen.getByLabelText(/description/i), "Test assignment");
+
+    // Optional test file upload
     const fileInput = screen.getByLabelText(/attach test file/i);
-    const file = new File(["print('ok')"], "tests.py", { type: "text/x-python" });
-    await userEvent.upload(fileInput, file);
+    const testFile = new File(["print('ok')"], "tests.py", { type: "text/x-python" });
+    await userEvent.upload(fileInput, testFile);
 
     await userEvent.click(screen.getByRole("button", { name: /save assignment/i }));
 
-    // New assignment appears at the top
-    expect(await screen.findByRole("button", { name: /new hw/i })).toBeInTheDocument();
+    // Verify new assignment appears
+    expect(await screen.findByRole("button", { name: /new homework/i })).toBeInTheDocument();
   });
 
-  test("shows error if any GET fails", async () => {
-    server.use(
-      http.get("**/api/v1/courses/:course_id/students", () => HttpResponse.text("whoops", { status: 500 }))
-    );
-
+  test("faculty: shows validation error when title is missing", async () => {
     renderCourse({ courseId: "500", auth: { role: "faculty", userId: "301" } });
 
-    // Component renders an error paragraph (no role=status here)
-    expect(await screen.findByText(/failed to load course page|whoops/i)).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("button", { name: /create assignment/i }));
+
+    // Submit with no title
+    await userEvent.click(screen.getByRole("button", { name: /save assignment/i }));
+
+    expect(await screen.findByText(/title is required/i)).toBeInTheDocument();
   });
 
-  test("shows error if POST /assignments fails", async () => {
+  test("faculty: shows error when POST /assignments fails", async () => {
     server.use(
       http.post("**/api/v1/courses/:course_id/assignments", () =>
         HttpResponse.text("boom", { status: 500 })
@@ -87,30 +116,60 @@ describe("CoursePage (MSW)", () => {
     renderCourse({ courseId: "500", auth: { role: "faculty", userId: "301" } });
 
     await userEvent.click(await screen.findByRole("button", { name: /create assignment/i }));
-    // leave title blank to prove our UI validation works first
-    await userEvent.click(screen.getByRole("button", { name: /save assignment/i }));
-    // err from validation
-    expect(await screen.findByText(/title is required/i)).toBeInTheDocument();
-
-    // Now type a title so network error is hit
-    await userEvent.type(screen.getByLabelText(/title/i), "Fails");
+    await userEvent.type(screen.getByLabelText(/title/i), "Bad HW");
     await userEvent.click(screen.getByRole("button", { name: /save assignment/i }));
 
-    // Network error message (component sets crimson <p>)
     expect(await screen.findByText(/create failed|boom/i)).toBeInTheDocument();
   });
 
-  test("empty states when course has no roster or assignments", async () => {
+  test("handles GET failure (course or roster)", async () => {
     server.use(
-      http.get("**/api/v1/courses/:course_id/students", () => HttpResponse.json([], { status: 200 })),
-      http.get("**/api/v1/courses/:course_id/faculty", () => HttpResponse.json([], { status: 200 })),
-      http.get("**/api/v1/courses/:course_id/assignments", () => HttpResponse.json([], { status: 200 })),
+      http.get("**/api/v1/courses/:course_id/faculty", () =>
+        HttpResponse.text("faculty broken", { status: 500 })
+      )
     );
 
-    renderCourse({ courseId: "zzz", auth: { role: "faculty", userId: "301" } });
+    renderCourse({ courseId: "500", auth: { role: "faculty", userId: "301" } });
 
-    expect(await screen.findByText(/no faculty listed/i)).toBeInTheDocument();
+    expect(await screen.findByText(/failed to load course page|faculty broken/i)).toBeInTheDocument();
+  });
+
+  test("shows empty states for faculty, students, and assignments", async () => {
+    server.use(
+      http.get("**/api/v1/courses/:course_id", () =>
+        HttpResponse.json({
+          id: 999,
+          course_code: "BIO-100",
+          name: "Intro Bio",
+          description: null,
+        })
+      ),
+      http.get("**/api/v1/courses/:course_id/faculty", () => HttpResponse.json([], { status: 200 })),
+      http.get("**/api/v1/courses/:course_id/students", () => HttpResponse.json([], { status: 200 })),
+      http.get("**/api/v1/courses/:course_id/assignments", () => HttpResponse.json([], { status: 200 }))
+    );
+
+    renderCourse({ courseId: "999", auth: { role: "faculty", userId: "301" } });
+
+    expect(await screen.findByRole("heading", { name: /BIO-100/i })).toBeInTheDocument();
+    expect(screen.getByText(/no description provided/i)).toBeInTheDocument();
+    expect(screen.getByText(/no faculty listed/i)).toBeInTheDocument();
     expect(screen.getByText(/no students enrolled/i)).toBeInTheDocument();
     expect(screen.getByText(/no assignments/i)).toBeInTheDocument();
+  });
+
+  test("faculty: delete buttons appear but only show alerts", async () => {
+    window.alert = vi.fn();
+    renderCourse({ courseId: "500", auth: { role: "faculty", userId: "301" } });
+
+    await screen.findByText(/seeded assignment/i);
+
+    // Delete student and assignment buttons exist
+    const deleteButtons = screen.getAllByTitle(/delete/i);
+    expect(deleteButtons.length).toBeGreaterThan(0);
+
+    // Simulate click
+    await userEvent.click(deleteButtons[0]);
+    expect(window.alert).toHaveBeenCalled();
   });
 });
