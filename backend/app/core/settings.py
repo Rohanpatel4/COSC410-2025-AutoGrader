@@ -19,8 +19,6 @@ class Settings(BaseSettings):
     DEBUG: bool = True
 
     # --- Judge0 ---
-    # Toggle the Judge0 runner (set USE_JUDGE0=true in docker-compose or .env)
-    USE_JUDGE0: bool = True
     # Backend should reach Judge0 by service name over the compose network
     JUDGE0_URL: str = "http://judge0:2358"
 

@@ -140,12 +140,13 @@ def _parse_pytest_output(stdout: str, stderr: str) -> Dict[str, Any]:
 async def _submit_to_judge0(source_code: str, language_id: int, stdin: str = "") -> Dict[str, Any]:
     """
     Submit a single source_code to Judge0 and WAIT for result.
-    No base64. No polling. Judge0 returns the finished result.
+    Base64 encoded for safety. Judge0 returns the finished result.
     """
-    params = {"base64_encoded": "false", "wait": "true"}  # << key fix
+    import base64
+    params = {"base64_encoded": "true", "wait": "true"}
     payload = {
         "language_id": language_id,
-        "source_code": source_code,
+        "source_code": base64.b64encode(source_code.encode('utf-8')).decode('utf-8'),
         "stdin": stdin,
     }
     async with httpx.AsyncClient(timeout=60.0) as client:
@@ -159,10 +160,18 @@ async def _submit_files_to_judge0(files: list[dict], language_id: int, stdin: st
     Submit multiple files to Judge0 using the JSON 'files' array.
     Each dict: {"name": "main.py", "content": "<code>"}
     """
-    params = {"base64_encoded": "false", "wait": "true"}
+    import base64
+    params = {"base64_encoded": "true", "wait": "true"}
+    # Base64 encode file contents
+    encoded_files = []
+    for file_dict in files:
+        encoded_files.append({
+            "name": file_dict["name"],
+            "content": base64.b64encode(file_dict["content"].encode('utf-8')).decode('utf-8')
+        })
     payload = {
         "language_id": language_id,
-        "files": files,
+        "files": encoded_files,
         "stdin": stdin,
         "command_line_arguments": args,
     }
@@ -190,6 +199,11 @@ async def _run_with_judge0(code: str, tests: str) -> Dict[str, Any]:
             "grading": {"total_tests": 0, "passed_tests": 0, "failed_tests": 0, "all_passed": False, "has_tests": False}
         }
 
+
+    # Remove pytest imports from test code since pytest is available in Judge0 environment
+    # The frontend sends test code with pytest, but we don't need to remove it anymore
+    # since pytest is now installed in Judge0
+
     # Build combined Python program (student + tests + harness)
     combined_code = f"""import sys
 
@@ -211,7 +225,6 @@ def run_tests():
             passed += 1
         except Exception as e:
             print(f"FAILED: {{test_func.__name__}} - {{e}}")
-
             failed += 1
     print("\\n=== Test Results ===")
     print(f"Passed: {{passed}}")
