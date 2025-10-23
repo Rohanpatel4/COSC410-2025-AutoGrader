@@ -24,6 +24,12 @@ class Settings(BaseSettings):
     # Backend should reach Judge0 by service name over the compose network
     JUDGE0_URL: str = "http://judge0:2358"
 
+    # --- Piston ---
+    # Toggle usage of Piston execution engine
+    USE_PISTON: bool = False
+    # Piston base URL (service name on docker-compose network or full URL)
+    PISTON_URL: str = "http://piston:2000/api/v2/execute"
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def _parse_cors_origins(cls, v):

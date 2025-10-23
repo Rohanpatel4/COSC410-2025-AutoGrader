@@ -1,6 +1,9 @@
 # backend/app/services/sandbox.py
 from __future__ import annotations
 import os, shutil, subprocess, tempfile, uuid, json, pathlib
+from typing import Any
+import httpx
+from app.core.settings import settings
 
 INNER_DOCKER = os.environ.get("DOCKER_HOST", "tcp://dind:2375")
 JOB_ROOT = pathlib.Path("/runner/tmp")  # shared volume from compose
@@ -71,3 +74,81 @@ def run_pytest_job(files: dict[str, str], timeout_sec: int = 5) -> dict:
         "failed": failed,
         "log": out,
     }
+
+
+def run_piston_job(files: dict[str, str], timeout_sec: int = 5) -> dict[str, Any]:
+    """
+    Send files to a Piston API instance and return a simplified result.
+    Piston's execute endpoint accepts a payload like:
+      { "files": [{"name":"main.py","content":"..."}], "run_timeout": seconds }
+    We'll post and translate the response to the {exit_code, passed, failed, log} shape.
+    """
+    url = settings.PISTON_URL.rstrip("/")
+
+    # Piston expects a list of files with name/content. Convert mapping to that.
+    files_payload = [{"name": name, "content": content} for name, content in files.items()]
+
+    # Piston expects run_timeout in milliseconds and requires language/version.
+    # Use python3 as a sensible default; callers may be extended later to pass language/version.
+    payload = {
+        "language": "python3",
+        "version": "*",
+        "files": files_payload,
+        "stdin": "",
+        # convert seconds -> milliseconds
+        "run_timeout": int(timeout_sec * 1000),
+    }
+
+    try:
+        with httpx.Client(timeout=timeout_sec + 2) as client:
+            resp = client.post(url, json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as e:
+        return {
+            "exit_code": 1,
+            "passed": 0,
+            "failed": 0,
+            "log": f"piston-error: {e}",
+        }
+
+    # Piston returns stdout, stderr, and code. We'll include them in the log.
+    stdout = data.get("run", {}).get("stdout", "") if isinstance(data, dict) else ""
+    stderr = data.get("run", {}).get("stderr", "") if isinstance(data, dict) else ""
+    code = data.get("run", {}).get("code") if isinstance(data, dict) else None
+
+    log = ""
+    if stdout:
+        log += "--- stdout ---\n" + stdout + "\n"
+    if stderr:
+        log += "--- stderr ---\n" + stderr + "\n"
+
+    # We cannot meaningfully detect pytest 'passed'/'failed' counts from generic piston runs
+    # unless the test runner prints a pytest-style summary. We'll attempt to parse it heuristically.
+    passed = failed = 0
+    for line in log.splitlines():
+        line = line.strip()
+        if line.endswith(" passed") and line.split()[0].isdigit():
+            try:
+                passed += int(line.split()[0])
+            except Exception:
+                pass
+        if " failed" in line and line.split()[0].isdigit():
+            try:
+                failed += int(line.split()[0])
+            except Exception:
+                pass
+
+    return {
+        "exit_code": code if code is not None else 0,
+        "passed": passed,
+        "failed": failed,
+        "log": log,
+    }
+
+
+def run_job(files: dict[str, str], timeout_sec: int = 5) -> dict[str, Any]:
+    """Choose the executor: Piston (remote) or local docker pytest runner."""
+    if getattr(settings, "USE_PISTON", False):
+        return run_piston_job(files, timeout_sec=timeout_sec)
+    return run_pytest_job(files, timeout_sec=timeout_sec)

@@ -6,43 +6,21 @@ x-logging: &default-logging
 
 services:
   # ===================== Inner Docker daemon (rootless; no --privileged) =====================
-  dind:
-    image: docker:27-dind-rootless
-    privileged: true
-    command:
-      - "--host=tcp://0.0.0.0:2375"
-      - "--host=unix:///run/user/1000/docker.sock"
-      - "--storage-driver=overlay2"
-      - "--iptables=false"
-    environment:
-      DOCKER_TLS_CERTDIR: ""        # dev only: disable TLS for simplicity
-      DOCKER_DRIVER: overlay2
-    tmpfs:
-      - /tmp:rw,nosuid,size=256m
-    ports:
-      - "127.0.0.1:12735:2375"      # optional: talk to inner daemon from host for debugging
-    volumes:
-      - dind-data:/var/lib/docker   # inner daemon image/layer cache
-    networks:
-      - app-network
-    <<: *default-logging
-    restart: always
 
-  # ===================== Runner (talks to inner daemon; great for manual tests) =====================
-  runner:
-    build:
-      context: ./runner
-      dockerfile: Dockerfile
-    environment:
-      DOCKER_HOST: tcp://dind:2375   # points CLI to the inner daemon
-    volumes:
-      - runner-tmp:/runner/tmp       # shared scratch for submissions/tests
-    depends_on:
-      - dind
-    networks:
-      - app-network
-    <<: *default-logging
-    restart: always
+    # ===================== Piston Code Execution Engine =====================
+  piston:
+  image: ghcr.io/engineer-man/piston
+  platform: linux/amd64      # fixes Apple Silicon
+  container_name: piston
+  ports:
+    - "2000:2000"
+  volumes:
+    - ./piston_jobs:/piston/jobs
+  networks:
+    - app-network
+  restart: always
+
+
 
   # ===================== Backend (FastAPI) =====================
   backend:
@@ -52,14 +30,14 @@ services:
     environment:
       - DATABASE_URL=sqlite:///./backend/app.db
       - CORS_ORIGINS=["http://localhost:5173"]
-      - DOCKER_HOST=tcp://dind:2375         # let backend call the inner Docker daemon
       - PYTHONUNBUFFERED=1
+      - PISTON_URL=http://piston:2000/api/v2/execute
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app/backend               # your current bind mount
       - storage_data:/app/storage
-      - runner-tmp:/runner/tmp               # share the scratch area with runner & inner jobs
+                # share the scratch area with runner & inner jobs
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/docs'); print('ok')"]
       interval: 10s
@@ -67,7 +45,7 @@ services:
       retries: 5
       start_period: 30s
     depends_on:
-      - dind                                 # used to depend on judge0; now depends on inner Docker
+      - piston                                 # used to depend on judge0; now depends on inner Docker
     networks:
       - app-network
     <<: *default-logging
@@ -92,9 +70,7 @@ services:
 
 # ===================== Volumes =====================
 volumes:
-  storage_data:        # you already had this for backend storage
-  dind-data:           # inner daemon's image cache/layers
-  runner-tmp:          # job scratch shared by backend/runner
+  storage_data:        # you already had this for backend storage           # inner daemon's image cache/layers        # job scratch shared by backend/runner
 
 # ===================== Network =====================
 networks:

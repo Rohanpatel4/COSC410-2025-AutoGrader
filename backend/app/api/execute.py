@@ -1,7 +1,8 @@
 # backend/app/api/execute.py
 from fastapi import APIRouter
 from pydantic import BaseModel
-from app.services.sandbox import run_pytest_job
+from app.services.sandbox import run_pytest_job, run_job
+from app.core.settings import settings
 
 router = APIRouter(prefix="/api/v1", tags=["execute"])
 
@@ -11,5 +12,6 @@ class ExecPayload(BaseModel):
 
 @router.post("/execute")
 def execute(payload: ExecPayload):
-    result = run_pytest_job(payload.files, timeout_sec=payload.timeout_sec)
+    # choose runner based on settings (PISTON vs local docker inner-runner)
+    result = run_job(payload.files, timeout_sec=payload.timeout_sec)
     return result
