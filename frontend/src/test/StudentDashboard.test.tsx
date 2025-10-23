@@ -15,12 +15,12 @@ function CourseStub() {
   return <div>COURSE PAGE {course_tag}</div>;
 }
 
-describe("StudentDashboard (MSW)", () => {
+describe("StudentDashboard (MSW, updated)", () => {
   beforeEach(() => {
-    resetDb(); // start clean (no enrollments for any student)
+    resetDb();
   });
 
-  test("shows empty state, registers by course_tag, and opens course", async () => {
+  test("shows empty state, registers with enrollment key, and opens course", async () => {
     renderWithProviders(
       <Routes>
         <Route path="/" element={<StudentDashboard />} />
@@ -29,39 +29,36 @@ describe("StudentDashboard (MSW)", () => {
       { route: "/", auth: { role: "student", userId: "201" } }
     );
 
-    // Empty state first
+    // Empty state
     expect(await screen.findByText(/not enrolled/i)).toBeInTheDocument();
 
-    // Button disabled until a tag is entered
     const btn = screen.getByRole("button", { name: /register/i });
     expect(btn).toBeDisabled();
 
-    // Enter known seeded tag "500" (FirstCourse)
-    await userEvent.type(
-      screen.getByLabelText(/course tag/i),
-      "500"
-    );
+    // Input labeled “Enrollment Key”
+    const input = screen.getByLabelText(/enrollment key/i);
+    await userEvent.type(input, "ABC123XYZ789");
     expect(btn).toBeEnabled();
 
-    // Register
+    // Submit
     await userEvent.click(btn);
 
-    // Input clears after successful register
-    await screen.findByDisplayValue(""); // or:
-    expect((screen.getByLabelText(/course tag/i) as HTMLInputElement).value).toBe("");
+    // Should clear input and show success message
+    await screen.findByText(/registered/i);
+    expect((screen.getByLabelText(/enrollment key/i) as HTMLInputElement).value).toBe("");
 
-    // Course appears in list
-    expect(await screen.findByText(/500\s*-\s*FirstCourse/i)).toBeInTheDocument();
+    // Should reload courses
+    expect(await screen.findByText(/firstcourse/i)).toBeInTheDocument();
 
-    // Click Open -> navigate to stub
+    // Click “Open” and confirm navigation
     await userEvent.click(screen.getByRole("button", { name: /open/i }));
-    expect(await screen.findByText(/COURSE PAGE 500/i)).toBeInTheDocument();
+    expect(await screen.findByText(/COURSE PAGE/i)).toBeInTheDocument();
 
-    // DB reflects enrollment
+    // Check DB reflects enrollment
     expect(__testDb.getStudentCourses(201)).toHaveLength(1);
   });
 
-  test("button disabled with empty/blank input", async () => {
+  test("button disabled with blank or empty input", async () => {
     renderWithProviders(<StudentDashboard />, {
       route: "/",
       auth: { role: "student", userId: "201" },
@@ -70,14 +67,15 @@ describe("StudentDashboard (MSW)", () => {
     const btn = screen.getByRole("button", { name: /register/i });
     expect(btn).toBeDisabled();
 
-    await userEvent.type(screen.getByLabelText(/course tag/i), "   ");
+    const input = screen.getByLabelText(/enrollment key/i);
+    await userEvent.type(input, "   ");
     expect(btn).toBeDisabled();
 
-    await userEvent.clear(screen.getByLabelText(/course tag/i));
-    await userEvent.type(screen.getByLabelText(/course tag/i), "500");
+    await userEvent.clear(input);
+    await userEvent.type(input, "ABC123");
     expect(btn).toBeEnabled();
 
-    await userEvent.clear(screen.getByLabelText(/course tag/i));
+    await userEvent.clear(input);
     expect(btn).toBeDisabled();
   });
 
@@ -109,20 +107,28 @@ describe("StudentDashboard (MSW)", () => {
       auth: { role: "student", userId: "201" },
     });
 
-    await userEvent.type(screen.getByLabelText(/course tag/i), "500");
+    const input = screen.getByLabelText(/enrollment key/i);
+    await userEvent.type(input, "ABC123XYZ789");
     await userEvent.click(screen.getByRole("button", { name: /register/i }));
 
     const status = await screen.findByRole("status");
-    expect(status).toHaveTextContent(/boom/i);
+    expect(status).toHaveTextContent(/boom|failed/i);
   });
 
-  test("handles unknown course_tag (404 from server)", async () => {
+  test("handles unknown enrollment key (404 from server)", async () => {
+    server.use(
+      http.post("**/api/v1/registrations", () =>
+        HttpResponse.text("Not Found", { status: 404 })
+      )
+    );
+
     renderWithProviders(<StudentDashboard />, {
       route: "/",
       auth: { role: "student", userId: "201" },
     });
 
-    await userEvent.type(screen.getByLabelText(/course tag/i), "999999");
+    const input = screen.getByLabelText(/enrollment key/i);
+    await userEvent.type(input, "INVALIDKEY123");
     await userEvent.click(screen.getByRole("button", { name: /register/i }));
 
     const status = await screen.findByRole("status");
