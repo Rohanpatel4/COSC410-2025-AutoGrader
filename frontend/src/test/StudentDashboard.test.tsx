@@ -11,8 +11,8 @@ import { resetDb, __testDb } from "./handlers";
 
 // Tiny stub route to confirm navigation
 function CourseStub() {
-  const { course_tag = "" } = useParams();
-  return <div>COURSE PAGE {course_tag}</div>;
+  const { course_code = "" } = useParams();
+  return <div>COURSE PAGE {course_code}</div>;
 }
 
 describe("StudentDashboard (MSW)", () => {

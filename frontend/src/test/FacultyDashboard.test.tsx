@@ -12,8 +12,8 @@ import { __testDb, resetDb } from "./handlers";    // <- db helpers only
 
 // A tiny dummy route so we can assert navigation works
 function CourseStub() {
-  const { course_tag = "" } = useParams();
-  return <div>COURSE PAGE {course_tag}</div>;
+  const { course_code = "" } = useParams();
+  return <div>COURSE PAGE {course_code}</div>;
 }
 
 describe("FacultyDashboard (MSW)", () => {

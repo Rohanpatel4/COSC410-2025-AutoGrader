@@ -50,7 +50,7 @@ export default function FacultyDashboard() {
     e.preventDefault();
     setMsg(null);
     if (!courseTag.trim() || !name.trim()) {
-      setMsg("course_tag and name are required");
+      setMsg("course_code and name are required");
       return;
     }
     try {
@@ -58,7 +58,7 @@ export default function FacultyDashboard() {
       const created = await fetchJson<Course>(`/api/v1/courses`, {
         method: "POST",
         body: JSON.stringify({
-          course_tag: courseTag.trim(),
+          course_code: courseTag.trim(),
           name: name.trim(),
           description: description || null,
         }),
@@ -223,11 +223,11 @@ export default function FacultyDashboard() {
               {(mine ?? []).map((c) => (
                 <div key={c.id} style={styles.courseItem}>
                   <div style={{ fontWeight: 600 }}>
-                    {c.course_tag} - {c.name}
+                    {c.course_code} - {c.name}
                   </div>
                   <button
                     style={styles.ghostBtn}
-                    onClick={() => navigate(`/courses/${encodeURIComponent(c.course_tag)}`)}
+                    onClick={() => navigate(`/courses/${encodeURIComponent(c.course_code)}`)}
                   >
                     Open
                   </button>

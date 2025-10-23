@@ -51,10 +51,10 @@ export default function StudentDashboard() {
 
     setMsg(null);
     try {
-      // backend accepts course_tag OR course_id; we use course_tag
+      // backend accepts enrollment_key OR course_id; we use enrollment_key
       await fetchJson("/api/v1/registrations", {
         method: "POST",
-        body: JSON.stringify({ student_id: studentId, course_tag: trimmed }),
+        body: JSON.stringify({ student_id: studentId, enrollment_key: trimmed }),
       });
       setMsg("Registered!");
       setTag("");
@@ -184,11 +184,11 @@ export default function StudentDashboard() {
               {mine.map((c) => (
                 <div key={c.id} style={styles.courseItem}>
                   <div style={{ fontWeight: 600 }}>
-                    {c.course_tag} - {c.name}
+                    {c.enrollment_key  } - {c.name}
                   </div>
                   <button
                     style={styles.ghostBtn}
-                    onClick={() => navigate(`/courses/${encodeURIComponent(c.course_tag)}`)}
+                    onClick={() => navigate(`/courses/${encodeURIComponent(c.enrollment_key)}`)}
                   >
                     Open
                   </button>

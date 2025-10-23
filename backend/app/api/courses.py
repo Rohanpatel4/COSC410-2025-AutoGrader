@@ -1,7 +1,7 @@
 # backend/app/api/courses.py
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Header, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Header, Query, status
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
@@ -10,15 +10,18 @@ from app.models.models import (
     Assignment,
     Course,
     RoleEnum,
-    # StudentRegistration,  # DEPRECATED - now using user_course_association for all enrollments
+    StudentRegistration,
     StudentSubmission,
     User,
     user_course_association,
 )
+import secrets
+import string
 
 router = APIRouter()
 
 # ---------- helpers ----------
+'''
 def _course_by_key(db: Session, key: str) -> Course | None:
     """Fetch a course by numeric ID or course_tag."""
     if key.isdigit():
@@ -26,6 +29,26 @@ def _course_by_key(db: Session, key: str) -> Course | None:
         if c:
             return c
     return db.execute(select(Course).where(Course.course_tag == key)).scalar_one_or_none()
+'''
+#new course_by_key function
+def _course_by_key(db: Session, key: str) -> Course | None:
+    """Fetch a course by numeric ID, course_code, or enrollment_key."""
+    if key.isdigit():
+        c = db.get(Course, int(key))
+        if c:
+            return c
+    
+    # Try course_code first
+    c = db.execute(select(Course).where(Course.course_code == key)).scalar_one_or_none()
+    if c:
+        return c
+    
+    # Try enrollment_key
+    c = db.execute(select(Course).where(Course.enrollment_key == key)).scalar_one_or_none()
+    if c:
+        return c
+    
+    return None
 
 
 def _parse_dt(v):
@@ -70,8 +93,8 @@ def _assignment_to_dict(
 
 # Identity helper (reads headers set by the frontend fetch helper)
 def get_identity(
-    x_user_id: int | None = Header(default=None),
-    x_user_role: str | None = Header(default=None),
+    x_user_id: int | None = Header(default=None, convert_underscores=False),
+    x_user_role: str | None = Header(default=None, convert_underscores=False),
 ) -> tuple[int | None, RoleEnum | None]:
     if not x_user_id or not x_user_role:
         return None, None
@@ -81,8 +104,23 @@ def get_identity(
         return None, None
     return x_user_id, role
 
+def _generate_enrollment_key() -> str:
+    """Generate a unique 8-character alphanumeric enrollment key."""
+    return ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(8))
+
+def _ensure_unique_enrollment_key(db: Session, enrollment_key: str) -> str:
+    """Ensure enrollment key is unique, regenerate if needed."""
+    max_attempts = 100
+    for attempt in range(max_attempts):
+        exists = db.execute(select(Course).where(Course.enrollment_key == enrollment_key)).scalar_one_or_none()
+        if not exists:
+            return enrollment_key
+        enrollment_key = _generate_enrollment_key()
+    raise HTTPException(500, "Could not generate unique enrollment key")
+
 
 # ---------- course CRUD / listing ----------
+'''
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_course(
     payload: dict,  # { course_tag, name, description? }
@@ -91,7 +129,7 @@ def create_course(
 ):
     tag = (payload.get("course_tag") or "").strip()
     name = (payload.get("name") or "").strip()
-    description = payload.get("description") or ""
+    description = (payload.get("description") or "").strip()
 
     if not tag or not name:
         raise HTTPException(400, "course_tag and name are required")
@@ -101,16 +139,13 @@ def create_course(
     if exists:
         raise HTTPException(409, "Course tag already exists")
 
-    # Create the course
     course = Course(course_tag=tag, name=name, description=description)
     db.add(course)
     db.flush()  # get course.id without committing yet
 
-    # Auto-link faculty creator to the course
+    # Auto-link creator if they are faculty
     user_id, role = ident
-    
-    if user_id and role == RoleEnum.faculty:
-        # Associate faculty creator with the course in the same transaction
+    if role == RoleEnum.faculty and user_id:
         db.execute(
             user_course_association.insert().values(
                 user_id=user_id, course_id=course.id
@@ -119,10 +154,80 @@ def create_course(
 
     db.commit()
     db.refresh(course)
-    
     return {
         "id": course.id,
-        "course_tag": course.course_tag,
+        "course_code": course.course_tag,
+        "name": course.name,
+        "description": course.description,
+        "Enrollment_Key": course.enrollment_key,
+    }
+'''
+#new create course function
+@router.post("", status_code=status.HTTP_201_CREATED)
+def create_course(
+    request: Request,
+    payload: dict,  # { course_code, name, description? }
+    ident=Depends(get_identity),
+    db: Session = Depends(get_db),
+):
+    course_code = (payload.get("course_code") or "").strip()
+    name = (payload.get("name") or "").strip()
+    description = payload.get("description") or ""
+
+    if not course_code or not name:
+        raise HTTPException(400, "course_code and name are required")
+
+    # Duplicate course_code check
+    exists = db.execute(select(Course).where(Course.course_code == course_code)).scalar_one_or_none()
+    if exists:
+        raise HTTPException(409, "Course code already exists")
+
+    # Generate unique enrollment key
+    enrollment_key = _generate_enrollment_key()
+    enrollment_key = _ensure_unique_enrollment_key(db, enrollment_key)
+
+    course = Course(
+        course_code=course_code, 
+        enrollment_key=enrollment_key,
+        name=name, 
+        description=description
+    )
+    db.add(course)
+    db.flush()  # get course.id without committing yet
+
+    # Auto-link creator if they are faculty
+    # Try to get user identity from dependency or request headers
+    user_id, role = ident
+    
+    # If dependency didn't work, extract from request headers directly
+    if not user_id:
+        x_user_id = request.headers.get("x-user-id") or request.headers.get("X-User-Id")
+        x_user_role = request.headers.get("x-user-role") or request.headers.get("X-User-Role")
+        
+        if x_user_id:
+            try:
+                user_id = int(x_user_id)
+                if x_user_role:
+                    try:
+                        role = RoleEnum(x_user_role)
+                    except ValueError:
+                        pass  # Invalid role, keep as None
+            except (ValueError, TypeError):
+                pass  # Invalid user_id format
+    
+    # Associate faculty creator with the course in the same transaction
+    if user_id and role == RoleEnum.faculty:
+        db.execute(
+            user_course_association.insert().values(
+                user_id=user_id, course_id=course.id
+            )
+        )
+    db.commit()
+    db.refresh(course)
+    return {
+        "id": course.id,
+        "course_code": course.course_code,
+        "enrollment_key": course.enrollment_key,
         "name": course.name,
         "description": course.description,
     }
@@ -154,12 +259,13 @@ def list_courses(
 
     if q:
         ql = q.lower()
-        rows = [c for c in rows if ql in (c.course_tag or "").lower() or ql in (c.name or "").lower()]
+        rows = [c for c in rows if ql in (c.course_code or "").lower() or ql in (c.name or "").lower()]
 
     items = [
         {
             "id": int(c.id),
-            "course_tag": str(c.course_tag),
+            "course_code": str(c.course_code),
+            "enrollment_key": str(c.enrollment_key),
             "name": str(c.name),
             "description": str(c.description or ""),
         }
@@ -168,7 +274,7 @@ def list_courses(
     return {"items": items, "nextCursor": None}
 
 
-# NEW: path-based faculty listing (mirrors students' explicit path style)
+# existing faculty courses
 @router.get("/faculty/{faculty_id}", response_model=list[dict])
 def faculty_courses(faculty_id: int, db: Session = Depends(get_db)):
     rows = (
@@ -184,10 +290,15 @@ def faculty_courses(faculty_id: int, db: Session = Depends(get_db)):
         .all()
     )
     return [
-        {"id": c.id, "course_tag": c.course_tag, "name": c.name, "description": c.description}
+        {
+            "id": c.id, 
+            "course_code": c.course_code, 
+            "enrollment_key": c.enrollment_key,
+            "name": c.name, 
+            "description": c.description
+        }
         for c in rows
     ]
-
 
 @router.get("/{course_key}")
 def get_course(course_key: str, db: Session = Depends(get_db)):
@@ -196,7 +307,8 @@ def get_course(course_key: str, db: Session = Depends(get_db)):
         raise HTTPException(404, "Not found")
     return {
         "id": c.id,
-        "course_tag": c.course_tag,
+        "course_code": c.course_code,
+        "enrollment_key": c.enrollment_key,
         "name": c.name,
         "description": c.description,
     }
@@ -297,22 +409,23 @@ def course_students(course_key: str, db: Session = Depends(get_db)):
     if not c:
         raise HTTPException(404, "Not found")
 
-    # Query user_course_association and filter by role=student
-    student_rows = db.execute(
-        select(User)
-        .join(user_course_association, user_course_association.c.user_id == User.id)
-        .where(
-            user_course_association.c.course_id == c.id,
-            User.role == RoleEnum.student
+    reg_rows = db.execute(
+        select(StudentRegistration.student_id).where(
+            StudentRegistration.course_id == c.id
         )
-    ).scalars().all()
+    ).all()
 
+    if not reg_rows:
+        return []
+
+    student_ids = [sid for (sid,) in reg_rows]
+    students = db.execute(select(User).where(User.id.in_(student_ids))).scalars().all()
     return [
         {
             "id": s.id,
             "name": getattr(s, "username", None) or getattr(s, "name", None) or str(s.id),
         }
-        for s in student_rows
+        for s in students
     ]
 
 
@@ -326,19 +439,19 @@ def remove_student_from_course(
     if not c:
         raise HTTPException(404, "Course not found")
 
-    # Delete from user_course_association
     res = db.execute(
-        user_course_association.delete().where(
+        select(StudentRegistration).where(
             and_(
-                user_course_association.c.course_id == c.id,
-                user_course_association.c.user_id == student_id,
+                StudentRegistration.course_id == c.id,
+                StudentRegistration.student_id == student_id,
             )
         )
-    )
-    
-    if res.rowcount == 0:
-        raise HTTPException(404, "Enrollment not found")
+    ).scalar_one_or_none()
 
+    if not res:
+        raise HTTPException(404, "Registration not found")
+
+    db.delete(res)
     db.commit()
     return {"ok": True}
 
@@ -350,6 +463,7 @@ def list_assignments_for_course(
     student_id: int | None = None,
     db: Session = Depends(get_db),
 ):
+
     c = _course_by_key(db, course_key)
     if not c:
         return []
@@ -448,8 +562,5 @@ def delete_assignment(
     db.delete(a)
     db.commit()
     return {"ok": True}
-
-
-
 
 
