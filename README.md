@@ -4,6 +4,7 @@
 ```bash
 # this to run inspect_db, make sure docker container is running when you do
 # run all of these from the project root
+docker compose cp inspect_db.py backend:/app/inspect_db.py
 docker compose exec backend sh -lc \
   'python /app/inspect_db.py --url sqlite:///backend/app.db --limit 10'
 

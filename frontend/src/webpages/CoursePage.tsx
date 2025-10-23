@@ -8,13 +8,20 @@ import { useAuth } from "../auth/AuthContext";
 type Student = { id: number; name?: string };
 type Faculty = { id: number; name?: string };
 
+type CoursePayload = {
+  id: number;
+  course_code: string;           // e.g., "COSC-410"
+  name: string;                  // course title/name
+  description?: string | null;
+  enrollment_key?: string;       // present for faculty views
+};
+
 export default function CoursePage() {
   const { course_id = "" } = useParams<{ course_id: string }>();
   const navigate = useNavigate();
   const { role, userId } = useAuth();
   const isFaculty = role === "faculty";
-  const [course, setCourse] = React.useState<{ id: number; title: string; description?: string } | null>(null);
-
+  const [course, setCourse] = React.useState<CoursePayload | null>(null);
 
   const [students, setStudents] = React.useState<Student[]>([]);
   const [faculty, setFaculty] = React.useState<Faculty[]>([]);
@@ -37,19 +44,17 @@ export default function CoursePage() {
   setLoading(true);
 
   try {
-    const studentIdParam =
-      role === "student" && userId ? `?student_id=${userId}` : "";
+      const studentIdParam =
+        role === "student" && userId ? `?student_id=${userId}` : "";
 
-    const [courseData, s, f, a] = await Promise.all([
-      fetchJson<{ id: number; title: string; description?: string }>(
-        `/api/v1/courses/${course_id}`
-      ),
-      fetchJson<Student[]>(`/api/v1/courses/${course_id}/students`),
-      fetchJson<Faculty[]>(`/api/v1/courses/${course_id}/faculty`),
-      fetchJson<Assignment[]>(
-        `/api/v1/courses/${course_id}/assignments${studentIdParam}`
-      ),
-    ]);
+      const [courseData, s, f, a] = await Promise.all([
+        fetchJson<CoursePayload>(`/api/v1/courses/${encodeURIComponent(course_id)}`),
+        fetchJson<Student[]>(`/api/v1/courses/${encodeURIComponent(course_id)}/students`),
+        fetchJson<Faculty[]>(`/api/v1/courses/${encodeURIComponent(course_id)}/faculty`),
+        fetchJson<Assignment[]>(
+          `/api/v1/courses/${encodeURIComponent(course_id)}/assignments${studentIdParam}`
+        ),
+      ]);
 
     // ✅ Update all data once fetch completes
     setCourse(courseData);
@@ -85,11 +90,6 @@ export default function CoursePage() {
 
     if (!payload.title) {
       setErr("Title is required.");
-      return;
-    }
-
-    if (!payload.description) {
-      setErr("desc is required.");
       return;
     }
 
@@ -138,12 +138,25 @@ export default function CoursePage() {
       <div style={{ marginBottom: 12 }}>
         <Link to="/my">← Back to dashboard</Link>
       </div>
-    {course && (
-  <div style={{ marginBottom: 24 }}>
-    <h1 style={{ marginBottom: 4 }}>{course.title}</h1>
-    <p style={{ color: "#555", fontSize: "1rem" }}>
-      {course.description || "No description provided."}
-    </p>
+      {course && (
+        <div style={{ marginBottom: 24 }}>
+          {/* Header uses course_code – name */}
+          <h1 style={{ marginBottom: 4 }}>
+            {course.course_code} – {course.name}
+          </h1>
+
+          {/* Description + Enrollment key (if present) */}
+          <div style={{ color: "#555", fontSize: "1rem" }}>
+            <p style={{ marginTop: 0 }}>
+              {course.description || "No description provided."}
+            </p>
+            {course.enrollment_key && (
+              <p style={{ marginTop: 6 }}>
+                <span style={{ color: "#6b7280" }}>Enrollment key: </span>
+                <code>{course.enrollment_key}</code>
+              </p>
+            )}
+          </div>
     {loading && (
       <p style={{ color: "#888", fontStyle: "italic" }}>Refreshing data…</p>
     )}

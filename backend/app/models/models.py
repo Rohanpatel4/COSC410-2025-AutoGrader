@@ -35,7 +35,10 @@ class User(Base):
 class Course(Base):
     __tablename__ = "courses"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    course_tag: Mapped[str] = mapped_column(String, nullable=False)
+
+    course_code: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    enrollment_key: Mapped[str] = mapped_column(String, nullable=False, unique=True, index=True)
+
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
 

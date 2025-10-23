@@ -9,7 +9,7 @@ export default function FacultyDashboard() {
   const navigate = useNavigate();
   const professorId = Number(userId ?? 0);
 
-  const [courseTag, setCourseTag] = React.useState("");
+  const [courseCode, setCourseCode] = React.useState("");
   const [name, setName] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [mine, setMine] = React.useState<Course[]>([]);
@@ -41,30 +41,24 @@ export default function FacultyDashboard() {
 
   React.useEffect(() => { loadMine(); }, [professorId]);
 
-  function generateRandomTag() {
-    const randomCode = Math.floor(100000 + Math.random() * 900000);
-    setCourseTag(randomCode.toString());
-  }
-
   async function onCreate(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
-    if (!courseTag.trim() || !name.trim()) {
-      setMsg("course_tag and name are required");
+    if (!courseCode.trim() || !name.trim()) {
+      setMsg("course_code and name are required");
       return;
     }
     try {
-      // NEW: no professor_id query; backend auto-links creator via headers
       const created = await fetchJson<Course>(`/api/v1/courses`, {
         method: "POST",
         body: JSON.stringify({
-          course_tag: courseTag.trim(),
+          course_code: courseCode.trim(),
           name: name.trim(),
           description: description || null,
         }),
       });
       setMine((prev) => [created, ...prev]);
-      setCourseTag(""); setName(""); setDescription("");
+      setCourseCode(""); setName(""); setDescription("");
       setMsg("Course created!");
     } catch (e: any) {
       setMsg(e?.message ?? "Create failed");
@@ -143,6 +137,10 @@ export default function FacultyDashboard() {
       fontSize: "12px",
       marginLeft: "8px",
     } as React.CSSProperties,
+    secondary: {
+      fontSize: 12,
+      color: "#6b7280",
+    } as React.CSSProperties,
     courseItem: {
       display: "flex",
       alignItems: "center",
@@ -179,21 +177,16 @@ export default function FacultyDashboard() {
       )}
 
       <div style={styles.grid}>
-        {/* Create Course card */}
+        {/* Create Course */}
         <div style={styles.card}>
           <h2 style={{ marginTop: 0 }}>Create Course</h2>
           <form onSubmit={onCreate}>
-            <div style={{ display: "flex", alignItems: "center", marginBottom: 6 }}>
-              <label htmlFor="c-tag" style={styles.label}>Course Tag</label>
-              <button type="button" style={styles.secondaryBtn} onClick={generateRandomTag}>
-                Generate Tag
-              </button>
-            </div>
+            <label htmlFor="c-code" style={styles.label}>Course Code</label>
             <input
-              id="c-tag"
+              id="c-code"
               placeholder="e.g., COSC-410"
-              value={courseTag}
-              onChange={(e) => setCourseTag(e.target.value)}
+              value={courseCode}
+              onChange={(e) => setCourseCode(e.target.value)}
               required
               style={styles.input}
             />
@@ -204,9 +197,14 @@ export default function FacultyDashboard() {
             <label htmlFor="c-desc" style={styles.label}>Description</label>
             <textarea id="c-desc" value={description} onChange={(e) => setDescription(e.target.value)} style={styles.textarea} />
 
-            <button type="submit" style={styles.primaryBtn} disabled={!courseTag.trim() || !name.trim()}>
+            <button type="submit" style={styles.primaryBtn} disabled={!courseCode.trim() || !name.trim()}>
               Create Course
             </button>
+            <div style={{ marginTop: 8 }}>
+              <span style={styles.secondary}>
+                Enrollment key will be generated automatically.
+              </span>
+            </div>
           </form>
         </div>
 
@@ -222,12 +220,17 @@ export default function FacultyDashboard() {
             <div>
               {(mine ?? []).map((c) => (
                 <div key={c.id} style={styles.courseItem}>
-                  <div style={{ fontWeight: 600 }}>
-                    {c.course_tag} - {c.name}
+                  <div>
+                    <div style={{ fontWeight: 600 }}>
+                      {c.course_code} – {c.name}
+                    </div>
+                    {c.enrollment_key && (
+                      <div style={styles.secondary}>Key: {c.enrollment_key}</div>
+                    )}
                   </div>
                   <button
                     style={styles.ghostBtn}
-                    onClick={() => navigate(`/courses/${encodeURIComponent(c.course_tag)}`)}
+                    onClick={() => navigate(`/courses/${encodeURIComponent(c.course_code)}`)}
                   >
                     Open
                   </button>

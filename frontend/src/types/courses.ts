@@ -1,6 +1,7 @@
 export type Course = {
-  id: number;                 // DB PK
-  course_tag: string;         // human/tag used for joining & URLs
+  id: number;
+  course_code: string;         // e.g., "COSC-410"
+  enrollment_key?: string;     // 12-char random code for student registration
   name: string;
   description?: string | null;
 };

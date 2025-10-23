@@ -9,7 +9,7 @@ export default function StudentDashboard() {
   const navigate = useNavigate();
   const studentId = Number(userId ?? 0);
 
-  const [tag, setTag] = React.useState(""); // user types a course_tag (e.g., "COSC-410")
+  const [enrollKey, setEnrollKey] = React.useState("");
   const [mine, setMine] = React.useState<Course[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [msg, setMsg] = React.useState<string | null>(null);
@@ -43,21 +43,20 @@ export default function StudentDashboard() {
 
   async function onRegister(e: React.FormEvent) {
     e.preventDefault();
-    const trimmed = tag.trim();
+    const trimmed = enrollKey.trim();
     if (!trimmed) {
-      setMsg("Please enter a Course Tag (e.g., COSC-410)");
+      setMsg("Please enter an enrollment key.");
       return;
     }
 
     setMsg(null);
     try {
-      // backend accepts course_tag OR course_id; we use course_tag
       await fetchJson("/api/v1/registrations", {
         method: "POST",
-        body: JSON.stringify({ student_id: studentId, course_tag: trimmed }),
+        body: JSON.stringify({ student_id: studentId, enrollment_key: trimmed }),
       });
       setMsg("Registered!");
-      setTag("");
+      setEnrollKey("");
       await loadMyCourses();
     } catch (e: any) {
       setMsg(e?.message ?? "Registration failed");
@@ -157,15 +156,15 @@ export default function StudentDashboard() {
         <div style={styles.card}>
           <h2 style={{ marginTop: 0 }}>Register for courses</h2>
           <form onSubmit={onRegister}>
-            <label htmlFor="course-search" style={styles.label}>Course Tag</label>
+            <label htmlFor="enroll-key" style={styles.label}>Enrollment Key</label>
             <input
-              id="course-search"
-              placeholder="Enter Course Tag (e.g., COSC-410)"
-              value={tag}
-              onChange={(e) => setTag(e.target.value)}
+              id="enroll-key"
+              placeholder="Enter 12-character key from your instructor"
+              value={enrollKey}
+              onChange={(e) => setEnrollKey(e.target.value)}
               style={styles.input}
             />
-            <button type="submit" style={styles.primaryBtn} disabled={!tag.trim()}>
+            <button type="submit" style={styles.primaryBtn} disabled={!enrollKey.trim()}>
               Register
             </button>
           </form>
@@ -184,11 +183,11 @@ export default function StudentDashboard() {
               {mine.map((c) => (
                 <div key={c.id} style={styles.courseItem}>
                   <div style={{ fontWeight: 600 }}>
-                    {c.course_tag} - {c.name}
+                    {c.course_code} - {c.name}
                   </div>
                   <button
                     style={styles.ghostBtn}
-                    onClick={() => navigate(`/courses/${encodeURIComponent(c.course_tag)}`)}
+                    onClick={() => navigate(`/courses/${encodeURIComponent(c.course_code)}`)}
                   >
                     Open
                   </button>

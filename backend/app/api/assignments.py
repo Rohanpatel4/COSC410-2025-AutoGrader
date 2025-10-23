@@ -9,23 +9,20 @@ from collections import defaultdict
 from app.core.db import get_db
 from app.models.models import (
     Assignment, Course, StudentSubmission, TestCase,
-    # StudentRegistration,  # DEPRECATED - now using user_course_association for all enrollments
     User, RoleEnum, user_course_association
 )
-
-# REMOVED: Judge0 client - using secure subprocess execution instead
 
 router = APIRouter()
 
 # ---- helpers ---------------------------------------------------------------
 
 def _course_by_key(db: Session, key: str) -> Optional[Course]:
-    """Fetch a course by numeric id or course_tag."""
+    """Fetch a course by numeric id or course_code."""
     if key.isdigit():
         c = db.get(Course, int(key))
         if c:
             return c
-    return db.execute(select(Course).where(Course.course_tag == key)).scalar_one_or_none()
+    return db.execute(select(Course).where(Course.course_code == key)).scalar_one_or_none()
 
 def _to_iso_or_raw(v):
     if hasattr(v, "isoformat"):
@@ -178,7 +175,7 @@ async def upload_test_file_for_assignment(
 ):
     """
     Attach a test file to an assignment.
-    For now we store the test code in test_files.var_char (string column).
+    For now we store the test code in test_files.filename (string column).
     """
     a = db.get(Assignment, assignment_id)
     if not a:
@@ -196,7 +193,7 @@ async def upload_test_file_for_assignment(
     # Replace any existing test rows for this assignment (simple policy)
     db.query(TestCase).filter(TestCase.assignment_id == assignment_id).delete()
 
-    tc = TestCase(assignment_id=assignment_id, var_char=content)
+    tc = TestCase(assignment_id=assignment_id, filename=content)
     db.add(tc)
     db.commit()
     db.refresh(tc)
@@ -243,7 +240,8 @@ async def submit_to_assignment(
 ):
     """
     Create a StudentSubmission for this assignment and run it against the
-    assignment's stored test file (latest TestCase row). Uses Judge0.
+    assignment's stored test file (latest TestCase row).
+    # JUDGE0: This endpoint currently depends on Judge0 for execution.
     """
     a = db.get(Assignment, assignment_id)
     if not a:
@@ -274,7 +272,7 @@ async def submit_to_assignment(
         .order_by(TestCase.id.desc())
         .limit(1)
     ).scalar_one_or_none()
-    if not tc or not (tc.var_char or "").strip():
+    if not tc or not (tc.filename or "").strip():
         raise HTTPException(409, "No test file attached to this assignment")
 
     if not submission.filename or not submission.filename.lower().endswith(".py"):
@@ -287,12 +285,12 @@ async def submit_to_assignment(
     except Exception as e:
         raise HTTPException(400, f"Failed to read submission: {e}")
 
-    # Import grading functions from the attempts module
+     # JUDGE0: external grader import
     from app.api.attempt_submission_test import _run_with_judge0, _parse_pytest_output
 
     # Run with Judge0 sandbox
     try:
-        result = await _run_with_judge0(student_code, tc.var_char)
+        result = await _run_with_judge0(student_code, tc.filename)
         grading = result.get("grading", {})
     except Exception as e:
         err_payload = e.args[0] if (hasattr(e, "args") and e.args and isinstance(e.args[0], dict)) else {"error": repr(e)}
@@ -324,6 +322,7 @@ async def submit_to_assignment(
             "passed_tests": grading.get("passed_tests", 0),
             "failed_tests": grading.get("failed_tests", 0),
         },
+        # this all originates from judge0
         "result": {
             "status": result.get("status", {}),
             "stdout": result.get("stdout", ""),
@@ -442,7 +441,7 @@ def gradebook_for_course(course_key: str, db: Session = Depends(get_db)):
 
     if not a_ids or not s_ids:
         return {
-            "course": {"id": c.id, "name": c.name, "course_tag": c.course_tag},
+            "course": {"id": c.id, "name": c.name, "course_code": c.course_code},
             "assignments": assignments,
             "students": [],
         }
@@ -476,7 +475,7 @@ def gradebook_for_course(course_key: str, db: Session = Depends(get_db)):
         })
 
     return {
-        "course": {"id": c.id, "name": c.name, "course_tag": c.course_tag},
+        "course": {"id": c.id, "name": c.name, "course_code": c.course_code},
         "assignments": assignments,
         "students": out_students,
     }

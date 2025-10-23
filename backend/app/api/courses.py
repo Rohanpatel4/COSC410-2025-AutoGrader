@@ -1,7 +1,9 @@
 # backend/app/api/courses.py
 from datetime import datetime
+import secrets
+import string
 
-from fastapi import APIRouter, Depends, HTTPException, Header, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Header, Query, status
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
@@ -10,7 +12,6 @@ from app.models.models import (
     Assignment,
     Course,
     RoleEnum,
-    # StudentRegistration,  # DEPRECATED - now using user_course_association for all enrollments
     StudentSubmission,
     User,
     user_course_association,
@@ -18,14 +19,25 @@ from app.models.models import (
 
 router = APIRouter()
 
+ALNUM = string.ascii_uppercase + string.digits
+
 # ---------- helpers ----------
+def _generate_enrollment_key(db: Session, length: int = 12) -> str:
+    """Generate a unique 12-char A–Z0–9 key."""
+    for _ in range(20):
+        key = "".join(secrets.choice(ALNUM) for _ in range(length))
+        exists = db.execute(select(Course.id).where(Course.enrollment_key == key)).first()
+        if not exists:
+            return key
+    raise HTTPException(500, "Failed to generate unique enrollment key")
+
 def _course_by_key(db: Session, key: str) -> Course | None:
-    """Fetch a course by numeric ID or course_tag."""
+    """Fetch a course by numeric ID or course_code."""
     if key.isdigit():
         c = db.get(Course, int(key))
         if c:
             return c
-    return db.execute(select(Course).where(Course.course_tag == key)).scalar_one_or_none()
+    return db.execute(select(Course).where(Course.course_code == key)).scalar_one_or_none()
 
 
 def _parse_dt(v):
@@ -85,26 +97,32 @@ def get_identity(
 # ---------- course CRUD / listing ----------
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_course(
-    payload: dict,  # { course_tag, name, description? }
+    payload: dict,  # { course_code, name, description? }
     ident=Depends(get_identity),
     db: Session = Depends(get_db),
 ):
-    tag = (payload.get("course_tag") or "").strip()
+    course_code = (payload.get("course_code") or "").strip()
     name = (payload.get("name") or "").strip()
     description = payload.get("description") or ""
 
-    if not tag or not name:
-        raise HTTPException(400, "course_tag and name are required")
+    if not course_code or not name:
+        raise HTTPException(400, "course_code and name are required")
 
-    # Duplicate tag check
-    exists = db.execute(select(Course).where(Course.course_tag == tag)).scalar_one_or_none()
+    # Duplicate checks
+    exists = db.execute(select(Course).where(Course.course_code == course_code)).scalar_one_or_none()
     if exists:
-        raise HTTPException(409, "Course tag already exists")
+        raise HTTPException(409, "Course code already exists")
 
-    # Create the course
-    course = Course(course_tag=tag, name=name, description=description)
+    enrollment_key = _generate_enrollment_key(db)
+
+    course = Course(
+        course_code=course_code,
+        enrollment_key=enrollment_key,
+        name=name,
+        description=description,
+    )
     db.add(course)
-    db.flush()  # get course.id without committing yet
+    db.flush()  # get course.id
 
     # Auto-link faculty creator to the course
     user_id, role = ident
@@ -122,7 +140,8 @@ def create_course(
     
     return {
         "id": course.id,
-        "course_tag": course.course_tag,
+        "course_code": course.course_code,
+        "enrollment_key": course.enrollment_key,
         "name": course.name,
         "description": course.description,
     }
@@ -154,17 +173,21 @@ def list_courses(
 
     if q:
         ql = q.lower()
-        rows = [c for c in rows if ql in (c.course_tag or "").lower() or ql in (c.name or "").lower()]
+        rows = [c for c in rows if ql in (c.course_code or "").lower() or ql in (c.name or "").lower()]
 
-    items = [
-        {
+    items = []
+    for c in rows[:limit]:
+        item = {
             "id": int(c.id),
-            "course_tag": str(c.course_tag),
+            "course_code": str(c.course_code),
             "name": str(c.name),
             "description": str(c.description or ""),
         }
-        for c in rows[:limit]
-    ]
+        # Optional: include enrollment_key only for filtered faculty views
+        if professor_id is not None:
+            item["enrollment_key"] = c.enrollment_key
+        items.append(item)
+
     return {"items": items, "nextCursor": None}
 
 
@@ -184,7 +207,13 @@ def faculty_courses(faculty_id: int, db: Session = Depends(get_db)):
         .all()
     )
     return [
-        {"id": c.id, "course_tag": c.course_tag, "name": c.name, "description": c.description}
+        {
+            "id": c.id,
+            "course_code": c.course_code,
+            "enrollment_key": c.enrollment_key,  # faculty can copy this
+            "name": c.name,
+            "description": c.description,
+        }
         for c in rows
     ]
 
@@ -196,7 +225,8 @@ def get_course(course_key: str, db: Session = Depends(get_db)):
         raise HTTPException(404, "Not found")
     return {
         "id": c.id,
-        "course_tag": c.course_tag,
+        "course_code": c.course_code,
+        "enrollment_key": c.enrollment_key,
         "name": c.name,
         "description": c.description,
     }
@@ -383,7 +413,7 @@ def create_assignment_for_course(
     db: Session = Depends(get_db),
 ):
     """
-    Create an assignment for the given course (course id or course_tag).
+    Create an assignment for the given course (course id or course_code).
     Expected payload: { title, description?, sub_limit?, start?, stop? }
     """
     c = _course_by_key(db, course_key)

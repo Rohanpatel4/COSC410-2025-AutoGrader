@@ -38,13 +38,14 @@ class UserRead(BaseModel):
 # ---------- COURSES ----------
 # models.py: description is NOT nullable -> required in schemas
 class CourseCreate(BaseModel):
-    course_tag: str
+    course_code: str
     name: str
     description: str
 
 class CourseRead(BaseModel):
     id: int
-    course_tag: str
+    course_code: str
+    enrollment_key: str
     name: str
     description: str
     model_config = ConfigDict(from_attributes=True)
@@ -72,12 +73,12 @@ class AssignmentRead(BaseModel):
 # ---------- TEST CASES ----------
 class TestCaseCreate(BaseModel):
     assignment_id: int
-    var_char: str
+    filename: str
 
 class TestCaseRead(BaseModel):
     id: int
     assignment_id: int
-    var_char: str
+    filename: str
     model_config = ConfigDict(from_attributes=True)
 
 # ---------- STUDENT SUBMISSIONS ----------
@@ -91,19 +92,5 @@ class StudentSubmissionRead(BaseModel):
     assignment_id: int
     grade: Optional[int] = None
     model_config = ConfigDict(from_attributes=True)
-
-# ---------- STUDENT REGISTRATIONS ----------
-# DEPRECATED: StudentRegistration has been consolidated into user_course_association
-# All enrollment (both faculty and students) now use user_course_association
-# Use users.role to distinguish between faculty and students
-# class StudentRegistrationCreate(BaseModel):
-#     student_id: int
-#     course_id: int
-
-# class StudentRegistrationRead(BaseModel):
-#     id: int
-#     student_id: int
-#     course_id: int
-#     model_config = ConfigDict(from_attributes=True)
 
 

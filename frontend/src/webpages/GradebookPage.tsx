@@ -4,13 +4,13 @@ import { useParams, Link } from "react-router-dom";
 import { fetchJson } from "../api/client";
 
 type GBPayload = {
-  course: { id: number; name: string; course_tag: string };
+  course: { id: number; name: string; course_code: string };
   assignments: { id: number; title: string }[];
   students: { student_id: number; username: string; grades: Record<string, number | null> }[];
 };
 
 export default function GradebookPage() {
-  const { course_id = "" } = useParams<{ course_id: string }>(); // works with numeric id or course_tag
+  const { course_id = "" } = useParams<{ course_id: string }>(); // works with numeric id or course_code
   const [data, setData] = React.useState<GBPayload | null>(null);
   const [err, setErr] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -42,7 +42,7 @@ export default function GradebookPage() {
 
       <h1>
         Gradebook{" "}
-        {data ? `– ${data.course.course_tag || data.course.name || data.course.id}` : ""}
+        {data ? `– ${data.course.course_code || data.course.name || data.course.id}` : ""}
       </h1>
 
       {loading && <p>Loading…</p>}

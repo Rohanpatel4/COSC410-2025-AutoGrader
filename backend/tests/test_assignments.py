@@ -245,7 +245,7 @@ def test_divide_by_zero():
     except ZeroDivisionError:
         pass  # This is expected
 '''
-        test_case = TestCase(assignment_id=assignment.id, var_char=test_code)
+        test_case = TestCase(assignment_id=assignment.id, filename=test_code)
         db.add(test_case)
         db.commit()
 

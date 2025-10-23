@@ -130,7 +130,7 @@ def _create_assignments(session, course_id):
         session.add(a)
         session.flush()
         # Minimal test file so /submit wouldn't 409 if you try it
-        tc = TestCase(assignment_id=a.id, var_char="def test_stub():\n    assert True")
+        tc = TestCase(assignment_id=a.id, filename="def test_stub():\n    assert True")
         session.add(tc)
         out.append(a)
     return out
