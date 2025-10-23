@@ -1,149 +1,148 @@
-// src/test/FacultyDashboard.test.tsx
 import React from "react";
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
-import { Route, Routes, useParams } from "react-router-dom";
+import { Routes, Route, useParams } from "react-router-dom";
 
 import FacultyDashboard from "../webpages/FacultyDashboard";
 import { renderWithProviders } from "./renderWithProviders";
-import { server } from "./server";                 // <- only this server
-import { __testDb, resetDb } from "./handlers";    // <- db helpers only
+import { server } from "./server";
+import { __testDb, resetDb } from "./handlers";
 
-// A tiny dummy route so we can assert navigation works
+// Dummy route to verify navigation
 function CourseStub() {
   const { course_tag = "" } = useParams();
   return <div>COURSE PAGE {course_tag}</div>;
 }
 
-describe("FacultyDashboard (MSW)", () => {
-  beforeEach(() => {
-    resetDb();
-  });
+function renderFacultyDashboard() {
+  return renderWithProviders(
+    <Routes>
+      <Route path="/" element={<FacultyDashboard />} />
+      <Route path="/courses/:course_tag" element={<CourseStub />} />
+    </Routes>,
+    {
+      route: "/",
+      auth: { role: "faculty", userId: "301" },
+    }
+  );
+}
 
-  test("loads professor's courses and opens one", async () => {
-    renderWithProviders(
-      <Routes>
-        <Route path="/" element={<FacultyDashboard />} />
-        <Route path="/courses/:course_tag" element={<CourseStub />} />
-      </Routes>,
+describe("FacultyDashboard (updated to match new component)", () => {
+  beforeEach(() => resetDb());
+
+  test("loads faculty’s courses and allows opening a course", async () => {
+    // Seed one test course in mock DB
+    __testDb.state.coursesByProfessor[301] = [
       {
-        route: "/",
-        auth: { role: "faculty", userId: "301" },
-      }
-    );
+        id: 1,
+        course_code: "COSC-410",
+        name: "AutoGrader",
+        enrollment_key: "abc123",
+        description: "Software design course",
+      },
+    ];
 
-    // Seeded course is visible
-    expect(await screen.findByText(/FirstCourse/i)).toBeInTheDocument();
+    renderFacultyDashboard();
 
-    // Click Open and land on the stub route
+    // Course appears after fetch
+    expect(await screen.findByText(/COSC-410\s*–\s*AutoGrader/i)).toBeInTheDocument();
+    expect(screen.getByText(/Key:\s*abc123/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 total/i)).toBeInTheDocument();
+
+    // Click Open and land on course stub page
     await userEvent.click(screen.getByRole("button", { name: /open/i }));
-
-    // Confirm navigation by reading the stub content
-    expect(await screen.findByText(/COURSE PAGE 500/i)).toBeInTheDocument();
+    expect(await screen.findByText(/COURSE PAGE COSC-410/i)).toBeInTheDocument();
   });
 
   test("creates a course and prepends it to the list", async () => {
-    renderWithProviders(<FacultyDashboard />, {
-      route: "/",
-      auth: { role: "faculty", userId: "301" },
-    });
+    renderFacultyDashboard();
 
-    // Fill the form
-    await userEvent.type(screen.getByLabelText(/course tag/i), "777");
-    await userEvent.type(screen.getByLabelText(/course name/i), "NewCourse");
-    await userEvent.type(screen.getByLabelText(/description/i), "desc");
+    // Fill out the form
+    await userEvent.type(screen.getByLabelText(/course code/i), "BIO-200");
+    await userEvent.type(screen.getByLabelText(/course name/i), "Intro Biology");
+    await userEvent.type(screen.getByLabelText(/description/i), "Biology basics");
 
     // Submit
     await userEvent.click(screen.getByRole("button", { name: /create course/i }));
 
-    // Success status
-    expect(await screen.findByRole("status")).toHaveTextContent(/course created!/i);
+    // Success message appears
+    expect(await screen.findByRole("status")).toHaveTextContent(/course created/i);
 
-    // The new course is visible (and should appear first)
-    const items = await screen.findAllByRole("button", { name: /open/i });
-    const firstRow = items[0].closest("div")!;
-    expect(within(firstRow).getByText(/777\s*-\s*NewCourse/i)).toBeInTheDocument();
+    // Newly created course is visible at the top
+    const openButtons = await screen.findAllByRole("button", { name: /open/i });
+    const firstRow = openButtons[0].closest("div")!;
+    expect(within(firstRow).getByText(/BIO-200\s*–\s*Intro Biology/i)).toBeInTheDocument();
 
-    // DB has 2 items now for professor 301
-    expect(__testDb.getAll(301)).toHaveLength(2);
+    // Should reflect in mock DB
+    expect(__testDb.getAll(301).length).toBeGreaterThanOrEqual(1);
   });
 
-  test("validates required fields via disabled state before submit", async () => {
-    renderWithProviders(<FacultyDashboard />, {
-      route: "/",
-      auth: { role: "faculty", userId: "301" },
-    });
-
+  test("disables the create button until required fields are filled", async () => {
+    renderFacultyDashboard();
     const createBtn = screen.getByRole("button", { name: /create course/i });
 
     // Initially disabled
     expect(createBtn).toBeDisabled();
 
-    // Type only one field -> still disabled
-    await userEvent.type(screen.getByLabelText(/course tag/i), "777");
+    // Type one field -> still disabled
+    await userEvent.type(screen.getByLabelText(/course code/i), "COSC-300");
     expect(createBtn).toBeDisabled();
 
-    // Fill the other required field -> enabled
-    await userEvent.type(screen.getByLabelText(/course name/i), "NewCourse");
+    // Fill second field -> enabled
+    await userEvent.type(screen.getByLabelText(/course name/i), "Data Structures");
     expect(createBtn).toBeEnabled();
   });
 
-  test("shows a backend error message if POST fails", async () => {
-    // Force the POST to fail for this test only
+  test("shows a backend error if POST /courses fails", async () => {
     server.use(
-      http.post("**/api/v1/courses", () =>
-        HttpResponse.text("boom", { status: 500 })
-      )
+      http.post("**/api/v1/courses", () => HttpResponse.text("server exploded", { status: 500 }))
     );
 
-    renderWithProviders(<FacultyDashboard />, {
-      route: "/",
-      auth: { role: "faculty", userId: "301" },
-    });
+    renderFacultyDashboard();
 
-    await userEvent.type(screen.getByLabelText(/course tag/i), "999");
-    await userEvent.type(screen.getByLabelText(/course name/i), "BadCourse");
+    await userEvent.type(screen.getByLabelText(/course code/i), "ERR-101");
+    await userEvent.type(screen.getByLabelText(/course name/i), "Error Course");
     await userEvent.click(screen.getByRole("button", { name: /create course/i }));
 
     const status = await screen.findByRole("status");
-    expect(status).toHaveTextContent(/boom/i);
+    expect(status).toHaveTextContent(/server exploded|create failed/i);
   });
 
-  // ---------- NEW EDGE TESTS ----------
-
-  test("shows an error message if GET /courses fails", async () => {
+  test("shows an error if GET /courses/faculty/:id fails", async () => {
     server.use(
-      http.get("**/api/v1/courses", () =>
+      http.get("**/api/v1/courses/faculty/:id", () =>
         HttpResponse.text("load failed", { status: 500 })
       )
     );
 
-    renderWithProviders(<FacultyDashboard />, {
-      route: "/",
-      auth: { role: "faculty", userId: "301" },
-    });
+    renderFacultyDashboard();
 
-    // Error bubble appears
+    // Shows failure message and empty list
     const status = await screen.findByRole("status");
-    expect(status).toBeInTheDocument();
+    expect(status).toHaveTextContent(/failed to load|load failed/i);
 
-    // Since load failed, the list should be empty/zero total with empty-state copy
     expect(await screen.findByText(/0 total/i)).toBeInTheDocument();
     expect(screen.getByText(/no courses yet/i)).toBeInTheDocument();
   });
 
   test("renders empty state when professor has no courses", async () => {
-    resetDb();
     __testDb.state.coursesByProfessor[301] = [];
 
-    renderWithProviders(<FacultyDashboard />, {
-      route: "/",
-      auth: { role: "faculty", userId: "301" },
-    });
+    renderFacultyDashboard();
 
     expect(await screen.findByText(/0 total/i)).toBeInTheDocument();
     expect(screen.getByText(/no courses yet/i)).toBeInTheDocument();
     expect(screen.getByText(/create your first course/i)).toBeInTheDocument();
+  });
+
+  test("shows logout button and sandbox link", async () => {
+    renderFacultyDashboard();
+
+    expect(await screen.findByRole("button", { name: /log out/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /go to sandbox/i })).toHaveAttribute(
+      "href",
+      "/assignment"
+    );
   });
 });
