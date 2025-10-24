@@ -16,6 +16,10 @@ class Settings(BaseSettings):
         # "http://192.168.1.10:5173",
     ]
 
+    # --- Judge0 / Grading ---
+    JUDGE0_URL: str = "http://dind:2358"
+    BRIDGE_URL: str = "http://dind:5001"
+
     # --- Debug ---
     DEBUG: bool = True
 
