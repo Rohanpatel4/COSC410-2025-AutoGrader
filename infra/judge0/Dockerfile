@@ -12,15 +12,21 @@ LABEL maintainer=$JUDGE0_MAINTAINER
 ENV PATH "/usr/local/ruby-2.7.0/bin:/opt/.gem/bin:$PATH"
 ENV GEM_HOME "/opt/.gem/"
 
-RUN apt-get update && \
+RUN sed -i 's/deb.debian.org/archive.debian.org/g' /etc/apt/sources.list && \
+    sed -i 's/security.debian.org/archive.debian.org/g' /etc/apt/sources.list && \
+    sed -i '/buster-updates/d' /etc/apt/sources.list && \
+    apt-get update && \
     apt-get install -y --no-install-recommends \
       cron \
       libpq-dev \
-      sudo && \
+      sudo \
+      python3-pip \
+      python3-dev && \
     rm -rf /var/lib/apt/lists/* && \
     echo "gem: --no-document" > /root/.gemrc && \
     gem install bundler:2.1.4 && \
-    npm install -g --unsafe-perm aglio@2.3.0
+    npm install -g --unsafe-perm aglio@2.3.0 && \
+    pip3 install --no-cache-dir Flask==2.2.5
 
 EXPOSE 2358
 
@@ -33,6 +39,10 @@ COPY cron /etc/cron.d
 RUN cat /etc/cron.d/* | crontab -
 
 COPY . .
+
+# Copy integration bridge
+COPY integration_bridge /bridge
+ENV PYTHONPATH=/bridge
 
 ENTRYPOINT ["/api/docker-entrypoint.sh"]
 CMD ["/api/scripts/server"]

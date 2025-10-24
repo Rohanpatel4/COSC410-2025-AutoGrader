@@ -18,9 +18,10 @@ services:
     ports:
       - "127.0.0.1:12735:2375"  # Docker daemon API
       - "2358:2358"              # Judge0 API (forwarded from inner Docker)
+      - "5001:5000"              # Integration Bridge (forwarded from inner Docker)
     volumes:
       - dind-data:/var/lib/docker
-      - ./infra/judge0:/workspace/j0:ro
+      - ./infra/judge0:/workspace/j0:rw
     networks:
       - app-network
     restart: always
@@ -40,12 +41,20 @@ services:
       - |
         echo "[j0ctl] Waiting for DinD to be ready..."
         sleep 5
-        echo "[j0ctl] Booting Judge0 inside DinD..."
+        echo "[j0ctl] Starting Judge0 stack..."
         docker compose -f /workspace/j0/docker-compose.yml up -d
-        echo "[j0ctl] Judge0 stack started. Checking status:"
+        echo "[j0ctl] Judge0 stack started."
         docker compose -f /workspace/j0/docker-compose.yml ps
-        echo "[j0ctl] ✓ Judge0 should be accessible at http://localhost:2358"
-        echo "[j0ctl] Note: Inner stack publishes 2358:2358, forwarded through DinD"
+        echo ""
+        echo "[j0ctl] Building Integration Bridge..."
+        docker compose -f /workspace/j0/bridge-compose.yml build
+        echo "[j0ctl] Starting Integration Bridge..."
+        docker compose -f /workspace/j0/bridge-compose.yml up -d
+        echo "[j0ctl] Bridge stack started."
+        docker compose -f /workspace/j0/bridge-compose.yml ps
+        echo ""
+        echo "[j0ctl] ✓ Judge0 accessible at http://localhost:2358"
+        echo "[j0ctl] ✓ Bridge accessible at http://localhost:5001"
         echo "[j0ctl] Keeping container alive..."
         tail -f /dev/null
     networks:
@@ -79,6 +88,7 @@ services:
       - DOCKER_HOST=tcp://dind:2375         # let backend call the inner Docker daemon
       - PYTHONUNBUFFERED=1
       - JUDGE0_URL=http://dind:2358
+      - BRIDGE_URL=http://dind:5001
     ports:
       - "8000:8000"
     volumes:
