@@ -9,16 +9,16 @@ services:
 
     # ===================== Piston Code Execution Engine =====================
   piston:
-  image: ghcr.io/engineer-man/piston
-  platform: linux/amd64      # fixes Apple Silicon
-  container_name: piston
-  ports:
-    - "2000:2000"
-  volumes:
-    - ./piston_jobs:/piston/jobs
-  networks:
-    - app-network
-  restart: always
+    image: ghcr.io/engineer-man/piston:latest
+    platform: linux/amd64      # fixes Apple Silicon
+    container_name: piston
+    ports:
+      - "2000:2000"
+    volumes:
+      - ./piston_jobs:/piston/jobs
+    networks:
+      - app-network
+    restart: always
 
 
 

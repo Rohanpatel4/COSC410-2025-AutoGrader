@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from app.services.sandbox import run_pytest_job, run_job
 from app.core.settings import settings
 
-router = APIRouter(prefix="/api/v1", tags=["execute"])
+router = APIRouter(prefix="/execute", tags=["execute"])
 
 class ExecPayload(BaseModel):
     files: dict[str, str]     # {"student.py": "...", "tests/test_basic.py": "..."}

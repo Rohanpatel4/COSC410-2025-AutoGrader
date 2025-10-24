@@ -11,6 +11,7 @@ from .courses import router as courses_router
 from .registrations import router as registrations_router
 from .assignments import router as assignments_router
 from .execute import router as execute_router
+from .piston import router as piston_router
 
 # Init DB
 Base.metadata.create_all(bind=engine)
@@ -38,6 +39,7 @@ app.include_router(courses_router,        prefix="/api/v1/courses",     tags=["c
 app.include_router(registrations_router,  prefix="/api/v1",             tags=["registrations"])
 app.include_router(assignments_router,    prefix="/api/v1/assignments", tags=["assignments"])
 app.include_router(execute_router)
+app.include_router(piston.router)
 
 # Run the server when executed as a module
 if __name__ == "__main__":
