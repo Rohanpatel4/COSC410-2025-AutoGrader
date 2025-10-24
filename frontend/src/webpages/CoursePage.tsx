@@ -145,12 +145,12 @@ export default function CoursePage() {
             {course.course_code} – {course.name}
           </h1>
 
-          {/* Description + Enrollment key (if present) */}
+          {/* Description + Enrollment key (faculty only) */}
           <div style={{ color: "#555", fontSize: "1rem" }}>
             <p style={{ marginTop: 0 }}>
               {course.description || "No description provided."}
             </p>
-            {course.enrollment_key && (
+            {isFaculty && course.enrollment_key && (
               <p style={{ marginTop: 6 }}>
                 <span style={{ color: "#6b7280" }}>Enrollment key: </span>
                 <code>{course.enrollment_key}</code>

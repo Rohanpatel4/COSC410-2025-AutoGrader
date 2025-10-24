@@ -161,7 +161,11 @@ export default function AssignmentDetailPage() {
   return (
     <div className="container">
       <div style={{ marginBottom: 12 }}>
-        <Link to="/my">← Back</Link>
+        {a?.course_id ? (
+          <Link to={`/courses/${encodeURIComponent(a.course_id)}`}>← Back to course</Link>
+        ) : (
+          <Link to="/my">← Back</Link>
+        )}
       </div>
 
       {!assignment_id && (
