@@ -1,0 +1,17 @@
+[run]
+omit =
+    tests/*
+    test_*
+    debug_combined.py
+    scripts/*
+    test_examples/*
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise AssertionError
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    class .*\bProtocol\):
+    @(abc\.)?abstractmethod

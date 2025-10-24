@@ -53,7 +53,8 @@ def test_isolated_db_and_storage():
     if hasattr(core_db, "SessionLocal"):
         core_db.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-
+    # Create all tables
+    Base.metadata.create_all(bind=engine)
 
     # Seed test users
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

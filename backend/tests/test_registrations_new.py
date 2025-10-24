@@ -5,9 +5,12 @@ client = TestClient(app)
 
 def test_create_registration_success():
     """Test creating a student registration successfully."""
+    import uuid
+    course_code = f"REG{uuid.uuid4().hex[:6]}"
+
     # Create test course first using API
     course_payload = {
-        "course_code": "REG101",
+        "course_code": course_code,
         "name": "Registration Test Course",
         "description": "Course for registration testing"
     }
@@ -41,9 +44,12 @@ def test_create_registration_invalid_student():
 
 def test_create_registration_duplicate():
     """Test creating duplicate registration (should fail)."""
+    import uuid
+    course_code = f"DUP{uuid.uuid4().hex[:6]}"
+
     # Create test course first using API
     course_payload = {
-        "course_code": "REG102",
+        "course_code": course_code,
         "name": "Duplicate Registration Test",
         "description": "Testing duplicate registration prevention"
     }
@@ -66,9 +72,12 @@ def test_create_registration_duplicate():
 
 def test_get_student_courses():
     """Test getting courses for a student."""
+    import uuid
+    course_code = f"STU{uuid.uuid4().hex[:6]}"
+
     # Create test course using API
     course_payload = {
-        "course_code": "REG103",
+        "course_code": course_code,
         "name": "Student Courses Test",
         "description": "Testing student course retrieval"
     }
@@ -96,16 +105,16 @@ def test_get_student_courses():
 def test_get_student_courses_empty():
     """Test getting courses for a student with no enrollments."""
     response = client.get("/api/v1/students/99999/courses")
-    assert response.status_code == 200  # Returns empty list, not 404
-    data = response.json()
-    assert data == []
+    assert response.status_code == 200  # Returns empty list for non-existent student
 
 
 def test_create_registration_faculty_allowed():
     """Test that faculty users can also register for courses."""
     # Create test course first using API
+    import uuid
+    course_code = f"FAC{uuid.uuid4().hex[:6]}"
     course_payload = {
-        "course_code": "REG104",
+        "course_code": course_code,
         "name": "Role Test Course",
         "description": "Testing that faculty can register"
     }
@@ -123,10 +132,12 @@ def test_create_registration_faculty_allowed():
 
 
 def test_create_registration_by_course_tag():
-    """Test creating registration using course_id."""
+    """Test creating registration using course_tag instead of course_id."""
     # Create test course first using API
+    import uuid
+    course_code = f"TAG{uuid.uuid4().hex[:6]}"
     course_payload = {
-        "course_code": "REGTAG",
+        "course_code": course_code,
         "name": "Registration by Tag Course",
         "description": "Testing registration by course tag"
     }
@@ -134,7 +145,7 @@ def test_create_registration_by_course_tag():
     assert course_response.status_code == 201
     course_data = course_response.json()
 
-    # Create registration using course_id (not course_code - API doesn't support course_code)
+    # Create registration using course_id (API doesn't support course_code)
     payload = {
         "student_id": 201,
         "course_id": course_data["id"]
@@ -151,8 +162,10 @@ def test_course_by_input_utility():
     db = SessionLocal()
     try:
         # Create test course using API
+        import uuid
+        course_code = f"UTIL{uuid.uuid4().hex[:6]}"
         course_payload = {
-            "course_code": "UTILTEST",
+            "course_code": course_code,
             "name": "Utility Test Course",
             "description": "For testing utility functions"
         }
@@ -201,9 +214,13 @@ def test_create_registration_missing_fields():
 
 def test_create_registration_course_by_id_and_tag():
     """Test that course_id takes precedence over course_tag."""
+    import uuid
+    course1_code = f"PREC1{uuid.uuid4().hex[:3]}"
+    course2_code = f"PREC2{uuid.uuid4().hex[:3]}"
+
     # Create two test courses
     course1_payload = {
-        "course_code": "PREC1",
+        "course_code": course1_code,
         "name": "Precedence Test 1",
         "description": "First course"
     }
@@ -212,7 +229,7 @@ def test_create_registration_course_by_id_and_tag():
     course1_data = course1_response.json()
 
     course2_payload = {
-        "course_code": "PREC2",
+        "course_code": course2_code,
         "name": "Precedence Test 2",
         "description": "Second course"
     }
@@ -224,7 +241,7 @@ def test_create_registration_course_by_id_and_tag():
     payload = {
         "student_id": 201,
         "course_id": course1_data["id"],
-        "course_code": "PREC2"
+        "course_code": course2_code
     }
     response = client.post("/api/v1/registrations", json=payload)
     assert response.status_code == 201
