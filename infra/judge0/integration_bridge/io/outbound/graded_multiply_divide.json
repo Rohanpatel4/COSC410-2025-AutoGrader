@@ -1,0 +1,117 @@
+{
+  "job": "multiply_divide",
+  "total_units": 8,
+  "passed": 5,
+  "failed": 3,
+  "score_pct": 62.5,
+  "by_kind": {
+    "FAILED_ASSERTION": 3,
+    "PASSED": 5
+  },
+  "units": [
+    {
+      "status_id": 11,
+      "status": "Runtime Error (NZEC)",
+      "kind": "FAILED_ASSERTION",
+      "passed": 0,
+      "failed": 1,
+      "stdout": "",
+      "stderr": "Traceback (most recent call last):\n  File \"script.py\", line 18, in <module>\n    assert multiply(2, 3) == 6\nAssertionError\n",
+      "time": "0.292",
+      "memory": 9368,
+      "harness": "h_01.py",
+      "assert": "assert multiply(2, 3) == 6"
+    },
+    {
+      "status_id": 3,
+      "status": "Accepted",
+      "kind": "PASSED",
+      "passed": 1,
+      "failed": 0,
+      "stdout": "",
+      "stderr": "",
+      "time": "0.152",
+      "memory": 9304,
+      "harness": "h_04.py",
+      "assert": "assert multiply(2, 2) == 4"
+    },
+    {
+      "status_id": 3,
+      "status": "Accepted",
+      "kind": "PASSED",
+      "passed": 1,
+      "failed": 0,
+      "stdout": "",
+      "stderr": "",
+      "time": "0.175",
+      "memory": 9284,
+      "harness": "h_05.py",
+      "assert": "assert divide(6, 2) == 3"
+    },
+    {
+      "status_id": 11,
+      "status": "Runtime Error (NZEC)",
+      "kind": "FAILED_ASSERTION",
+      "passed": 0,
+      "failed": 1,
+      "stdout": "",
+      "stderr": "Traceback (most recent call last):\n  File \"script.py\", line 18, in <module>\n    assert multiply(-2, 3) == -6\nAssertionError\n",
+      "time": "0.206",
+      "memory": 9468,
+      "harness": "h_02.py",
+      "assert": "assert multiply(-2, 3) == -6"
+    },
+    {
+      "status_id": 11,
+      "status": "Runtime Error (NZEC)",
+      "kind": "FAILED_ASSERTION",
+      "passed": 0,
+      "failed": 1,
+      "stdout": "",
+      "stderr": "Traceback (most recent call last):\n  File \"script.py\", line 18, in <module>\n    assert multiply(2.5, 2) == 5.0\nAssertionError\n",
+      "time": "0.15",
+      "memory": 9396,
+      "harness": "h_03.py",
+      "assert": "assert multiply(2.5, 2) == 5.0"
+    },
+    {
+      "status_id": 3,
+      "status": "Accepted",
+      "kind": "PASSED",
+      "passed": 1,
+      "failed": 0,
+      "stdout": "",
+      "stderr": "",
+      "time": "0.156",
+      "memory": 9140,
+      "harness": "h_06.py",
+      "assert": "assert divide(-6, 2) == -3"
+    },
+    {
+      "status_id": 3,
+      "status": "Accepted",
+      "kind": "PASSED",
+      "passed": 1,
+      "failed": 0,
+      "stdout": "",
+      "stderr": "",
+      "time": "0.165",
+      "memory": 9344,
+      "harness": "h_08.py",
+      "assert": "assert divide(0, 5) == 0"
+    },
+    {
+      "status_id": 3,
+      "status": "Accepted",
+      "kind": "PASSED",
+      "passed": 1,
+      "failed": 0,
+      "stdout": "",
+      "stderr": "",
+      "time": "0.163",
+      "memory": 9412,
+      "harness": "h_07.py",
+      "assert": "assert divide(5, 2) == 2.5"
+    }
+  ]
+}
