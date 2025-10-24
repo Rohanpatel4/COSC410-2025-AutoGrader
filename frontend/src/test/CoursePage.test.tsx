@@ -38,8 +38,10 @@ describe("CoursePage (updated to match new component)", () => {
     // Course description
     expect(screen.getByText(/no description provided|course/i)).toBeInTheDocument();
 
-    // Faculty + student names from seeded test DB
-    expect(await screen.findByText(/Prof|Faculty|Ada/i)).toBeInTheDocument();
+    // Faculty section renders
+    expect(await screen.findByRole('heading', { name: /faculty/i })).toBeInTheDocument();
+    // Specific faculty member renders
+    expect(screen.getByText(/Prof\.?\s+Ada/i)).toBeInTheDocument();
     expect(await screen.findByText(/Student Sam/i)).toBeInTheDocument();
 
     // Existing seeded assignment

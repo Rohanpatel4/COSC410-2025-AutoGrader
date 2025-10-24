@@ -11,15 +11,15 @@ import { __testDb, resetDb } from "./handlers";
 
 // Dummy route to verify navigation
 function CourseStub() {
-  const { course_tag = "" } = useParams();
-  return <div>COURSE PAGE {course_tag}</div>;
+  const { course_code = "" } = useParams();
+  return <div>COURSE PAGE {course_code}</div>;
 }
 
 function renderFacultyDashboard() {
   return renderWithProviders(
     <Routes>
       <Route path="/" element={<FacultyDashboard />} />
-      <Route path="/courses/:course_tag" element={<CourseStub />} />
+      <Route path="/courses/:course_code" element={<CourseStub />} />
     </Routes>,
     {
       route: "/",
@@ -136,13 +136,9 @@ describe("FacultyDashboard (updated to match new component)", () => {
     expect(screen.getByText(/create your first course/i)).toBeInTheDocument();
   });
 
-  test("shows logout button and sandbox link", async () => {
+  test("shows logout button", async () => {
     renderFacultyDashboard();
-
+    
     expect(await screen.findByRole("button", { name: /log out/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /go to sandbox/i })).toHaveAttribute(
-      "href",
-      "/assignment"
-    );
   });
 });

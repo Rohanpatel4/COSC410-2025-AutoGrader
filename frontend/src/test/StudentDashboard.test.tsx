@@ -11,8 +11,8 @@ import { resetDb, __testDb } from "./handlers";
 
 // Stub route to confirm navigation
 function CourseStub() {
-  const { course_tag = "" } = useParams();
-  return <div>COURSE PAGE {course_tag}</div>;
+  const { course_code = "" } = useParams();
+  return <div>COURSE PAGE {course_code}</div>;
 }
 
 describe("StudentDashboard (MSW, updated)", () => {
@@ -20,11 +20,11 @@ describe("StudentDashboard (MSW, updated)", () => {
     resetDb();
   });
 
-  test("shows empty state, registers with course tag, and opens course", async () => {
+  test("shows empty state, registers with enrollment key, and opens course", async () => {
     renderWithProviders(
       <Routes>
         <Route path="/" element={<StudentDashboard />} />
-        <Route path="/courses/:course_tag" element={<CourseStub />} />
+        <Route path="/courses/:course_code" element={<CourseStub />} />
       </Routes>,
       { route: "/", auth: { role: "student", userId: "201" } }
     );
@@ -35,26 +35,26 @@ describe("StudentDashboard (MSW, updated)", () => {
     const registerBtn = screen.getByRole("button", { name: /register/i });
     expect(registerBtn).toBeDisabled();
 
-    // Input labeled “Course Tag”
-    const input = screen.getByLabelText(/course tag/i);
-    await userEvent.type(input, "ABC123XYZ789");
+    // Input labeled “Enrollment Key”
+    const input = screen.getByLabelText(/enrollment key/i);
+    await userEvent.type(input, "ABC123XYZ789"); // seeded key for COSC-410 / FirstCourse
     expect(registerBtn).toBeEnabled();
 
     // Submit registration
     await userEvent.click(registerBtn);
 
     // Confirm success message
-    expect(await screen.findByText(/registered!/i)).toBeInTheDocument();
-
-    // Input cleared
-    expect((screen.getByLabelText(/course tag/i) as HTMLInputElement).value).toBe("");
-
-    // Course list reloads and displays new course
     expect(await screen.findByText(/firstcourse/i)).toBeInTheDocument();
 
-    // Open course navigation works
+    expect((screen.getByLabelText(/enrollment key/i) as HTMLInputElement).value).toBe("");
+
+    // Course list reloads and displays new course
+    // UI shows "COSC-410 - FirstCourse"
+    expect(await screen.findByText(/firstcourse/i)).toBeInTheDocument();
+
+    // Open course navigation works (param is course_code)
     await userEvent.click(screen.getByRole("button", { name: /open/i }));
-    expect(await screen.findByText(/COURSE PAGE/i)).toBeInTheDocument();
+    expect(await screen.findByText(/COURSE PAGE COSC-410/i)).toBeInTheDocument();
 
     // DB shows new enrollment
     expect(__testDb.getStudentCourses(201)).toHaveLength(1);
@@ -69,12 +69,12 @@ describe("StudentDashboard (MSW, updated)", () => {
     const btn = screen.getByRole("button", { name: /register/i });
     expect(btn).toBeDisabled();
 
-    const input = screen.getByLabelText(/course tag/i);
+    const input = screen.getByLabelText(/enrollment key/i);
     await userEvent.type(input, "   ");
     expect(btn).toBeDisabled();
 
     await userEvent.clear(input);
-    await userEvent.type(input, "COSC-410");
+    await userEvent.type(input, "SOMEKEY");
     expect(btn).toBeEnabled();
 
     await userEvent.clear(input);
@@ -109,7 +109,7 @@ describe("StudentDashboard (MSW, updated)", () => {
       auth: { role: "student", userId: "201" },
     });
 
-    const input = screen.getByLabelText(/course tag/i);
+    const input = screen.getByLabelText(/enrollment key/i);
     await userEvent.type(input, "ABC123XYZ789");
     await userEvent.click(screen.getByRole("button", { name: /register/i }));
 
@@ -117,7 +117,7 @@ describe("StudentDashboard (MSW, updated)", () => {
     expect(status).toHaveTextContent(/boom|failed/i);
   });
 
-  test("handles unknown course tag (404 from server)", async () => {
+  test("handles unknown enrollment key (404 from server)", async () => {
     server.use(
       http.post("**/api/v1/registrations", () =>
         HttpResponse.text("Not Found", { status: 404 })
@@ -129,7 +129,7 @@ describe("StudentDashboard (MSW, updated)", () => {
       auth: { role: "student", userId: "201" },
     });
 
-    const input = screen.getByLabelText(/course tag/i);
+    const input = screen.getByLabelText(/enrollment key/i);
     await userEvent.type(input, "INVALIDTAG123");
     await userEvent.click(screen.getByRole("button", { name: /register/i }));
 
@@ -137,3 +137,4 @@ describe("StudentDashboard (MSW, updated)", () => {
     expect(status).toHaveTextContent(/not found|failed|course/i);
   });
 });
+

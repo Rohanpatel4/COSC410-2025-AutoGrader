@@ -5,10 +5,11 @@ import { setupServer } from "msw/node";
 // ---- Types used in tests/UI ----
 type Course = {
   id: number;
-  course_tag: string; // NOTE: in your app, the :course_id route param is the tag (e.g., "500")
+  course_code: string;      // e.g., "COSC-410"
   name: string;
   description: string | null;
   professor_id: number;
+  enrollment_key?: string;  // e.g., "ABC123XYZ789"
 };
 
 type RosterStudent = { id: number; name?: string };
@@ -16,10 +17,10 @@ type RosterFaculty = { id: number; name?: string };
 
 type Assignment = {
   id: number;
-  course_id: number;            // ADDED: used by AssignmentsPage list
+  course_id: number;
   title: string;
   description?: string | null;
-  sub_limit?: number | null;    // ADDED: used by AssignmentsPage list
+  sub_limit?: number | null;
   start?: string | null;
   stop?: string | null;
   num_attempts?: number;
@@ -28,10 +29,16 @@ type Assignment = {
 type Attempt = { id: number; grade: number | null };
 type AttemptsByAsgStudent = Record<number, Record<number, Attempt[]>>;
 
+/**
+ * NOTE ON KEYS:
+ * - Tests/components route as /courses/:course_id where :course_id is a string like "500".
+ * - We keep internal maps keyed by that string ("500"), but we DO NOT expose any course_tag in payloads.
+ * - Public Course shape only includes course_code, name, description, professor_id, enrollment_key.
+ */
 type DB = {
   // faculty dashboard
   coursesByProfessor: Record<number, Course[]>;
-  courseByTag: Record<string, Course>;
+  courseByTag: Record<string, Course>; // keyed by "500", etc.
   nextCourseId: number;
 
   // student dashboard
@@ -40,7 +47,7 @@ type DB = {
   // course page
   facultyByCourseTag: Record<string, RosterFaculty[]>;
   studentsByCourseTag: Record<string, RosterStudent[]>;
-  assignmentsByCourseTag: Record<string, Assignment[]>; // keyed by course_tag ("500")
+  assignmentsByCourseTag: Record<string, Assignment[]>;
   nextAssignmentId: number;
 
   // assignment detail page
@@ -53,24 +60,27 @@ type DB = {
 const seed: DB = {
   // Faculty Dashboard
   coursesByProfessor: {
-    // professor_id 301 has one seeded course named "FirstCourse"
+    // professor_id 301 has one seeded course
     301: [
       {
         id: 1,
-        course_tag: "500",
+        course_code: "COSC-410",
         name: "FirstCourse",
         description: "seed",
         professor_id: 301,
+        enrollment_key: "ABC123XYZ789",
       },
     ],
   },
+  // Internally we map the route key "500" -> that Course
   courseByTag: {
     "500": {
       id: 1,
-      course_tag: "500",
+      course_code: "COSC-410",
       name: "FirstCourse",
       description: "seed",
       professor_id: 301,
+      enrollment_key: "ABC123XYZ789",
     },
   },
   nextCourseId: 2,
@@ -80,7 +90,7 @@ const seed: DB = {
     // e.g. 201: [ courseObj ]
   },
 
-  // Course Page (seed a small roster + one assignment for tag 500)
+  // Course Page (seed a small roster + one assignment for tag "500")
   facultyByCourseTag: {
     "500": [{ id: 301, name: "Prof. Ada" }],
   },
@@ -91,7 +101,7 @@ const seed: DB = {
     "500": [
       {
         id: 9001,
-        course_id: 1,           // tie back to Course.id
+        course_id: 1, // tie back to Course.id
         title: "Seeded Assignment",
         description: "Warm-up",
         sub_limit: 3,
@@ -132,7 +142,7 @@ export function resetDb() {
   __db.studentsByCourseTag = structuredClone(seed.studentsByCourseTag);
   __db.assignmentsByCourseTag = structuredClone(seed.assignmentsByCourseTag);
   __db.nextAssignmentId = seed.nextAssignmentId;
-  
+
   __db.assignmentById = structuredClone(seed.assignmentById);
   __db.attemptsByAsgStudent = structuredClone(seed.attemptsByAsgStudent);
   __db.nextAttemptId = seed.nextAttemptId;
@@ -164,11 +174,22 @@ function getProfessorIdFromUrl(url: URL): number | null {
   return Number.isNaN(n) ? null : n;
 }
 
+function findCourseByEnrollmentKey(key: string): Course | undefined {
+  const lists = Object.values(__db.coursesByProfessor);
+  return lists.flat().find((c) => c.enrollment_key === key);
+}
+
+function findCourseByNumericId(id: number): Course | undefined {
+  const lists = Object.values(__db.coursesByProfessor);
+  return lists.flat().find((c) => c.id === id);
+}
+
 const COURSES_URL = "**/api/v1/courses";
 const STUDENT_COURSES_URL = "**/api/v1/students/:id/courses";
 const REGISTRATIONS_URL = "**/api/v1/registrations";
 
 // Course page URL patterns
+const COURSE_HEADER_URL = "**/api/v1/courses/:course_id"; // NEW
 const COURSE_STUDENTS_URL = "**/api/v1/courses/:course_id/students";
 const COURSE_FACULTY_URL = "**/api/v1/courses/:course_id/faculty";
 const COURSE_ASSIGNMENTS_URL = "**/api/v1/courses/:course_id/assignments";
@@ -187,6 +208,7 @@ export const handlers = [
   // ---------- Faculty: Courses CRUD-ish (list/create) ------
   // =========================================================
 
+  // Back-compat (query param style) – keep if any legacy tests still hit it.
   // GET /api/v1/courses?professor_id=301
   http.get(COURSES_URL, ({ request }) => {
     const url = new URL(request.url);
@@ -201,44 +223,52 @@ export const handlers = [
     return HttpResponse.json(list, { status: 200 });
   }),
 
-  // POST /api/v1/courses?professor_id=301
-  http.post(COURSES_URL, async ({ request }) => {
-    const url = new URL(request.url);
-    const pid = getProfessorIdFromUrl(url);
-    if (!pid) {
-      return HttpResponse.json(
-        { message: "professor_id is required" },
-        { status: 400 }
-      );
-    }
-
-    const body = (await request.json()) as {
-      course_tag?: string;
-      name?: string;
-      description?: string | null;
-    };
-
-    if (!body.course_tag?.trim() || !body.name?.trim()) {
-      return HttpResponse.json(
-        { message: "course_tag and name are required" },
-        { status: 400 }
-      );
-    }
-
-    const created: Course = {
-      id: __db.nextCourseId++,
-      course_tag: body.course_tag.trim(),
-      name: body.name.trim(),
-      description: body.description ?? null,
-      professor_id: pid,
-    };
-
-    const list = (__db.coursesByProfessor[pid] ??= []);
-    list.unshift(created);
-    __db.courseByTag[created.course_tag] = created;
-
-    return HttpResponse.json(created, { status: 201 });
+  // NEW: path-based faculty filter used by FacultyDashboard
+  // GET /api/v1/courses/faculty/:id
+  http.get("**/api/v1/courses/faculty/:id", ({ params }) => {
+    const id = Number(params.id ?? 0);
+    if (!id) return HttpResponse.json({ message: "bad professor id" }, { status: 400 });
+    const list = __db.coursesByProfessor[id] ?? [];
+    return HttpResponse.json(list, { status: 200 });
   }),
+
+  // POST /api/v1/courses  (JSON body: { professor_id, course_code, name, description })
+  http.post(COURSES_URL, async ({ request }) => {
+  const body = (await request.json()) as {
+    course_code?: string;
+    name?: string;
+    description?: string | null;
+    // professor_id?: number; // optional/ignored
+  };
+
+  const code = (body?.course_code ?? "").trim();
+  const name = (body?.name ?? "").trim();
+
+  if (!code || !name) {
+    return HttpResponse.json({ message: "course_code and name are required" }, { status: 400 });
+  }
+
+  // Default professor for test environment
+  const pid = 301;
+
+  // derive a simple string route key like "501", "502", ...
+  const newTag = String(__db.nextCourseId + 499);
+
+  const created: Course = {
+    id: __db.nextCourseId++,
+    course_code: code,
+    name,
+    description: body.description ?? null,
+    professor_id: pid,
+    enrollment_key: "EK-" + Math.random().toString(36).slice(2, 10).toUpperCase(),
+  };
+
+  const list = (__db.coursesByProfessor[pid] ??= []);
+  list.unshift(created);
+  __db.courseByTag[newTag] = created;
+
+  return HttpResponse.json(created, { status: 201 });
+}),
 
   // =========================================================
   // ----------------- Student: My courses -------------------
@@ -255,42 +285,47 @@ export const handlers = [
     return HttpResponse.json(list, { status: 200 });
   }),
 
-  // POST /api/v1/registrations  body: { student_id, course_tag | course_id }
+  // POST /api/v1/registrations
+  // body can be: { student_id, enrollment_key } (preferred)
+  // OR legacy:   { student_id, course_id } or { student_id, course_tag }
   http.post(REGISTRATIONS_URL, async ({ request }) => {
     const body = (await request.json()) as {
       student_id?: number;
-      course_tag?: string;
+      enrollment_key?: string;
       course_id?: number;
+      course_tag?: string; // legacy
     };
 
     const sid = Number(body.student_id);
-    const tag = body.course_tag?.trim();
-
-    if (!sid || Number.isNaN(sid) || (!tag && !body.course_id)) {
-      return HttpResponse.json(
-        { message: "student_id and course_tag (or course_id) are required" },
-        { status: 400 }
-      );
+    if (!sid || Number.isNaN(sid)) {
+      return HttpResponse.json({ message: "student_id is required" }, { status: 400 });
     }
 
     let course: Course | undefined;
-    if (tag) course = __db.courseByTag[tag];
-    else if (body.course_id) {
-      // find by id across all professors
-      const lists = Object.values(__db.coursesByProfessor);
-      course = lists.flat().find((c) => c.id === body.course_id);
+
+    // Preferred: enrollment_key
+    const key = (body.enrollment_key ?? "").trim();
+    if (key) {
+      course = findCourseByEnrollmentKey(key);
+    }
+
+    // Fallback: numeric course_id
+    if (!course && body.course_id) {
+      course = findCourseByNumericId(Number(body.course_id));
+    }
+
+    // Fallback: legacy course_tag string
+    if (!course && body.course_tag) {
+      const tag = String(body.course_tag).trim();
+      course = __db.courseByTag[tag];
     }
 
     if (!course) {
-      return HttpResponse.json(
-        { message: "course not found" },
-        { status: 404 }
-      );
+      return HttpResponse.text("Not Found", { status: 404 });
     }
 
     const current = (__db.enrollmentsByStudent[sid] ??= []);
-    const exists = current.some((c) => c.id === course!.id);
-    if (!exists) current.unshift(course);
+    if (!current.some((c) => c.id === course!.id)) current.unshift(course);
 
     return HttpResponse.json({ ok: true }, { status: 201 });
   }),
@@ -298,6 +333,22 @@ export const handlers = [
   // =========================================================
   // ------------------- Course Page APIs --------------------
   // =========================================================
+
+  // NEW: Course header payload expected by CoursePage
+  // GET /api/v1/courses/:course_id
+  http.get(COURSE_HEADER_URL, ({ params }) => {
+    const tag = String(params.course_id ?? "");
+    const course = __db.courseByTag[tag];
+    if (!course) return HttpResponse.json({ message: "not found" }, { status: 404 });
+    const payload = {
+      id: course.id,
+      course_code: course.course_code,
+      name: course.name,
+      description: course.description,
+      enrollment_key: course.enrollment_key,
+    };
+    return HttpResponse.json(payload, { status: 200 });
+  }),
 
   // GET /api/v1/courses/:course_id/students
   http.get(COURSE_STUDENTS_URL, ({ params }) => {
@@ -318,14 +369,59 @@ export const handlers = [
     const tag = String(params.course_id ?? "");
     const url = new URL(request.url);
     const studentId = url.searchParams.get("student_id");
-    let list = (__db.assignmentsByCourseTag[tag] ?? []).map(a => ({ ...a }));
+    let list = (__db.assignmentsByCourseTag[tag] ?? []).map((a) => ({ ...a }));
 
-    // If student-specific view matters, we could adjust num_attempts etc.
+    // student-specific view: ensure num_attempts present
     if (studentId) {
-      list = list.map(a => ({ ...a, num_attempts: a.num_attempts ?? 0 }));
+      list = list.map((a) => ({ ...a, num_attempts: a.num_attempts ?? 0 }));
     }
     return HttpResponse.json(list, { status: 200 });
   }),
+
+  // GET /api/v1/assignments/:id/grades  (faculty view)
+http.get("**/api/v1/assignments/:id/grades", ({ params }) => {
+  const id = Number(params.id);
+  const asg = __db.assignmentById[id];
+  if (!asg) {
+    return HttpResponse.json({ message: "not found" }, { status: 404 });
+  }
+
+  // find the course's "tag" (your test data keys, e.g., "500") by matching course_id
+  let tag = "";
+  for (const [k, course] of Object.entries(__db.courseByTag)) {
+    if (course.id === asg.course_id) {
+      tag = k;
+      break;
+    }
+  }
+
+  // students enrolled in that course tag
+  const roster = __db.studentsByCourseTag[tag] ?? [];
+
+  // attempts for this assignment keyed by student
+  const attemptsByStudent = __db.attemptsByAsgStudent[id] ?? {};
+
+  const students = roster.map((s) => {
+    const atts = (attemptsByStudent[s.id] ?? []).map((a) => ({ id: a.id, grade: a.grade }));
+    const best =
+      atts.length
+        ? atts.reduce((m, r) => (r.grade != null && r.grade > m ? r.grade : m), -1)
+        : null;
+    return {
+      student_id: s.id,
+      username: s.name ?? String(s.id),
+      attempts: atts,
+      best: best === -1 ? null : best,
+    };
+  });
+
+  const payload = {
+    assignment: { id: asg.id, title: asg.title },
+    students,
+  };
+
+  return HttpResponse.json(payload, { status: 200 });
+}),
 
   // POST /api/v1/courses/:course_id/assignments
   http.post(COURSE_ASSIGNMENTS_URL, async ({ params, request }) => {
@@ -337,7 +433,6 @@ export const handlers = [
       return HttpResponse.json({ message: "Title is required" }, { status: 400 });
     }
 
-    // map tag → Course to get numeric id
     const course = __db.courseByTag[tag];
     const created: Assignment = {
       id: __db.nextAssignmentId++,
@@ -352,7 +447,7 @@ export const handlers = [
 
     const list = (__db.assignmentsByCourseTag[tag] ??= []);
     list.unshift(created);
-    
+
     __db.assignmentById[created.id] = created;
 
     return HttpResponse.json(created, { status: 201 });
@@ -392,7 +487,7 @@ export const handlers = [
       return HttpResponse.json({ detail: "assignment not found" }, { status: 404 });
     }
 
-  // Try to read multipart, but don't let parsing block the request.
+    // Try to read multipart, but don't let parsing block the request.
     let sid = 0;
     let file: unknown = null;
     try {
@@ -400,39 +495,39 @@ export const handlers = [
       sid = Number(form.get("student_id") || 0);
       file = form.get("submission");
     } catch {
-  // Fall back to the student in your tests
+      // Fall back to the student in your tests
       sid = 201;
     }
 
-  // Window check (mirror UI)
-  const now = Date.now();
-  const startOk = asg.start ? now >= new Date(asg.start).getTime() : true;
-  const stopOk  = asg.stop  ? now <= new Date(asg.stop).getTime()  : true;
-  if (!(startOk && stopOk)) {
-    return HttpResponse.json({ detail: "window closed" }, { status: 403 });
-  }
-
-  // Limit check
-  if (asg.sub_limit != null && asg.sub_limit >= 0) {
-    const existing = __db.attemptsByAsgStudent[id]?.[sid] ?? [];
-    if (existing.length >= asg.sub_limit) {
-      return HttpResponse.json({ detail: "limit reached" }, { status: 429 });
+    // Window check (mirror UI)
+    const now = Date.now();
+    const startOk = asg.start ? now >= new Date(asg.start).getTime() : true;
+    const stopOk = asg.stop ? now <= new Date(asg.stop).getTime() : true;
+    if (!(startOk && stopOk)) {
+      return HttpResponse.json({ detail: "window closed" }, { status: 403 });
     }
-  }
 
-  // Fake grading + persist attempt
-  const grade = 95;
-  const attempt = { id: __db.nextAttemptId++, grade };
-  const slot = (__db.attemptsByAsgStudent[id] ??= {});
-  const list = (slot[sid] ??= []);
-  list.unshift(attempt);
+    // Limit check
+    if (asg.sub_limit != null && asg.sub_limit >= 0) {
+      const existing = __db.attemptsByAsgStudent[id]?.[sid] ?? [];
+      if (existing.length >= asg.sub_limit) {
+        return HttpResponse.json({ detail: "limit reached" }, { status: 429 });
+      }
+    }
 
-  const grading = { passed: true, passed_tests: 3, total_tests: 3 };
-  return HttpResponse.json(
-    { ok: true, grade, grading },
-    { status: 201, headers: { "Content-Type": "application/json" } }
-  );
-}),
+    // Fake grading + persist attempt
+    const grade = 95;
+    const attempt = { id: __db.nextAttemptId++, grade };
+    const slot = (__db.attemptsByAsgStudent[id] ??= {});
+    const list = (slot[sid] ??= []);
+    list.unshift(attempt);
+
+    const grading = { passed: true, passed_tests: 3, total_tests: 3 };
+    return HttpResponse.json(
+      { ok: true, grade, grading },
+      { status: 201, headers: { "Content-Type": "application/json" } }
+    );
+  }),
 
   // =========================================================
   // ---------------- Global Assignments list ----------------
@@ -444,7 +539,7 @@ export const handlers = [
       ([tag, list]) => {
         const course = __db.courseByTag[tag];
         const courseId = course ? course.id : 0;
-        return list.map(a => ({ ...a, course_id: a.course_id ?? courseId }));
+        return list.map((a) => ({ ...a, course_id: a.course_id ?? courseId }));
       }
     );
     return HttpResponse.json(flattened, { status: 200 });

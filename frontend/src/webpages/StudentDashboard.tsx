@@ -136,8 +136,6 @@ export default function StudentDashboard() {
           <h1 style={{ margin: 0 }}>Student</h1>
           <div style={styles.subheader}>
             <span>User ID: {userId ?? "—"}</span>
-            <span>•</span>
-            <Link to="/assignment">Go to Sandbox</Link>
           </div>
         </div>
         <div>

@@ -77,9 +77,10 @@ describe("AssignmentDetailPage (MSW, updated)", () => {
       })
     );
 
+    // blocks when submission limit reached
     renderAsStudent();
 
-    expect(await screen.findByText(/submission limit/i)).toBeInTheDocument();
+    expect(await screen.findByText(/^submission limit/i)).toBeInTheDocument(); // ← anchor start
     expect(await screen.findByText(/you’ve reached the submission limit/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /submit/i })).toBeDisabled();
   });

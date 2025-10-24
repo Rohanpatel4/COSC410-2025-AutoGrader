@@ -103,16 +103,6 @@ function AppRouter() {
           }
         />
 
-        {/* Temporary sandbox route (unprotected per your comment, change if needed) */}
-        {/* <Route
-          path="/assignment/*"
-          element={
-            <Protected>
-              <SandboxApp />
-            </Protected>
-          }
-        /> */}
-
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
