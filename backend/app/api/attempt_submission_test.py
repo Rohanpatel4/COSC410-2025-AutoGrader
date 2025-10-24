@@ -6,6 +6,7 @@ import asyncio
 import base64
 import tarfile
 import io
+import os
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from starlette import status
@@ -135,7 +136,27 @@ def _parse_pytest_output(stdout: str, stderr: str) -> Dict[str, Any]:
         "has_tests": total_tests > 0
     }
 
-# ----- Judge0 integration -----
+# ----- Bridge integration -----
+
+async def _submit_to_bridge(submission_code: str, test_code: str, job_name: str = "job") -> Dict[str, Any]:
+    """
+    Submit code to the Judge0 Integration Bridge.
+    The bridge will split tests, run through Judge0, and return graded results.
+    """
+    bridge_url = os.getenv("BRIDGE_URL", "http://localhost:5001")
+    payload = {
+        "submission_code": submission_code,
+        "test_code": test_code,
+        "job_name": job_name,
+    }
+    
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        r = await client.post(f"{bridge_url}/grade", json=payload)
+        r.raise_for_status()
+        return r.json()
+
+
+# ----- Judge0 integration (direct, fallback) -----
 
 async def _submit_to_judge0(source_code: str, language_id: int, stdin: str = "") -> Dict[str, Any]:
     """
@@ -402,6 +423,111 @@ if __name__ == "__main__":
             pass
 
 router = APIRouter(tags=["attempts"])
+print(f"[DEBUG] Router created: {router}", flush=True)
+print(f"[DEBUG] About to define attempt_submission_test_bridge", flush=True)
+
+@router.post("/bridge", status_code=status.HTTP_201_CREATED)
+async def attempt_submission_test_bridge(
+    submission: UploadFile = File(..., description="Student .py submission"),
+    test_case: str = Form(..., description="Test case code (text)"),
+    job_name: str = Form(default="submission", description="Optional job identifier"),
+):
+    """
+    Submit code for grading via the Judge0 Integration Bridge.
+    This splits tests into individual units and runs them in parallel.
+    """
+    # 1) Validate file type
+    if not submission.filename or not submission.filename.lower().endswith(".py"):
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Only .py files are accepted."
+        )
+
+    # 2) Convert UploadFile -> str
+    try:
+        conv = _get_callable(fc, "file_to_text")
+        if conv:
+            student_code = await _call_safely(conv, submission)
+        else:
+            sub_bytes = await submission.read()
+            alt1 = _get_callable(fc, "py_bytes_to_string")
+            alt2 = _get_callable(fc, "convert_py_bytes_to_string")
+            alt3 = _get_callable(fc, "convert_to_string")
+            if alt1:
+                student_code = await _call_safely(alt1, submission.filename, sub_bytes)
+            elif alt2:
+                student_code = await _call_safely(alt2, submission.filename, sub_bytes)
+            elif alt3:
+                student_code = await _call_safely(alt3, sub_bytes)
+            else:
+                student_code = sub_bytes.decode("utf-8", errors="strict")
+
+        if not isinstance(student_code, str):
+            raise TypeError("converter did not return str")
+        if not student_code.strip():
+            raise ValueError("submission is empty after conversion")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Submission conversion failed: {e}")
+
+    # 3) Submit to bridge
+    try:
+        result = await _submit_to_bridge(
+            submission_code=student_code,
+            test_code=test_case,
+            job_name=job_name
+        )
+        
+        # Bridge returns:
+        # {
+        #   "job": "job_name",
+        #   "total_units": 5,
+        #   "passed": 4,
+        #   "failed": 1,
+        #   "score_pct": 80.0,
+        #   "by_kind": {"PASSED": 4, "FAILED_ASSERTION": 1},
+        #   "units": [...]
+        # }
+        
+        return {
+            "status": "ok",
+            "submission_filename": submission.filename,
+            "converter_used": "file_to_text" if _get_callable(fc, "file_to_text") else "fallback",
+            "sandbox_used": "judge0_integration_bridge",
+            "grading": {
+                "passed": result.get("failed", 0) == 0,
+                "total_tests": result.get("total_units", 0),
+                "passed_tests": result.get("passed", 0),
+                "failed_tests": result.get("failed", 0),
+                "score_pct": result.get("score_pct", 0.0),
+            },
+            "result": {
+                "job_name": result.get("job", job_name),
+                "by_kind": result.get("by_kind", {}),
+                "units": result.get("units", []),
+                "raw": result if settings.DEBUG else None,
+            },
+        }
+        
+    except httpx.HTTPStatusError as e:
+        error_detail = {
+            "message": f"Bridge returned error: {e.response.status_code}",
+            "bridge_response": e.response.text if settings.DEBUG else None
+        }
+        raise HTTPException(status_code=502, detail=error_detail)
+    except httpx.RequestError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Could not connect to Judge0 bridge: {str(e)}"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Bridge error: {str(e)}")
+
+
+@router.get("/test-route")
+async def test_route_registration():
+    return {"message": "Test route works"}
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def attempt_submission_test(
