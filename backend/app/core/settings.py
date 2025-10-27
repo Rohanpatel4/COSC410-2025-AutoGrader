@@ -17,8 +17,8 @@ class Settings(BaseSettings):
     ]
 
     # --- Judge0 / Grading ---
+    # Judge0 runs in DinD container at http://dind:2358
     JUDGE0_URL: str = "http://dind:2358"
-    BRIDGE_URL: str = "http://dind:5001"
 
     # --- Debug ---
     DEBUG: bool = True

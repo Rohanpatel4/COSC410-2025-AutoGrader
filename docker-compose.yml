@@ -5,7 +5,7 @@ x-logging: &default-logging
       max-size: 100M
 
 services:
-  # ===================== Inner Docker daemon (rootless; no --privileged) =====================
+  # ===================== Inner Docker daemon (DinD) =====================
   dind:
     image: docker:27-dind
     privileged: true
@@ -18,7 +18,6 @@ services:
     ports:
       - "127.0.0.1:12735:2375"  # Docker daemon API
       - "2358:2358"              # Judge0 API (forwarded from inner Docker)
-      - "5001:5000"              # Integration Bridge (forwarded from inner Docker)
     volumes:
       - dind-data:/var/lib/docker
       - ./infra/judge0:/workspace/j0:rw
@@ -40,41 +39,18 @@ services:
       - -c
       - |
         echo "[j0ctl] Waiting for DinD to be ready..."
-        sleep 5
+        sleep 15
         echo "[j0ctl] Starting Judge0 stack..."
         docker compose -f /workspace/j0/docker-compose.yml up -d
         echo "[j0ctl] Judge0 stack started."
         docker compose -f /workspace/j0/docker-compose.yml ps
         echo ""
-        echo "[j0ctl] Building Integration Bridge..."
-        docker compose -f /workspace/j0/bridge-compose.yml build
-        echo "[j0ctl] Starting Integration Bridge..."
-        docker compose -f /workspace/j0/bridge-compose.yml up -d
-        echo "[j0ctl] Bridge stack started."
-        docker compose -f /workspace/j0/bridge-compose.yml ps
-        echo ""
-        echo "[j0ctl] ✓ Judge0 accessible at http://localhost:2358"
-        echo "[j0ctl] ✓ Bridge accessible at http://localhost:5001"
+        echo "[j0ctl] ✓ Judge0 accessible at http://dind:2358 (from backend)"
+        echo "[j0ctl] ✓ Judge0 accessible at http://localhost:2358 (from host)"
         echo "[j0ctl] Keeping container alive..."
         tail -f /dev/null
     networks:
       - app-network
-    restart: always
-
-  # ===================== Runner (talks to inner daemon; great for manual tests) =====================
-  runner:
-    build:
-      context: ./runner
-      dockerfile: Dockerfile
-    environment:
-      DOCKER_HOST: tcp://dind:2375   # points CLI to the inner daemon
-    volumes:
-      - runner-tmp:/runner/tmp       # shared scratch for submissions/tests
-    depends_on:
-      - dind
-    networks:
-      - app-network
-    <<: *default-logging
     restart: always
 
   # ===================== Backend (FastAPI) =====================
@@ -85,16 +61,14 @@ services:
     environment:
       - DATABASE_URL=sqlite:///./backend/app.db
       - CORS_ORIGINS=["http://localhost:5173"]
-      - DOCKER_HOST=tcp://dind:2375         # let backend call the inner Docker daemon
       - PYTHONUNBUFFERED=1
+      # Judge0 runs in DinD at http://dind:2358
       - JUDGE0_URL=http://dind:2358
-      - BRIDGE_URL=http://dind:5001
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app/backend               # your current bind mount
       - storage_data:/app/storage
-      - runner-tmp:/runner/tmp               # share the scratch area with runner & inner jobs
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/docs'); print('ok')"]
       interval: 10s
@@ -102,8 +76,8 @@ services:
       retries: 5
       start_period: 30s
     depends_on:
-      - dind                                 # used to depend on judge0; now depends on inner Docker
-      - j0ctl                                # ensure Judge0 is started inside DinD
+      - dind
+      - j0ctl
     networks:
       - app-network
     <<: *default-logging
@@ -128,9 +102,8 @@ services:
 
 # ===================== Volumes =====================
 volumes:
-  storage_data:        # you already had this for backend storage
+  storage_data:        # backend storage
   dind-data:           # inner daemon's image cache/layers
-  runner-tmp:          # job scratch shared by backend/runner
 
 # ===================== Network =====================
 networks:
