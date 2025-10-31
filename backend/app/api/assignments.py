@@ -238,7 +238,15 @@ async def submit_to_assignment(
     student_id: int = Form(...),
     db: Session = Depends(get_db),
 ):
+<<<<<<< Updated upstream
  
+=======
+    """
+    Create a StudentSubmission for this assignment and run it against the
+    assignment's stored test file (latest TestCase row).
+    # TODO: Replace with Piston implementation
+    """
+>>>>>>> Stashed changes
     a = db.get(Assignment, assignment_id)
     if not a:
         raise HTTPException(404, "Assignment not found")
@@ -281,6 +289,7 @@ async def submit_to_assignment(
     except Exception as e:
         raise HTTPException(400, f"Failed to read submission: {e}")
 
+<<<<<<< Updated upstream
     # Calculate grade based on test results
     passed = grading.get("all_passed", False)
     total_tests = grading.get("total_tests", 0)
@@ -291,32 +300,13 @@ async def submit_to_assignment(
         student_id=student_id,
         assignment_id=assignment_id,
         grade=grade,
+=======
+     # TODO: Replace with Piston implementation
+    raise HTTPException(
+        status_code=501,
+        detail="Judge0 integration has been removed. Assignment submission will be replaced with Piston."
+>>>>>>> Stashed changes
     )
-    db.add(attempt)
-    db.commit()
-    db.refresh(attempt)
-
-    return {
-        "id": attempt.id,
-        "assignment_id": assignment_id,
-        "student_id": student_id,
-        "grade": grade,
-        "grading": {
-            "passed": grading.get("all_passed", False),
-            "total_tests": grading.get("total_tests", 0),
-            "passed_tests": grading.get("passed_tests", 0),
-            "failed_tests": grading.get("failed_tests", 0),
-        },
-        # this all originates from judge0
-        "result": {
-            "status": result.get("status", {}),
-            "stdout": result.get("stdout", ""),
-            "stderr": result.get("stderr") or "",
-            "compile_output": result.get("compile_output") or "",
-            "time": result.get("time", ""),
-            "memory": result.get("memory", ""),
-        },
-    }
 
 @router.get("/{assignment_id}/grades", response_model=dict)
 def grades_for_assignment(assignment_id: int, db: Session = Depends(get_db)):

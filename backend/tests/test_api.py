@@ -160,70 +160,33 @@ async def test_attempt_submission_test_bridge_bridge_error(mock_submit):
 #     assert got["status"] in ("RUNNING","SUCCEEDED")
 
 
-# Test the main submission endpoint
+# Test the main submission endpoint (now returns 501 since Judge0 removed)
 @pytest.mark.asyncio
-@patch('app.api.attempt_submission_test._run_with_judge0')
-async def test_attempt_submission_test_success(mock_run_judge0):
-    """Test successful main submission."""
-    mock_run_judge0.return_value = {
-        "stdout": "PASSED: test_example\n",
-        "stderr": "",
-        "compile_output": "",
-        "returncode": 0,
-        "status": {"id": 3},
-        "time": 0.1,
-        "memory": 1024,
-        "language_id_used": 71,
-        "grading": {
-            "total_tests": 1,
-            "passed_tests": 1,
-            "failed_tests": 0
-        }
-    }
-
+async def test_attempt_submission_test_not_implemented():
+    """Test main submission endpoint returns 501 (Judge0 removed)."""
     file_content = b"def add(a, b):\n    return a + b\n"
     files = {"submission": ("test.py", file_content, "text/x-python")}
     data = {"test_case": "def test_add():\n    assert add(1, 2) == 3\n"}
 
     response = client.post("/api/v1/attempts", files=files, data=data)
 
-    assert response.status_code == 201
+    assert response.status_code == 501
     result = response.json()
-    assert result["grading"]["passed_tests"] == 1
-    assert result["grading"]["failed_tests"] == 0
-    mock_run_judge0.assert_called_once()
+    assert "Judge0 integration has been removed" in result["detail"]
 
 
 @pytest.mark.asyncio
-@patch('app.api.attempt_submission_test._run_with_judge0')
-async def test_attempt_submission_test_invalid_file_type(mock_run_judge0):
-    """Test main submission with invalid file type."""
-    file_content = b"def add(a, b):\n    return a + b\n"
-    files = {"submission": ("test.txt", file_content, "text/plain")}
-    data = {"test_case": "def test_add():\n    assert add(1, 2) == 3\n"}
-
-    response = client.post("/api/v1/attempts", files=files, data=data)
-
-    assert response.status_code == 415
-    assert "Only .py files are accepted" in response.json()["detail"]
-    mock_run_judge0.assert_not_called()
-
-
-@pytest.mark.asyncio
-@patch('app.api.attempt_submission_test._run_with_judge0')
-async def test_attempt_submission_test_judge0_error(mock_run_judge0):
-    """Test main submission when Judge0 fails."""
-    mock_run_judge0.side_effect = Exception("Judge0 connection failed")
-
+async def test_attempt_submission_test_bridge_not_implemented():
+    """Test bridge submission endpoint returns 501 (Judge0 removed)."""
     file_content = b"def add(a, b):\n    return a + b\n"
     files = {"submission": ("test.py", file_content, "text/x-python")}
     data = {"test_case": "def test_add():\n    assert add(1, 2) == 3\n"}
 
-    response = client.post("/api/v1/attempts", files=files, data=data)
+    response = client.post("/api/v1/attempts/bridge", files=files, data=data)
 
-    assert response.status_code == 500
+    assert response.status_code == 501
     result = response.json()
-    assert result["detail"]["message"] == "Judge0 error"
+    assert "Judge0 Integration Bridge has been removed" in result["detail"]
 
 
 def test_test_route_registration():

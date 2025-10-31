@@ -182,7 +182,7 @@ Successfully tested the complete workflow for creating an assignment, uploading 
 5. **Database Persistence**: All submissions and attempts are stored correctly
 6. **Multiple Attempts**: Students can submit multiple times, and best grade is tracked
 7. **Multiple Students**: Different students can submit to the same assignment
-8. **Judge0 Integration**: Code execution works correctly with proper error handling
+8. **Code Execution**: Endpoints prepared for Piston integration (Judge0 removed)
 9. **Test Execution**: Inline test functions execute correctly without import issues
 
 ### 📝 Test Format Requirements

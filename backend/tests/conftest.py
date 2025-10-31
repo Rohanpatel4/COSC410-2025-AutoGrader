@@ -21,7 +21,7 @@ from app.core import db as core_db  # has Base, engine, SessionLocal maybe
 from app.api.main import app
 from scripts.seed_users import reseed_users, USERS
 
-# REMOVED: Mock Judge0 server - using secure subprocess execution instead
+# NOTE: Code execution mocking will be updated when Piston integration is added
 
 @pytest.fixture(scope="session", autouse=True)
 def test_isolated_db_and_storage():
