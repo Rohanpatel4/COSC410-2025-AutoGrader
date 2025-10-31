@@ -5,119 +5,52 @@ x-logging: &default-logging
       max-size: 100M
 
 services:
-  # ===================== Inner Docker daemon (rootless; no --privileged) =====================
-  dind:
-    image: docker:27-dind
-    privileged: true
-    command:
-      - "--host=tcp://0.0.0.0:2375"
-      - "--storage-driver=overlay2"
-    environment:
-      DOCKER_TLS_CERTDIR: ""
-      DOCKER_DRIVER: overlay2
-    ports:
-      - "127.0.0.1:12735:2375"  # Docker daemon API
-      - "2358:2358"              # Judge0 API (forwarded from inner Docker)
-      - "5001:5000"              # Integration Bridge (forwarded from inner Docker)
-    volumes:
-      - dind-data:/var/lib/docker
-      - ./infra/judge0:/workspace/j0:rw
-    networks:
-      - app-network
-    restart: always
-
-  # ===================== Judge0 bootstrap inside DinD =====================
-  j0ctl:
-    image: docker:27-cli
-    depends_on:
-      - dind
-    environment:
-      DOCKER_HOST: tcp://dind:2375
-    volumes:
-      - ./infra/judge0:/workspace/j0:ro
-    command:
-      - /bin/sh
-      - -c
-      - |
-        echo "[j0ctl] Waiting for DinD to be ready..."
-        sleep 5
-        echo "[j0ctl] Starting Judge0 stack..."
-        docker compose -f /workspace/j0/docker-compose.yml up -d
-        echo "[j0ctl] Judge0 stack started."
-        docker compose -f /workspace/j0/docker-compose.yml ps
-        echo ""
-        echo "[j0ctl] Building Integration Bridge..."
-        docker compose -f /workspace/j0/bridge-compose.yml build
-        echo "[j0ctl] Starting Integration Bridge..."
-        docker compose -f /workspace/j0/bridge-compose.yml up -d
-        echo "[j0ctl] Bridge stack started."
-        docker compose -f /workspace/j0/bridge-compose.yml ps
-        echo ""
-        echo "[j0ctl] ✓ Judge0 accessible at http://localhost:2358"
-        echo "[j0ctl] ✓ Bridge accessible at http://localhost:5001"
-        echo "[j0ctl] Keeping container alive..."
-        tail -f /dev/null
-    networks:
-      - app-network
-    restart: always
-
-  # ===================== Runner (talks to inner daemon; great for manual tests) =====================
-  runner:
-    build:
-      context: ./runner
-      dockerfile: Dockerfile
-    environment:
-      DOCKER_HOST: tcp://dind:2375   # points CLI to the inner daemon
-    volumes:
-      - runner-tmp:/runner/tmp       # shared scratch for submissions/tests
-    depends_on:
-      - dind
-    networks:
-      - app-network
-    <<: *default-logging
-    restart: always
-
-  # ===================== Backend (FastAPI) =====================
   backend:
-    build:
-      context: .
-      dockerfile: infra/docker/backend.Dockerfile
+    image: python:3.12-slim
+    working_dir: /app
     environment:
-      - DATABASE_URL=sqlite:///./backend/app.db
-      - CORS_ORIGINS=["http://localhost:5173"]
-      - DOCKER_HOST=tcp://dind:2375         # let backend call the inner Docker daemon
-      - PYTHONUNBUFFERED=1
-      - JUDGE0_URL=http://dind:2358
-      - BRIDGE_URL=http://dind:5001
+      DATABASE_URL: sqlite:///./backend/app.db
+      CORS_ORIGINS: '["http://localhost:5173"]'
+      PYTHONUNBUFFERED: "1"
+      PYTHONPATH: /app/backend         # <-- key change
+    volumes:
+      - ./backend:/app/backend
+      - storage_data:/app/storage
+    command: >
+      sh -c "
+        python -m pip install --no-cache-dir --upgrade pip &&
+        if [ -f backend/requirements.txt ]; then
+          pip install --no-cache-dir -r backend/requirements.txt;
+        else
+          pip install --no-cache-dir fastapi uvicorn;
+        fi &&
+        uvicorn app.api.main:app --host 0.0.0.0 --port 8000   # <-- key change
+      "
     ports:
       - "8000:8000"
-    volumes:
-      - ./backend:/app/backend               # your current bind mount
-      - storage_data:/app/storage
-      - runner-tmp:/runner/tmp               # share the scratch area with runner & inner jobs
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/docs'); print('ok')"]
       interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 30s
-    depends_on:
-      - dind                                 # used to depend on judge0; now depends on inner Docker
-      - j0ctl                                # ensure Judge0 is started inside DinD
-    networks:
-      - app-network
-    <<: *default-logging
-    restart: always
+      retries: 12
+      start_period: 50s
 
-  # ===================== Frontend (unchanged) =====================
+  # ===== Frontend (Vite dev server) =====
   frontend:
-    build:
-      context: .
-      dockerfile: infra/docker/frontend.Dockerfile
+    image: node:20-alpine
+    working_dir: /app/frontend
     environment:
-      - VITE_API_URL=/api
+      # Use backend directly; no nginx proxy, no code changes required
+      VITE_API_URL: http://localhost:8000
+    volumes:
+      - ./frontend:/app/frontend
+    command: >
+      sh -c "
+        npm ci &&
+        npm run dev -- --host 0.0.0.0 --port 5173
+      "
     ports:
-      - "5173:80"
+      - "5173:5173"
     depends_on:
       backend:
         condition: service_healthy
@@ -126,15 +59,9 @@ services:
     <<: *default-logging
     restart: always
 
-# ===================== Volumes =====================
 volumes:
-  storage_data:        # you already had this for backend storage
-  dind-data:           # inner daemon's image cache/layers
-  runner-tmp:          # job scratch shared by backend/runner
+  storage_data:
 
-# ===================== Network =====================
 networks:
   app-network:
     driver: bridge
-
-  
