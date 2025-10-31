@@ -19,7 +19,7 @@ class Settings(BaseSettings):
 
 
     # --- Debug ---
-    # should we keep this?DEBUG: bool = True
+    DEBUG: bool = True
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod

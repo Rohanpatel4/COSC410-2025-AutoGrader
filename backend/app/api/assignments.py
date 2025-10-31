@@ -238,15 +238,11 @@ async def submit_to_assignment(
     student_id: int = Form(...),
     db: Session = Depends(get_db),
 ):
-<<<<<<< Updated upstream
- 
-=======
     """
     Create a StudentSubmission for this assignment and run it against the
     assignment's stored test file (latest TestCase row).
     # TODO: Replace with Piston implementation
     """
->>>>>>> Stashed changes
     a = db.get(Assignment, assignment_id)
     if not a:
         raise HTTPException(404, "Assignment not found")
@@ -289,25 +285,11 @@ async def submit_to_assignment(
     except Exception as e:
         raise HTTPException(400, f"Failed to read submission: {e}")
 
-<<<<<<< Updated upstream
-    # Calculate grade based on test results
-    passed = grading.get("all_passed", False)
-    total_tests = grading.get("total_tests", 0)
-    grade = 100 if passed and total_tests > 0 else 0
-
-    # persist attempt
-    attempt = StudentSubmission(
-        student_id=student_id,
-        assignment_id=assignment_id,
-        grade=grade,
-=======
      # TODO: Replace with Piston implementation
     raise HTTPException(
         status_code=501,
         detail="Judge0 integration has been removed. Assignment submission will be replaced with Piston."
->>>>>>> Stashed changes
     )
-
 @router.get("/{assignment_id}/grades", response_model=dict)
 def grades_for_assignment(assignment_id: int, db: Session = Depends(get_db)):
     """

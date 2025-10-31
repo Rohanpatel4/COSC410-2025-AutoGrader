@@ -1,9 +1,13 @@
-from fastapi import APIRouter
+# backend/app/api/attempt_submission_test.py
+from typing import Any, Dict
+import importlib, inspect, ast
+import httpx
+import asyncio
+import base64
+import tarfile
+import io
+import os
 
-<<<<<<< Updated upstream
-# Placeholder router so imports don't fail
-router = APIRouter(prefix="/attempts", tags=["attempts"])
-=======
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from starlette import status
 from app.core.settings import settings
@@ -319,7 +323,6 @@ async def attempt_submission_test(
         status_code=501,
         detail="Judge0 integration has been removed. This endpoint will be replaced with Piston."
     )
->>>>>>> Stashed changes
 
 @router.get("/")
 def get_attempts():

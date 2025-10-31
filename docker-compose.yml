@@ -5,35 +5,12 @@ x-logging: &default-logging
       max-size: 100M
 
 services:
-<<<<<<< Updated upstream
-=======
   # ===================== Backend (FastAPI) =====================
->>>>>>> Stashed changes
   backend:
-    image: python:3.12-slim
-    working_dir: /app
+    build:
+      context: .
+      dockerfile: infra/docker/backend.Dockerfile
     environment:
-<<<<<<< Updated upstream
-      DATABASE_URL: sqlite:///./backend/app.db
-      CORS_ORIGINS: '["http://localhost:5173"]'
-      PYTHONUNBUFFERED: "1"
-      PYTHONPATH: /app/backend         # <-- key change
-    volumes:
-      - ./backend:/app/backend
-      - storage_data:/app/storage
-    command: >
-      sh -c "
-        python -m pip install --no-cache-dir --upgrade pip &&
-        if [ -f backend/requirements.txt ]; then
-          pip install --no-cache-dir -r backend/requirements.txt;
-        else
-          pip install --no-cache-dir fastapi uvicorn;
-        fi &&
-        uvicorn app.api.main:app --host 0.0.0.0 --port 8000   # <-- key change
-      "
-    ports:
-      - "8000:8000"
-=======
       - DATABASE_URL=sqlite:///./backend/app.db
       - CORS_ORIGINS=["http://localhost:5173"]
       - PYTHONUNBUFFERED=1
@@ -42,22 +19,16 @@ services:
     volumes:
       - ./backend:/app/backend               # your current bind mount
       - storage_data:/app/storage
->>>>>>> Stashed changes
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/docs'); print('ok')"]
       interval: 10s
       timeout: 5s
-<<<<<<< Updated upstream
-      retries: 12
-      start_period: 50s
-=======
       retries: 5
       start_period: 30s
     networks:
       - app-network
     <<: *default-logging
     restart: always
->>>>>>> Stashed changes
 
   # ===== Frontend (Vite dev server) =====
   frontend:
@@ -84,11 +55,7 @@ services:
     restart: always
 
 volumes:
-<<<<<<< Updated upstream
-  storage_data:
-=======
   storage_data:        # backend storage
->>>>>>> Stashed changes
 
 networks:
   app-network:
