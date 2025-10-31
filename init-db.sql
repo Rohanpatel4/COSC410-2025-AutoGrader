@@ -1,5 +1,0 @@
--- Create judge0 user and database for Judge0
-CREATE USER judge0 WITH PASSWORD 'Rqh4mF33BYZSb3WmRL4S3yntyGwzNY95';
-ALTER USER judge0 CREATEDB;
-CREATE DATABASE judge0 OWNER judge0;
-GRANT ALL PRIVILEGES ON DATABASE judge0 TO judge0;

@@ -238,11 +238,7 @@ async def submit_to_assignment(
     student_id: int = Form(...),
     db: Session = Depends(get_db),
 ):
-    """
-    Create a StudentSubmission for this assignment and run it against the
-    assignment's stored test file (latest TestCase row).
-    # JUDGE0: This endpoint currently depends on Judge0 for execution.
-    """
+ 
     a = db.get(Assignment, assignment_id)
     if not a:
         raise HTTPException(404, "Assignment not found")
@@ -284,17 +280,6 @@ async def submit_to_assignment(
         student_code = sub_bytes.decode("utf-8")
     except Exception as e:
         raise HTTPException(400, f"Failed to read submission: {e}")
-
-     # JUDGE0: external grader import
-    from app.api.attempt_submission_test import _run_with_judge0, _parse_pytest_output
-
-    # Run with Judge0 sandbox
-    try:
-        result = await _run_with_judge0(student_code, tc.filename)
-        grading = result.get("grading", {})
-    except Exception as e:
-        err_payload = e.args[0] if (hasattr(e, "args") and e.args and isinstance(e.args[0], dict)) else {"error": repr(e)}
-        raise HTTPException(status_code=500, detail={"message": "Execution error", "error": err_payload})
 
     # Calculate grade based on test results
     passed = grading.get("all_passed", False)
