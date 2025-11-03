@@ -5,6 +5,20 @@ x-logging: &default-logging
       max-size: 100M
 
 services:
+  # ===================== Piston (Code Execution Engine) =====================
+  piston:
+    image: ghcr.io/engineer-man/piston
+    container_name: piston
+    privileged: true
+    ports:
+      - "2000:2000"
+    volumes:
+      - piston_data:/piston
+    networks:
+      - app-network
+    <<: *default-logging
+    restart: always
+
   # ===================== Backend (FastAPI) =====================
   backend:
     build:
@@ -13,6 +27,7 @@ services:
     environment:
       - DATABASE_URL=sqlite:///./backend/app.db
       - CORS_ORIGINS=["http://localhost:5173"]
+      - PISTON_URL=http://piston:2000
       - PYTHONUNBUFFERED=1
     ports:
       - "8000:8000"
@@ -25,6 +40,8 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    depends_on:
+      - piston
     networks:
       - app-network
     <<: *default-logging
@@ -56,6 +73,7 @@ services:
 
 volumes:
   storage_data:        # backend storage
+  piston_data:         # Piston execution isolation (Windows compatible)
 
 networks:
   app-network:

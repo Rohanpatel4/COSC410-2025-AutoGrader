@@ -21,7 +21,7 @@ from app.core import db as core_db  # has Base, engine, SessionLocal maybe
 from app.api.main import app
 from scripts.seed_users import reseed_users, USERS
 
-# NOTE: Code execution mocking will be updated when Piston integration is added
+# NOTE: Code execution uses Piston integration
 
 @pytest.fixture(scope="session", autouse=True)
 def test_isolated_db_and_storage():

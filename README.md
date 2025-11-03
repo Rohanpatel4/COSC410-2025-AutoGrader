@@ -1,4 +1,6 @@
-# Offline Sandbox (MVP)
+# COSC410 AutoGrader
+
+Autograding system for coding-based classes using Piston for code execution.
 
 ## For inspect_db.py, seed_db.py, and rebuilding frontend
 ```bash
@@ -49,7 +51,9 @@ npm run test:cov
 ## Docker
 ```bash
 docker compose up --build
-# visit http://localhost:8080
+# visit http://localhost:5173 for frontend
+# backend API: http://localhost:8000/docs
+# Piston API: http://localhost:2000/api/v2/runtimes
 ```
 
 # Run pytest with coverage (shows % covered per file) (From root directory)
