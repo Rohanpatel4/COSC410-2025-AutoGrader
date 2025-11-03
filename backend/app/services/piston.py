@@ -4,6 +4,34 @@ import httpx
 from app.core.settings import settings
 
 
+async def _ensure_python312() -> str:
+    """Ensure Python 3.12 exists on Piston. Return resolved version (e.g., '3.12.0') or '3.12.x' selector."""
+    base = settings.PISTON_URL.rstrip("/")
+    want = "3.12.x"
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        # check
+        try:
+            r = await client.get(f"{base}/api/v2/runtimes")
+            r.raise_for_status()
+            for rt in r.json():
+                if rt.get("language") == "python" and rt.get("version", "").startswith("3.12"):
+                    return rt["version"]
+        except Exception:
+            pass
+        # install (idempotent)
+        try:
+            r = await client.post(f"{base}/api/v2/packages", json={"language":"python","version":want})
+            r.raise_for_status()
+        except httpx.HTTPStatusError:
+            pass
+        # re-check
+        r = await client.get(f"{base}/api/v2/runtimes")
+        r.raise_for_status()
+        for rt in r.json():
+            if rt.get("language") == "python" and rt.get("version", "").startswith("3.12"):
+                return rt["version"]
+    return want  # fall back to selector
+
 def _parse_pytest_output(stdout: str, stderr: str) -> Dict[str, Any]:
     """Parse test output to determine pass/fail status and test counts."""
     combined_output = (stdout or "") + "\n" + (stderr or "")
@@ -115,10 +143,14 @@ def _map_status_to_judge0(returncode: int, timed_out: bool = False) -> int:
     return 4  # Wrong Answer
 
 
+async def _get_python_version() -> str:
+    return await _ensure_python312()
+
+
 async def execute_code(
     student_code: str,
     test_code: str,
-    timeout_ms: int = 10000
+    timeout_ms: int = 3000
 ) -> Dict[str, Any]:
     """
     Execute student code with tests using Piston API.
@@ -136,14 +168,20 @@ async def execute_code(
     # Combine code
     combined_code = _combine_code(student_code, test_code)
     
+    # Get available Python version (or install if needed)
+    python_version = await _get_python_version()
+    
     # Piston API v2 execute endpoint
     # See: https://github.com/engineer-man/piston
     execute_url = f"{piston_url}/api/v2/execute"
     
     # Build request body for Piston
+    # Piston has a max run_timeout of 3000ms, so cap it
+    capped_timeout = min(timeout_ms, 3000)
+    
     request_body = {
         "language": "python",
-        "version": "3.12.0",
+        "version": python_version,
         "files": [
             {
                 "name": "main.py",
@@ -153,7 +191,7 @@ async def execute_code(
         "stdin": "",
         "args": [],
         "compile_timeout": 10000,
-        "run_timeout": timeout_ms,
+        "run_timeout": capped_timeout,
         "compile_memory_limit": -1,
         "run_memory_limit": -1
     }
@@ -161,6 +199,10 @@ async def execute_code(
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(execute_url, json=request_body)
+            if response.status_code == 400 and "runtime is unknown" in (response.text or ""):
+                # race or fresh volume: install and retry once
+                request_body["version"] = await _ensure_python312()
+                response = await client.post(execute_url, json=request_body)
             response.raise_for_status()
             result = response.json()
             
