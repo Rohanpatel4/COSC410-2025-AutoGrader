@@ -1,25 +1,160 @@
-/* Global reset + single light theme (no auto dark mode) */
-* { box-sizing: border-box; }
-html, body, #root { height: 100%; margin: 0; }
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap");
 
-/* Explicit base colors so text never goes white-on-white */
-body {
-  background: #fafafa;   /* light background */
-  color: #111;           /* dark text */
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
-               "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light dark;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    @apply scroll-smooth bg-neutral-50 text-neutral-900;
+  }
+
+  body {
+    @apply min-h-screen bg-gradient-to-br from-neutral-50 via-white to-neutral-100 text-neutral-900 font-sans antialiased transition-colors duration-300 ease-soft;
+  }
+
+  .dark body {
+    @apply bg-gradient-to-br from-background-dark via-gray-900 to-gray-950 text-gray-100;
+  }
+
+  body::selection {
+    background-color: rgba(40, 96, 225, 0.2);
+  }
+
+  #root {
+    @apply min-h-full;
+  }
+
+  h1 {
+    @apply text-4xl md:text-5xl font-semibold tracking-tight text-neutral-900 dark:text-gray-100 leading-tight;
+  }
+
+  h2 {
+    @apply text-3xl font-semibold tracking-tight text-neutral-900 dark:text-gray-100;
+  }
+
+  h3 {
+    @apply text-xl font-semibold text-neutral-900 dark:text-gray-100;
+  }
+
+  p {
+    @apply text-base text-gray-700 dark:text-gray-300 leading-relaxed;
+  }
+
+  a {
+    @apply text-primary hover:text-primary-dark dark:text-primary dark:hover:text-white font-medium transition-colors duration-200 ease-soft underline-offset-4;
+  }
 }
 
-/* Mild defaults you can reuse anywhere */
-.container { max-width: 60%; margin: 6rem auto; padding: 0 1rem; }
-button {
-  padding: 10px 14px;
-  border: 1px solid #c9c9c9;
-  border-radius: 10px;
-  background: #fff;
-  color: inherit;
-  cursor: pointer;
-}
-h1 { font-size: 1.6rem; margin: 0 0 1rem; }
+@layer components {
+  .page-container,
+  .container {
+    @apply max-w-7xl mx-auto w-full px-6 md:px-12;
+  }
 
-/* (No :root { color-scheme: ... } here) */
+  main {
+    @apply flex-1;
+  }
+
+  button,
+  .btn {
+    @apply inline-flex items-center justify-center rounded-xl px-6 py-3 font-medium transition-all duration-300 ease-soft focus:outline-none focus-visible:ring-4 focus-visible:ring-primary/25 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-background-dark;
+  }
+
+  button:disabled,
+  .btn:disabled {
+    @apply opacity-60 cursor-not-allowed shadow-none;
+  }
+
+  .btn-primary {
+    @apply bg-primary text-white shadow-soft hover:bg-primary-dark hover:shadow-glow dark:hover:bg-primary-dark;
+  }
+
+  .btn-secondary {
+    @apply bg-white text-neutral-900 border border-neutral-100 shadow-sm hover:border-primary hover:text-primary dark:bg-neutral-900 dark:text-gray-100 dark:border-white/10 dark:hover:border-primary dark:hover:text-white;
+  }
+
+  .btn-ghost {
+    @apply bg-transparent text-neutral-900 hover:text-primary dark:text-gray-100 dark:hover:text-white;
+  }
+
+  input,
+  select,
+  textarea {
+    @apply w-full rounded-xl border border-neutral-100/80 bg-white/80 px-4 py-2.5 text-neutral-900 shadow-sm placeholder:text-gray-400 transition-all duration-200 focus:border-primary focus:ring-4 focus:ring-primary/25 dark:bg-neutral-900/70 dark:text-gray-100 dark:border-white/10 dark:placeholder:text-gray-500;
+  }
+
+  input:focus,
+  select:focus,
+  textarea:focus {
+    @apply ring-4 ring-primary/20 outline-none;
+  }
+
+  label {
+    @apply block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2;
+  }
+
+  .card {
+    @apply rounded-2xl border border-neutral-100/80 bg-white/90 p-6 shadow-soft transition-all duration-300 ease-soft backdrop-blur-sm hover:shadow-lg dark:border-white/10 dark:bg-gray-900/70;
+  }
+
+  .card-muted {
+    @apply rounded-2xl border border-neutral-100/60 bg-white/70 p-5 shadow-sm dark:border-white/5 dark:bg-gray-900/50;
+  }
+
+  .surface-glass {
+    @apply rounded-3xl border border-white/20 bg-white/30 backdrop-blur-xl shadow-soft dark:border-white/10 dark:bg-white/5;
+  }
+
+  .section-padding {
+    @apply py-16 md:py-24;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary dark:bg-primary/15 dark:text-white;
+  }
+
+  .code-inline {
+    @apply font-mono rounded-md bg-neutral-100 px-2.5 py-1 text-sm text-neutral-900 dark:bg-neutral-900/70 dark:text-gray-100;
+  }
+
+  .alert {
+    @apply rounded-2xl border px-4 py-4 shadow-sm transition-colors duration-200;
+  }
+
+  .alert-success {
+    @apply border-accent/30 bg-accent/10 text-accent;
+  }
+
+  .alert-error {
+    @apply border-danger/40 bg-danger/10 text-danger;
+  }
+
+  .alert-info {
+    @apply border-primary/40 bg-primary/10 text-primary;
+  }
+
+  .alert-warning {
+    @apply border-warning/40 bg-warning/10 text-warning;
+  }
+
+  .table-header {
+    @apply bg-neutral-50 text-gray-600 dark:bg-gray-900 dark:text-gray-400;
+  }
+
+  table thead th {
+    @apply text-left text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-300;
+  }
+
+  table tbody td {
+    @apply text-sm text-gray-700 dark:text-gray-300;
+  }
+}
