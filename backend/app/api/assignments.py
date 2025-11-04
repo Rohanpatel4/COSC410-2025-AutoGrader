@@ -191,6 +191,10 @@ async def upload_test_file_for_assignment(
     except Exception as e:
         raise HTTPException(400, f"Failed to read test file: {e}")
 
+    # Validate that the file content is not empty
+    if not content.strip():
+        raise HTTPException(400, "Test file cannot be empty")
+
     # Replace any existing test rows for this assignment (simple policy)
     db.query(TestCase).filter(TestCase.assignment_id == assignment_id).delete()
 
@@ -290,8 +294,12 @@ async def submit_to_assignment(
     test_code = tc.filename
     result = await execute_code(student_code, test_code)
     
-    # Calculate grade: 100 if all tests pass, 0 otherwise
-    grade = 100 if result["grading"]["all_passed"] else 0
+    # Check for invalid test configuration (missing points)
+    if result["grading"].get("error"):
+        raise HTTPException(400, f"Invalid test file: {result['grading']['error']}")
+    
+    # Calculate grade as sum of earned points
+    grade = result["grading"].get("earned_points", 0)
     
     # Create submission record
     submission_record = StudentSubmission(

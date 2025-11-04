@@ -33,13 +33,24 @@ async def _ensure_python312() -> str:
     return want  # fall back to selector
 
 def _parse_pytest_output(stdout: str, stderr: str) -> Dict[str, Any]:
-    """Parse test output to determine pass/fail status and test counts."""
+    """Parse test output to determine pass/fail status, test counts, and point values."""
     combined_output = (stdout or "") + "\n" + (stderr or "")
 
     lines = combined_output.split('\n')
     passed_tests = 0
     failed_tests = 0
     total_tests = 0
+    earned_points = 0
+    total_points = 0
+    error_message = None
+
+    # Check for error about missing points
+    if "ERROR: Tests without point markers:" in combined_output:
+        error_start = combined_output.find("ERROR: Tests without point markers:")
+        error_end = combined_output.find("All tests must use", error_start)
+        if error_end == -1:
+            error_end = len(combined_output)
+        error_message = combined_output[error_start:error_end].strip()
 
     # Count individual test results
     for line in lines:
@@ -67,9 +78,19 @@ def _parse_pytest_output(stdout: str, stderr: str) -> Dict[str, Any]:
                     failed_tests = int(line.split(':')[1].strip())
                 except:
                     pass
-            elif line.startswith('Total:'):
+            elif line.startswith('Total:') and not line.startswith('TotalPoints:'):
                 try:
                     total_tests = int(line.split(':')[1].strip())
+                except:
+                    pass
+            elif line.startswith('Earned:'):
+                try:
+                    earned_points = int(line.split(':')[1].strip())
+                except:
+                    pass
+            elif line.startswith('TotalPoints:'):
+                try:
+                    total_points = int(line.split(':')[1].strip())
                 except:
                     pass
 
@@ -77,20 +98,38 @@ def _parse_pytest_output(stdout: str, stderr: str) -> Dict[str, Any]:
     if total_tests == 0:
         total_tests = passed_tests + failed_tests
 
-    return {
+    result = {
         "total_tests": total_tests,
         "passed_tests": passed_tests,
         "failed_tests": failed_tests,
+        "earned_points": earned_points,
+        "total_points": total_points,
         "passed": failed_tests == 0 and total_tests > 0,  # Frontend compatibility
         "all_passed": failed_tests == 0 and total_tests > 0,
         "has_tests": total_tests > 0
     }
+    
+    if error_message:
+        result["error"] = error_message
+    
+    return result
 
 
 def _combine_code(student_code: str, test_code: str) -> str:
-    """Combine student code and test code with unittest test runner."""
+    """Combine student code and test code with unittest test runner and custom points decorator."""
     return f"""import sys
 import unittest
+import functools
+
+# Custom points decorator for test functions
+_points_registry = {{}}
+
+def points(value):
+    # Decorator to assign point values to test functions
+    def decorator(func):
+        _points_registry[func.__name__] = value
+        return func
+    return decorator
 
 # Student code
 {student_code}
@@ -102,29 +141,82 @@ import unittest
 class TestRunner(unittest.TestCase):
     pass
 
-# Dynamically add test methods
+# Dynamically add test methods with point tracking
 test_functions = [obj for name, obj in globals().items()
                   if name.startswith('test_') and callable(obj)]
 
+# Track which tests have points assigned
+tests_without_points = []
+
 for test_func in test_functions:
+    # Check if test has points assigned
+    if test_func.__name__ not in _points_registry:
+        tests_without_points.append(test_func.__name__)
+    
     # Bind the test function as a method to the TestCase class
     # Use a closure to capture the specific function
     def make_test(func):
-        return lambda self: func()
+        def test_method(self):
+            try:
+                func()
+            except AssertionError as e:
+                raise AssertionError(f"FAILED: {{func.__name__}}") from e
+            else:
+                print(f"PASSED: {{func.__name__}}")
+        return test_method
     setattr(TestRunner, test_func.__name__, make_test(test_func))
 
 if __name__ == "__main__":
+    # Check for tests without points
+    if tests_without_points:
+        print(f"\\nERROR: Tests without point markers: {{', '.join(tests_without_points)}}")
+        print("All tests must use @points(value) decorator")
+        sys.exit(1)
+    
     # Run tests with unittest
     loader = unittest.TestLoader()
     suite = loader.loadTestsFromTestCase(TestRunner)
-    runner = unittest.TextTestRunner(stream=sys.stdout, verbosity=2)
-    result = runner.run(suite)
+    
+    # Custom test result collector
+    class PointsTestResult(unittest.TestResult):
+        def __init__(self):
+            super().__init__()
+            self.test_results = []
+        
+        def addSuccess(self, test):
+            super().addSuccess(test)
+            test_name = test._testMethodName
+            points_value = _points_registry.get(test_name, 0)
+            self.test_results.append({{"name": test_name, "passed": True, "points": points_value}})
+        
+        def addFailure(self, test, err):
+            super().addFailure(test, err)
+            test_name = test._testMethodName
+            points_value = _points_registry.get(test_name, 0)
+            self.test_results.append({{"name": test_name, "passed": False, "points": points_value}})
+        
+        def addError(self, test, err):
+            super().addError(test, err)
+            test_name = test._testMethodName
+            points_value = _points_registry.get(test_name, 0)
+            self.test_results.append({{"name": test_name, "passed": False, "points": points_value}})
+    
+    result = PointsTestResult()
+    suite.run(result)
+    
+    # Calculate points
+    total_points = sum(r["points"] for r in result.test_results)
+    earned_points = sum(r["points"] for r in result.test_results if r["passed"])
+    passed_tests = sum(1 for r in result.test_results if r["passed"])
+    failed_tests = len(result.test_results) - passed_tests
     
     # Print summary in our format
     print(f"\\n=== Test Results ===")
-    print(f"Passed: {{result.testsRun - len(result.failures) - len(result.errors)}}")
-    print(f"Failed: {{len(result.failures) + len(result.errors)}}")
-    print(f"Total: {{result.testsRun}}")
+    print(f"Passed: {{passed_tests}}")
+    print(f"Failed: {{failed_tests}}")
+    print(f"Total: {{len(result.test_results)}}")
+    print(f"Earned: {{earned_points}}")
+    print(f"TotalPoints: {{total_points}}")
     
     # Exit with appropriate code
     sys.exit(0 if result.wasSuccessful() else 1)
@@ -236,7 +328,7 @@ async def execute_code(
             "time": None,
             "memory": None,
             "language_id_used": 71,
-            "grading": {"total_tests": 0, "passed_tests": 0, "failed_tests": 0, "passed": False, "all_passed": False, "has_tests": False}
+            "grading": {"total_tests": 0, "passed_tests": 0, "failed_tests": 0, "earned_points": 0, "total_points": 0, "passed": False, "all_passed": False, "has_tests": False}
         }
     except httpx.HTTPStatusError as e:
         return {
@@ -247,7 +339,7 @@ async def execute_code(
             "time": None,
             "memory": None,
             "language_id_used": 71,
-            "grading": {"total_tests": 0, "passed_tests": 0, "failed_tests": 0, "passed": False, "all_passed": False, "has_tests": False}
+            "grading": {"total_tests": 0, "passed_tests": 0, "failed_tests": 0, "earned_points": 0, "total_points": 0, "passed": False, "all_passed": False, "has_tests": False}
         }
     except Exception as e:
         return {
@@ -258,7 +350,7 @@ async def execute_code(
             "time": None,
             "memory": None,
             "language_id_used": 71,
-            "grading": {"total_tests": 0, "passed_tests": 0, "failed_tests": 0, "passed": False, "all_passed": False, "has_tests": False}
+            "grading": {"total_tests": 0, "passed_tests": 0, "failed_tests": 0, "earned_points": 0, "total_points": 0, "passed": False, "all_passed": False, "has_tests": False}
         }
 
 
