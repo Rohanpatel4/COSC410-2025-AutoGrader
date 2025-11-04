@@ -4,13 +4,13 @@ import { useAuth } from "../auth/AuthContext";
 import { fetchJson } from "../api/client";
 import type { Course } from "../types/courses";
 import { Button, Input, Label, Card, Badge, Alert } from "../components/ui";
+import { AppShell } from "../components/layout/AppShell";
 
 export default function StudentDashboard() {
   const { userId, logout } = useAuth();
   const navigate = useNavigate();
   const studentId = Number(userId ?? 0);
 
-  const [enrollKey, setEnrollKey] = React.useState("");
   const [mine, setMine] = React.useState<Course[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [msg, setMsg] = React.useState<string | null>(null);
@@ -42,32 +42,10 @@ export default function StudentDashboard() {
 
   React.useEffect(() => { loadMyCourses(); }, [studentId]);
 
-  async function onRegister(e: React.FormEvent) {
-    e.preventDefault();
-    const trimmed = enrollKey.trim();
-    if (!trimmed) {
-      setMsg("Please enter an enrollment key.");
-      return;
-    }
-
-    setMsg(null);
-    try {
-      await fetchJson("/api/v1/registrations", {
-        method: "POST",
-        body: JSON.stringify({ student_id: studentId, enrollment_key: trimmed }),
-      });
-      setMsg("Registered!");
-      setEnrollKey("");
-      await loadMyCourses();
-    } catch (e: any) {
-      setMsg(e?.message ?? "Registration failed");
-    }
-  }
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-neutral-50 via-white to-neutral-100 py-12 text-neutral-900 transition-colors duration-300 ease-soft dark:from-background-dark dark:via-gray-900 dark:to-gray-950 dark:text-gray-100">
-      <main className="page-container space-y-8">
-        <header className="rounded-3xl border border-neutral-100/80 bg-white/90 p-8 shadow-soft dark:border-white/10 dark:bg-gray-900/70">
+    <AppShell>
+      <main className="page-container space-y-8 py-12">
+        <header className="rounded-3xl border border-border/80 bg-card/90 p-8 shadow-soft">
           <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
             <div className="space-y-2">
               <Badge variant="default">
@@ -75,8 +53,8 @@ export default function StudentDashboard() {
               </Badge>
               <div>
                 <h1 className="text-3xl font-semibold tracking-tight">Welcome back</h1>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  User ID <span className="font-semibold text-neutral-900 dark:text-gray-100">{userId ?? "—"}</span>
+                <p className="text-sm text-muted-foreground">
+                  User ID <span className="font-semibold text-foreground">{userId ?? "—"}</span>
                 </p>
               </div>
             </div>
@@ -85,9 +63,6 @@ export default function StudentDashboard() {
               <Button variant="secondary" onClick={onLogout}>
                 Log out
               </Button>
-              <Link to="/assignments">
-                <Button>View assignments</Button>
-              </Link>
             </div>
           </div>
         </header>
@@ -99,59 +74,34 @@ export default function StudentDashboard() {
           </Alert>
         )}
 
-        {/* Main Content Grid */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          {/* Register Card */}
-          <Card>
+        {/* My Courses Section */}
+        <Card>
+          <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent/10 text-accent">
                 <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v12m6-6H6" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                 </svg>
               </div>
-              <h2 className="text-xl font-semibold tracking-tight text-neutral-900 dark:text-gray-100">
-                Register for courses
+              <h2 className="text-xl font-semibold tracking-tight text-foreground">
+                My courses
               </h2>
             </div>
-            <form onSubmit={onRegister} className="mt-6 space-y-4">
-              <div>
-                <Label htmlFor="enroll-key">Enrollment key</Label>
-                <Input
-                  id="enroll-key"
-                  placeholder="Enter enrollment key from your instructor"
-                  value={enrollKey}
-                  onChange={(e) => setEnrollKey(e.target.value)}
-                />
-                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                  Use the 12-character key provided by your instructor.
-                </p>
-              </div>
-              <Button type="submit" className="w-full" disabled={!enrollKey.trim()}>
-                Register
-              </Button>
-            </form>
-          </Card>
 
-          {/* My Courses Card */}
-          <Card>
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent/10 text-accent">
-                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                  </svg>
-                </div>
-                <h2 className="text-xl font-semibold tracking-tight text-neutral-900 dark:text-gray-100">
-                  My courses
-                </h2>
-              </div>
-
+            <div className="flex items-center gap-3">
               {!loading && (
                 <Badge variant="info">
                   {mine.length} {mine.length === 1 ? "course" : "courses"}
                 </Badge>
               )}
+              <Button size="sm" onClick={() => navigate("/courses/join")}>
+                <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v12m6-6H6" />
+                </svg>
+                Join Course
+              </Button>
             </div>
+          </div>
 
             <div className="mt-6">
               {loading ? (
@@ -162,40 +112,47 @@ export default function StudentDashboard() {
                   </svg>
                 </div>
               ) : mine.length ? (
-                <div className="space-y-4">
+                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   {mine.map((c) => (
-                    <article
+                    <Link
                       key={c.id}
-                      className="flex flex-col gap-4 rounded-2xl border border-neutral-100 bg-white/90 p-5 shadow-sm transition-all duration-300 ease-soft hover:-translate-y-[2px] hover:border-primary/30 hover:shadow-glow dark:border-white/10 dark:bg-white/5"
+                      to={`/courses/${encodeURIComponent(c.course_code)}`}
+                      className="group flex min-h-[160px] flex-col rounded-2xl border border-border bg-card/90 p-6 shadow-sm transition-all duration-300 ease-soft hover:-translate-y-[2px] hover:border-primary/30 hover:shadow-glow active:scale-[.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                     >
-                      <div className="flex items-center justify-between gap-4">
-                        <div>
-                          <p className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      <article className="flex flex-1 flex-col justify-between gap-4">
+                        <div className="space-y-2">
+                          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                             {c.course_code}
                           </p>
-                          <p className="text-lg font-semibold text-neutral-900 dark:text-gray-100">{c.name}</p>
+                          <h3 className="text-lg font-semibold leading-tight text-foreground line-clamp-2">
+                            {c.name}
+                          </h3>
                         </div>
-                        <Button
-                          size="sm"
-                          onClick={() => navigate(`/courses/${encodeURIComponent(c.course_code)}`)}
-                        >
-                          View course
-                        </Button>
-                      </div>
-                    </article>
+                        <div className="flex items-center justify-end">
+                          <svg 
+                            className="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary" 
+                            fill="none" 
+                            stroke="currentColor" 
+                            viewBox="0 0 24 24"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </div>
+                      </article>
+                    </Link>
                   ))}
                 </div>
               ) : (
                 <div className="text-center">
-                  <div className="flex flex-col items-center gap-4 rounded-2xl bg-neutral-50 px-6 py-10 dark:bg-gray-900/60">
-                    <svg className="h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="flex flex-col items-center gap-4 rounded-2xl bg-muted px-6 py-10">
+                    <svg className="h-12 w-12 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                     </svg>
                     <div className="space-y-1">
-                      <p className="text-sm font-semibold text-neutral-900 dark:text-gray-100">
+                      <p className="text-sm font-semibold text-foreground">
                         Not enrolled in any courses yet
                       </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                      <p className="text-xs text-muted-foreground">
                         Use the enrollment key from your instructor to join a course.
                       </p>
                     </div>
@@ -203,9 +160,8 @@ export default function StudentDashboard() {
                 </div>
               )}
             </div>
-          </Card>
-        </div>
+        </Card>
       </main>
-    </div>
+    </AppShell>
   );
 }

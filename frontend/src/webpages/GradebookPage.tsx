@@ -2,6 +2,8 @@
 import React from "react";
 import { useParams, Link } from "react-router-dom";
 import { fetchJson } from "../api/client";
+import { AppShell } from "../components/layout/AppShell";
+import { Card, Alert } from "../components/ui";
 
 type GBPayload = {
   course: { id: number; name: string; course_code: string };
@@ -35,63 +37,73 @@ export default function GradebookPage() {
   const aIds = data?.assignments.map((a) => a.id) ?? [];
 
   return (
-    <div className="container">
-      <div style={{ marginBottom: 12 }}>
-        <Link to={`/courses/${encodeURIComponent(course_id)}`}>← Back to course</Link>
-      </div>
+    <AppShell>
+      <div className="container py-12">
+        <div className="mb-3">
+          <Link to={`/courses/${encodeURIComponent(course_id)}`} className="text-primary hover:opacity-80">
+            ← Back to course
+          </Link>
+        </div>
 
-      <h1>
-        Gradebook{" "}
-        {data ? `– ${data.course.course_code || data.course.name || data.course.id}` : ""}
-      </h1>
+        <Card>
+          <h1 className="text-3xl font-bold mb-6">
+            Gradebook{" "}
+            {data ? `– ${data.course.course_code || data.course.name || data.course.id}` : ""}
+          </h1>
 
-      {loading && <p>Loading…</p>}
-      {err && <p style={{ color: "crimson" }}>{err}</p>}
-
-      {data && (
-        <>
-          {data.assignments.length === 0 ? (
-            <p>No assignments yet.</p>
-          ) : data.students.length === 0 ? (
-            <p>No enrolled students.</p>
-          ) : (
-            <div style={{ overflowX: "auto", marginTop: 12 }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 800 }}>
-                <thead>
-                  <tr>
-                    <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #e2e8f0" }}>
-                      Student
-                    </th>
-                    {data.assignments.map((a) => (
-                      <th
-                        key={a.id}
-                        style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #e2e8f0" }}
-                        title={`Assignment ${a.id}`}
-                      >
-                        {a.title}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.students.map((s) => (
-                    <tr key={s.student_id}>
-                      <td style={{ padding: 8, borderBottom: "1px solid #f1f5f9", fontWeight: 600 }}>
-                        {s.username}
-                      </td>
-                      {aIds.map((aid) => (
-                        <td key={aid} style={{ padding: 8, borderBottom: "1px solid #f1f5f9" }}>
-                          {s.grades[String(aid)] == null ? "—" : s.grades[String(aid)]}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          {loading && <p className="text-center text-muted-foreground">Loading…</p>}
+          {err && (
+            <Alert variant="error">
+              <p className="font-medium">{err}</p>
+            </Alert>
           )}
-        </>
-      )}
-    </div>
+
+          {data && (
+            <>
+              {data.assignments.length === 0 ? (
+                <p className="text-muted-foreground">No assignments yet.</p>
+              ) : data.students.length === 0 ? (
+                <p className="text-muted-foreground">No enrolled students.</p>
+              ) : (
+                <div className="overflow-x-auto mt-3">
+                  <table className="w-full border-collapse min-w-[800px]">
+                    <thead>
+                      <tr>
+                        <th className="text-left p-2 border-b border-border">
+                          Student
+                        </th>
+                        {data.assignments.map((a) => (
+                          <th
+                            key={a.id}
+                            className="text-left p-2 border-b border-border"
+                            title={`Assignment ${a.id}`}
+                          >
+                            {a.title}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.students.map((s) => (
+                        <tr key={s.student_id}>
+                          <td className="p-2 border-b border-border font-semibold">
+                            {s.username}
+                          </td>
+                          {aIds.map((aid) => (
+                            <td key={aid} className="p-2 border-b border-border">
+                              {s.grades[String(aid)] == null ? "—" : s.grades[String(aid)]}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+        </Card>
+      </div>
+    </AppShell>
   );
 }

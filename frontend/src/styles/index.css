@@ -7,6 +7,58 @@
 @layer base {
   :root {
     color-scheme: light dark;
+    
+    /* Semantic color tokens - Light theme */
+    /* Using hex format for color picker support */
+    --background: #ffffff;
+    --foreground: #0e1327;
+    
+    --card: #ffffff;
+    --card-foreground: #0e1327;
+    
+    --primary: #5b7fdb;
+    --primary-foreground: #ffffff;
+    
+    --muted: #f3f4f8;
+    --muted-foreground: #6b7280;
+    
+    --accent: #00a4a6;
+    --accent-foreground: #ffffff;
+    
+    --danger: #d6458e;
+    --danger-foreground: #ffffff;
+    
+    --warning: #e6a700;
+    --warning-foreground: #ffffff;
+    
+    --border: #e2e8f0;
+    --ring: #5b7fdb;
+  }
+  
+  .dark {
+    --background: #090b14;
+    --foreground: #f2f2f7;
+    
+    --card: #0c0f18;
+    --card-foreground: #f2f2f7;
+    
+    --primary: #5b7fdb;
+    --primary-foreground: #ffffff;
+    
+    --muted: #1e293b;
+    --muted-foreground: #94a3b8;
+    
+    --accent: #00a4a6;
+    --accent-foreground: #ffffff;
+    
+    --danger: #d6458e;
+    --danger-foreground: #ffffff;
+    
+    --warning: #e6a700;
+    --warning-foreground: #ffffff;
+    
+    --border: #1e293b;
+    --ring: #5b7fdb;
   }
 
   * {
@@ -14,19 +66,15 @@
   }
 
   html {
-    @apply scroll-smooth bg-neutral-50 text-neutral-900;
+    @apply scroll-smooth;
   }
 
   body {
-    @apply min-h-screen bg-gradient-to-br from-neutral-50 via-white to-neutral-100 text-neutral-900 font-sans antialiased transition-colors duration-300 ease-soft;
-  }
-
-  .dark body {
-    @apply bg-gradient-to-br from-background-dark via-gray-900 to-gray-950 text-gray-100;
+    @apply min-h-screen bg-background text-foreground font-sans antialiased;
   }
 
   body::selection {
-    background-color: rgba(40, 96, 225, 0.2);
+    background-color: color-mix(in srgb, var(--primary) 20%, transparent);
   }
 
   #root {
@@ -34,23 +82,23 @@
   }
 
   h1 {
-    @apply text-4xl md:text-5xl font-semibold tracking-tight text-neutral-900 dark:text-gray-100 leading-tight;
+    @apply text-4xl md:text-5xl font-semibold tracking-tight text-foreground leading-tight;
   }
 
   h2 {
-    @apply text-3xl font-semibold tracking-tight text-neutral-900 dark:text-gray-100;
+    @apply text-3xl font-semibold tracking-tight text-foreground;
   }
 
   h3 {
-    @apply text-xl font-semibold text-neutral-900 dark:text-gray-100;
+    @apply text-xl font-semibold text-foreground;
   }
 
   p {
-    @apply text-base text-gray-700 dark:text-gray-300 leading-relaxed;
+    @apply text-base text-muted-foreground leading-relaxed;
   }
 
   a {
-    @apply text-primary hover:text-primary-dark dark:text-primary dark:hover:text-white font-medium transition-colors duration-200 ease-soft underline-offset-4;
+    @apply text-primary hover:opacity-80 font-medium transition-colors duration-200 ease-soft underline-offset-4;
   }
 }
 
@@ -66,7 +114,7 @@
 
   button,
   .btn {
-    @apply inline-flex items-center justify-center rounded-xl px-6 py-3 font-medium transition-all duration-300 ease-soft focus:outline-none focus-visible:ring-4 focus-visible:ring-primary/25 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-background-dark;
+    @apply inline-flex items-center justify-center rounded-xl px-6 py-3 font-medium transition-all duration-300 ease-soft focus:outline-none focus-visible:ring-4 focus-visible:ring-ring/25 focus-visible:ring-offset-2 focus-visible:ring-offset-background;
   }
 
   button:disabled,
@@ -75,43 +123,43 @@
   }
 
   .btn-primary {
-    @apply bg-primary text-white shadow-soft hover:bg-primary-dark hover:shadow-glow dark:hover:bg-primary-dark;
+    @apply bg-primary text-primary-foreground shadow-soft hover:opacity-90 hover:shadow-glow;
   }
 
   .btn-secondary {
-    @apply bg-white text-neutral-900 border border-neutral-100 shadow-sm hover:border-primary hover:text-primary dark:bg-neutral-900 dark:text-gray-100 dark:border-white/10 dark:hover:border-primary dark:hover:text-white;
+    @apply bg-card text-card-foreground border border-border shadow-sm hover:border-primary hover:text-primary;
   }
 
   .btn-ghost {
-    @apply bg-transparent text-neutral-900 hover:text-primary dark:text-gray-100 dark:hover:text-white;
+    @apply bg-transparent text-foreground hover:text-primary hover:bg-muted;
   }
 
   input,
   select,
   textarea {
-    @apply w-full rounded-xl border border-neutral-100/80 bg-white/80 px-4 py-2.5 text-neutral-900 shadow-sm placeholder:text-gray-400 transition-all duration-200 focus:border-primary focus:ring-4 focus:ring-primary/25 dark:bg-neutral-900/70 dark:text-gray-100 dark:border-white/10 dark:placeholder:text-gray-500;
+    @apply w-full rounded-xl border border-border bg-background px-4 py-2.5 text-foreground shadow-sm placeholder:text-muted-foreground transition-all duration-200 focus:border-primary focus:ring-4 focus:ring-ring/25;
   }
 
   input:focus,
   select:focus,
   textarea:focus {
-    @apply ring-4 ring-primary/20 outline-none;
+    @apply ring-4 ring-ring/20 outline-none;
   }
 
   label {
-    @apply block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2;
+    @apply block text-sm font-medium text-foreground mb-2;
   }
 
   .card {
-    @apply rounded-2xl border border-neutral-100/80 bg-white/90 p-6 shadow-soft transition-all duration-300 ease-soft backdrop-blur-sm hover:shadow-lg dark:border-white/10 dark:bg-gray-900/70;
+    @apply rounded-2xl border border-border bg-card p-6 shadow-soft transition-all duration-300 ease-soft hover:shadow-lg;
   }
 
   .card-muted {
-    @apply rounded-2xl border border-neutral-100/60 bg-white/70 p-5 shadow-sm dark:border-white/5 dark:bg-gray-900/50;
+    @apply rounded-2xl border border-border/60 bg-muted p-5 shadow-sm;
   }
 
   .surface-glass {
-    @apply rounded-3xl border border-white/20 bg-white/30 backdrop-blur-xl shadow-soft dark:border-white/10 dark:bg-white/5;
+    @apply rounded-3xl border border-border/20 bg-card/30 backdrop-blur-xl shadow-soft;
   }
 
   .section-padding {
@@ -119,11 +167,11 @@
   }
 
   .badge {
-    @apply inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary dark:bg-primary/15 dark:text-white;
+    @apply inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary;
   }
 
   .code-inline {
-    @apply font-mono rounded-md bg-neutral-100 px-2.5 py-1 text-sm text-neutral-900 dark:bg-neutral-900/70 dark:text-gray-100;
+    @apply font-mono rounded-md bg-muted px-2.5 py-1 text-sm text-foreground;
   }
 
   .alert {
@@ -147,14 +195,14 @@
   }
 
   .table-header {
-    @apply bg-neutral-50 text-gray-600 dark:bg-gray-900 dark:text-gray-400;
+    @apply bg-muted text-muted-foreground;
   }
 
   table thead th {
-    @apply text-left text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-300;
+    @apply text-left text-sm font-semibold uppercase tracking-wide text-muted-foreground;
   }
 
   table tbody td {
-    @apply text-sm text-gray-700 dark:text-gray-300;
+    @apply text-sm text-foreground;
   }
 }

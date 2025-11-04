@@ -1,11 +1,10 @@
 // src/webpages/LoginPage.tsx
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../auth/AuthContext";
+import { useAuth, Role } from "../auth/AuthContext";
 import { fetchJson } from "../api/client";
 import { Button, Input, Label, Select, Card, Alert } from "../components/ui";
-
-type Role = "student" | "faculty" | "admin";
+import { AppShell } from "../components/layout/AppShell";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -16,15 +15,64 @@ export default function LoginPage() {
   const [password, setPassword] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [shouldClearPasswordOnNextInput, setShouldClearPasswordOnNextInput] = React.useState(false);
+  const [emailError, setEmailError] = React.useState<string | null>(null);
+
+  // Helper to parse auth errors from the server
+  async function parseAuthError(res: Response): Promise<string> {
+    try {
+      const data = await res.json().catch(() => ({}));
+      const msg = (data?.detail ?? data?.message ?? "").toString();
+      return msg || "Invalid username or password";
+    } catch {
+      return "Invalid username or password";
+    }
+  }
+
+  // Validate email format
+  function validateEmail(email: string): boolean {
+    return /^\S+@\S+\.\S+$/.test(email);
+  }
+
+  // Handle password input - clear on first keystroke after error
+  function onPasswordKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (shouldClearPasswordOnNextInput) {
+      setPassword("");
+      setShouldClearPasswordOnNextInput(false);
+    }
+  }
+
+  // Handle email change - revalidate if there's an error
+  function onEmailChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const newEmail = e.target.value;
+    setEmail(newEmail);
+    if (emailError && validateEmail(newEmail)) {
+      setEmailError(null);
+    }
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (submitting) return;
+
+    // Validate email before submitting
+    if (!validateEmail(email)) {
+      setEmailError("Enter a valid email address.");
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
+    setEmailError(null);
 
     try {
-      const data = await fetchJson("/api/v1/login", {
+      const data = await fetchJson<{
+        userId?: number | string;
+        user_id?: number | string;
+        role?: string;
+        status?: string;
+        token?: string | null;
+      }>("/api/v1/login", {
         method: "POST",
         body: JSON.stringify({ username: email, email, password, role }),
       });
@@ -41,26 +89,29 @@ export default function LoginPage() {
     } catch (err: any) {
       // Clear any stale auth if a previous attempt succeeded
       localStorage.removeItem("auth");
-      setError(err?.message ?? "Login failed");
+      // Normalize all login errors to a clean message
+      setError("Invalid username or password");
+      setShouldClearPasswordOnNextInput(true);
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-neutral-50 via-white to-neutral-100 py-12 text-neutral-900 transition-colors duration-300 ease-soft dark:from-background-dark dark:via-gray-900 dark:to-gray-950 dark:text-gray-100">
-      <div className="mx-auto w-full max-w-md space-y-8 px-6">
+    <AppShell>
+      <div className="flex min-h-screen items-center justify-center py-12">
+        <div className="mx-auto w-full max-w-md space-y-8 px-6">
         <div className="text-center">
-          <h1 className="text-4xl font-bold tracking-tight text-neutral-900 dark:text-gray-100">
+          <h1 className="text-4xl font-bold tracking-tight text-foreground">
             AutoGrader
           </h1>
-          <p className="mt-2 text-gray-600 dark:text-gray-300">
+          <p className="mt-2 text-muted-foreground">
             Sign in to your account
           </p>
         </div>
 
         <Card>
-          <form className="space-y-6" onSubmit={onSubmit}>
+          <form className="space-y-6" onSubmit={onSubmit} noValidate>
             <div>
               <Label htmlFor="role">Select role</Label>
               <Select
@@ -81,10 +132,13 @@ export default function LoginPage() {
                 placeholder="student@wofford.edu"
                 autoComplete="username"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={onEmailChange}
                 required
-                error={!!error}
+                error={!!emailError}
               />
+              {emailError && (
+                <p className="mt-2 text-sm text-danger">{emailError}</p>
+              )}
             </div>
 
             <div>
@@ -96,13 +150,14 @@ export default function LoginPage() {
                 autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={onPasswordKeyDown}
                 required
                 error={!!error}
               />
             </div>
 
             {error && (
-              <Alert variant="error">
+              <Alert variant="error" role="alert" aria-live="polite">
                 <p className="text-sm font-medium">{error}</p>
               </Alert>
             )}
@@ -138,7 +193,8 @@ export default function LoginPage() {
             </Button>
           </form>
         </Card>
+        </div>
       </div>
-    </div>
+    </AppShell>
   );
 }

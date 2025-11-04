@@ -2,6 +2,8 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchJson } from "../api/client";
 import type { Assignment } from "../types/assignments";
+import { AppShell } from "../components/layout/AppShell";
+import { Button, Input, Label, Card, Badge } from "../components/ui";
 
 // datetime-local helpers
 function toLocalInputValue(d: Date | null) {
@@ -59,82 +61,82 @@ export default function AssignmentsPage() {
   }, []);
 
   return (
-    <div className="container">
-      <h1>All Assignments</h1>
-      {loading ? (
-        <p>Loading…</p>
-      ) : assignments.length === 0 ? (
-        <p>No assignments found.</p>
-      ) : (
-        <ul>
-          {assignments.map((a) => (
-            <li key={a.id} style={{ marginBottom: 12 }}>
-              <button
-                style={{
-                  background: "#4285f4",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 6,
-                  padding: "6px 12px",
-                  cursor: "pointer",
-                  marginRight: 8,
-                }}
-                onClick={() => navigate(`/assignments/${a.id}`)}
-              >
-                {a.title}
-              </button>
-              <span style={{ marginLeft: 12, color: "#555" }}>
-                Attempts: {a.num_attempts ?? 0}
-              </span>
-              <div style={{ fontSize: "0.95em", color: "#555" }}>
-                <div>Course: {a.course_id}</div>
-                {a.description && <div>Description: {a.description}</div>}
-                <div>Submission Limit: {a.sub_limit == null ? "∞" : a.sub_limit}</div>
-                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                  <label>
-                    Start
-                    <input
-                      style={{ marginLeft: 6 }}
-                      type="datetime-local"
-                      value={toLocalInputValue(dateMap[a.id]?.start ?? null)}
-                      onChange={(e) =>
-                        setDateMap((prev) => ({
-                          ...prev,
-                          [a.id]: {
-                            start: fromLocalInputValue(e.target.value),
-                            stop: prev[a.id]?.stop ?? null,
-                          },
-                        }))
-                      }
-                    />
-                  </label>
-                  <label>
-                    Stop
-                    <input
-                      style={{ marginLeft: 6 }}
-                      type="datetime-local"
-                      value={toLocalInputValue(dateMap[a.id]?.stop ?? null)}
-                      onChange={(e) =>
-                        setDateMap((prev) => ({
-                          ...prev,
-                          [a.id]: {
-                            start: prev[a.id]?.start ?? null,
-                            stop: fromLocalInputValue(e.target.value),
-                          },
-                        }))
-                      }
-                    />
-                  </label>
-                  <span style={{ color: "#666" }}>
-                    ({a.start ? new Date(a.start).toLocaleString() : "No start"} →{" "}
-                    {a.stop ? new Date(a.stop).toLocaleString() : "No stop"})
-                  </span>
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+    <AppShell>
+      <div className="container py-12">
+        <Card>
+          <h1 className="text-3xl font-bold mb-6">All Assignments</h1>
+          {loading ? (
+            <p className="text-center text-muted-foreground">Loading…</p>
+          ) : assignments.length === 0 ? (
+            <p className="text-muted-foreground">No assignments found.</p>
+          ) : (
+            <ul className="space-y-6">
+              {assignments.map((a) => (
+                <li key={a.id} className="border-b border-border pb-6 last:border-0 last:pb-0">
+                  <div className="flex items-center gap-3 mb-3">
+                    <Button
+                      size="sm"
+                      onClick={() => navigate(`/assignments/${a.id}`)}
+                    >
+                      {a.title}
+                    </Button>
+                    <Badge variant="info">
+                      Attempts: {a.num_attempts ?? 0}
+                    </Badge>
+                  </div>
+                  <div className="text-sm text-muted-foreground space-y-1">
+                    <div>Course: {a.course_id}</div>
+                    {a.description && <div>Description: {a.description}</div>}
+                    <div>Submission Limit: {a.sub_limit == null ? "∞" : a.sub_limit}</div>
+                    <div className="flex gap-4 items-center flex-wrap mt-3">
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor={`start-${a.id}`} className="mb-0">Start</Label>
+                        <Input
+                          id={`start-${a.id}`}
+                          type="datetime-local"
+                          value={toLocalInputValue(dateMap[a.id]?.start ?? null)}
+                          onChange={(e) =>
+                            setDateMap((prev) => ({
+                              ...prev,
+                              [a.id]: {
+                                start: fromLocalInputValue(e.target.value),
+                                stop: prev[a.id]?.stop ?? null,
+                              },
+                            }))
+                          }
+                          className="w-auto"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor={`stop-${a.id}`} className="mb-0">Stop</Label>
+                        <Input
+                          id={`stop-${a.id}`}
+                          type="datetime-local"
+                          value={toLocalInputValue(dateMap[a.id]?.stop ?? null)}
+                          onChange={(e) =>
+                            setDateMap((prev) => ({
+                              ...prev,
+                              [a.id]: {
+                                start: prev[a.id]?.start ?? null,
+                                stop: fromLocalInputValue(e.target.value),
+                              },
+                            }))
+                          }
+                          className="w-auto"
+                        />
+                      </div>
+                      <span className="text-muted-foreground text-xs">
+                        ({a.start ? new Date(a.start).toLocaleString() : "No start"} →{" "}
+                        {a.stop ? new Date(a.stop).toLocaleString() : "No stop"})
+                      </span>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      </div>
+    </AppShell>
   );
 }

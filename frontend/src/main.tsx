@@ -8,10 +8,12 @@ import StudentDashboard from "./webpages/StudentDashboard";
 import FacultyDashboard from "./webpages/FacultyDashboard";
 import CoursePage from "./webpages/CoursePage";
 import AssignmentsPage from "./webpages/AssignmentsPage";
-import AssignmentDetailPage from "./webpages/AssignmentDetailPage"; // ← NEW
+import AssignmentDetailPage from "./webpages/AssignmentDetailPage";
 import GradebookPage from "./webpages/GradebookPage";
+import CreateCoursePage from "./webpages/CreateCoursePage";
+import JoinCoursePage from "./webpages/JoinCoursePage";
 
-// NEW upload pages
+// Upload pages
 import UploadTestFile from "./webpages/UploadTestFile";
 import UploadStudentFile from "./webpages/UploadStudentFile";
 
@@ -45,6 +47,26 @@ function AppRouter() {
           }
         />
 
+        {/* Create course (faculty) */}
+        <Route
+          path="/courses/new"
+          element={
+            <Protected>
+              <CreateCoursePage />
+            </Protected>
+          }
+        />
+
+        {/* Join course (student) */}
+        <Route
+          path="/courses/join"
+          element={
+            <Protected>
+              <JoinCoursePage />
+            </Protected>
+          }
+        />
+
         {/* Course page */}
         <Route
           path="/courses/:course_id"
@@ -65,22 +87,22 @@ function AppRouter() {
           }
         />
 
+        {/* All assignments index */}
+        <Route
+          path="/assignments"
+          element={
+            <Protected>
+              <AssignmentsPage />
+            </Protected>
+          }
+        />
+
         {/* Assignment detail (student/faculty) */}
         <Route
           path="/assignments/:assignment_id"
           element={
             <Protected>
               <AssignmentDetailPage />
-            </Protected>
-          }
-        />
-
-        {/* All assignments index (optional) */}
-        <Route
-          path="/stuassignment/*"
-          element={
-            <Protected>
-              <AssignmentsPage />
             </Protected>
           }
         />

@@ -8,15 +8,35 @@ export default {
   theme: {
     extend: {
       colors: {
-        primary: "#2860E1",
-        "primary-dark": "#1F4AB4",
-        accent: "#00A4A6",
-        danger: "#D64545",
-        warning: "#E6A700",
-        "neutral-50": "#F7F8FB",
-        "neutral-100": "#E6E8EF",
-        "neutral-900": "#0E1327",
-        "background-dark": "#0F1220",
+        // Using color-mix() to enable Tailwind opacity modifiers (bg-primary/10, etc.)
+        background: "color-mix(in srgb, var(--background) calc(<alpha-value> * 100%), transparent)",
+        foreground: "color-mix(in srgb, var(--foreground) calc(<alpha-value> * 100%), transparent)",
+        card: {
+          DEFAULT: "color-mix(in srgb, var(--card) calc(<alpha-value> * 100%), transparent)",
+          foreground: "color-mix(in srgb, var(--card-foreground) calc(<alpha-value> * 100%), transparent)",
+        },
+        primary: {
+          DEFAULT: "color-mix(in srgb, var(--primary) calc(<alpha-value> * 100%), transparent)",
+          foreground: "color-mix(in srgb, var(--primary-foreground) calc(<alpha-value> * 100%), transparent)",
+        },
+        muted: {
+          DEFAULT: "color-mix(in srgb, var(--muted) calc(<alpha-value> * 100%), transparent)",
+          foreground: "color-mix(in srgb, var(--muted-foreground) calc(<alpha-value> * 100%), transparent)",
+        },
+        accent: {
+          DEFAULT: "color-mix(in srgb, var(--accent) calc(<alpha-value> * 100%), transparent)",
+          foreground: "color-mix(in srgb, var(--accent-foreground) calc(<alpha-value> * 100%), transparent)",
+        },
+        danger: {
+          DEFAULT: "color-mix(in srgb, var(--danger) calc(<alpha-value> * 100%), transparent)",
+          foreground: "color-mix(in srgb, var(--danger-foreground) calc(<alpha-value> * 100%), transparent)",
+        },
+        warning: {
+          DEFAULT: "color-mix(in srgb, var(--warning) calc(<alpha-value> * 100%), transparent)",
+          foreground: "color-mix(in srgb, var(--warning-foreground) calc(<alpha-value> * 100%), transparent)",
+        },
+        border: "color-mix(in srgb, var(--border) calc(<alpha-value> * 100%), transparent)",
+        ring: "color-mix(in srgb, var(--ring) calc(<alpha-value> * 100%), transparent)",
       },
       fontFamily: {
         sans: [
