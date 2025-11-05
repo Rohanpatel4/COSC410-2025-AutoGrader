@@ -1,25 +1,208 @@
-/* Global reset + single light theme (no auto dark mode) */
-* { box-sizing: border-box; }
-html, body, #root { height: 100%; margin: 0; }
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap");
 
-/* Explicit base colors so text never goes white-on-white */
-body {
-  background: #fafafa;   /* light background */
-  color: #111;           /* dark text */
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
-               "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light dark;
+    
+    /* Semantic color tokens - Light theme */
+    /* Using hex format for color picker support */
+    --background: #ffffff;
+    --foreground: #0e1327;
+    
+    --card: #ffffff;
+    --card-foreground: #0e1327;
+    
+    --primary: #5b7fdb;
+    --primary-foreground: #ffffff;
+    
+    --muted: #f3f4f8;
+    --muted-foreground: #6b7280;
+    
+    --accent: #00a4a6;
+    --accent-foreground: #ffffff;
+    
+    --danger: #d6458e;
+    --danger-foreground: #ffffff;
+    
+    --warning: #e6a700;
+    --warning-foreground: #ffffff;
+    
+    --border: #e2e8f0;
+    --ring: #5b7fdb;
+  }
+  
+  .dark {
+    --background: #090b14;
+    --foreground: #f2f2f7;
+    
+    --card: #0c0f18;
+    --card-foreground: #f2f2f7;
+    
+    --primary: #5b7fdb;
+    --primary-foreground: #ffffff;
+    
+    --muted: #1e293b;
+    --muted-foreground: #94a3b8;
+    
+    --accent: #00a4a6;
+    --accent-foreground: #ffffff;
+    
+    --danger: #d6458e;
+    --danger-foreground: #ffffff;
+    
+    --warning: #e6a700;
+    --warning-foreground: #ffffff;
+    
+    --border: #1e293b;
+    --ring: #5b7fdb;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    @apply scroll-smooth;
+  }
+
+  body {
+    @apply min-h-screen bg-background text-foreground font-sans antialiased;
+  }
+
+  body::selection {
+    background-color: color-mix(in srgb, var(--primary) 20%, transparent);
+  }
+
+  #root {
+    @apply min-h-full;
+  }
+
+  h1 {
+    @apply text-4xl md:text-5xl font-semibold tracking-tight text-foreground leading-tight;
+  }
+
+  h2 {
+    @apply text-3xl font-semibold tracking-tight text-foreground;
+  }
+
+  h3 {
+    @apply text-xl font-semibold text-foreground;
+  }
+
+  p {
+    @apply text-base text-muted-foreground leading-relaxed;
+  }
+
+  a {
+    @apply text-primary hover:opacity-80 font-medium transition-colors duration-200 ease-soft underline-offset-4;
+  }
 }
 
-/* Mild defaults you can reuse anywhere */
-.container { max-width: 60%; margin: 6rem auto; padding: 0 1rem; }
-button {
-  padding: 10px 14px;
-  border: 1px solid #c9c9c9;
-  border-radius: 10px;
-  background: #fff;
-  color: inherit;
-  cursor: pointer;
-}
-h1 { font-size: 1.6rem; margin: 0 0 1rem; }
+@layer components {
+  .page-container,
+  .container {
+    @apply max-w-7xl mx-auto w-full px-6 md:px-12;
+  }
 
-/* (No :root { color-scheme: ... } here) */
+  main {
+    @apply flex-1;
+  }
+
+  button,
+  .btn {
+    @apply inline-flex items-center justify-center rounded-xl px-6 py-3 font-medium transition-all duration-300 ease-soft focus:outline-none focus-visible:ring-4 focus-visible:ring-ring/25 focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+
+  button:disabled,
+  .btn:disabled {
+    @apply opacity-60 cursor-not-allowed shadow-none;
+  }
+
+  .btn-primary {
+    @apply bg-primary text-primary-foreground shadow-soft hover:opacity-90 hover:shadow-glow;
+  }
+
+  .btn-secondary {
+    @apply bg-card text-card-foreground border border-border shadow-sm hover:border-primary hover:text-primary;
+  }
+
+  .btn-ghost {
+    @apply bg-transparent text-foreground hover:text-primary hover:bg-muted;
+  }
+
+  input,
+  select,
+  textarea {
+    @apply w-full rounded-xl border border-border bg-background px-4 py-2.5 text-foreground shadow-sm placeholder:text-muted-foreground transition-all duration-200 focus:border-primary focus:ring-4 focus:ring-ring/25;
+  }
+
+  input:focus,
+  select:focus,
+  textarea:focus {
+    @apply ring-4 ring-ring/20 outline-none;
+  }
+
+  label {
+    @apply block text-sm font-medium text-foreground mb-2;
+  }
+
+  .card {
+    @apply rounded-2xl border border-border bg-card p-6 shadow-soft transition-all duration-300 ease-soft hover:shadow-lg;
+  }
+
+  .card-muted {
+    @apply rounded-2xl border border-border/60 bg-muted p-5 shadow-sm;
+  }
+
+  .surface-glass {
+    @apply rounded-3xl border border-border/20 bg-card/30 backdrop-blur-xl shadow-soft;
+  }
+
+  .section-padding {
+    @apply py-16 md:py-24;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary;
+  }
+
+  .code-inline {
+    @apply font-mono rounded-md bg-muted px-2.5 py-1 text-sm text-foreground;
+  }
+
+  .alert {
+    @apply rounded-2xl border px-4 py-4 shadow-sm transition-colors duration-200;
+  }
+
+  .alert-success {
+    @apply border-accent/30 bg-accent/10 text-accent;
+  }
+
+  .alert-error {
+    @apply border-danger/40 bg-danger/10 text-danger;
+  }
+
+  .alert-info {
+    @apply border-primary/40 bg-primary/10 text-primary;
+  }
+
+  .alert-warning {
+    @apply border-warning/40 bg-warning/10 text-warning;
+  }
+
+  .table-header {
+    @apply bg-muted text-muted-foreground;
+  }
+
+  table thead th {
+    @apply text-left text-sm font-semibold uppercase tracking-wide text-muted-foreground;
+  }
+
+  table tbody td {
+    @apply text-sm text-foreground;
+  }
+}

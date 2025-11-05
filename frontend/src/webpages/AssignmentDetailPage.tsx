@@ -4,6 +4,8 @@ import { useParams, Link } from "react-router-dom";
 import { fetchJson, BASE } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import type { Assignment } from "../types/assignments";
+import { AppShell } from "../components/layout/AppShell";
+import { Button, Card, Alert, Badge } from "../components/ui";
 
 type Attempt = { id: number; grade: number | null };
 
@@ -159,208 +161,222 @@ export default function AssignmentDetailPage() {
   }
 
   return (
-    <div className="container">
-      <div style={{ marginBottom: 12 }}>
-        {a?.course_id ? (
-          <Link to={`/courses/${encodeURIComponent(a.course_id)}`}>← Back to course</Link>
-        ) : (
-          <Link to="/my">← Back</Link>
+    <AppShell>
+      <div className="container py-12 space-y-6">
+        <div className="mb-3">
+          {a?.course_id ? (
+            <Link to={`/courses/${encodeURIComponent(a.course_id)}`} className="text-primary hover:opacity-80">
+              ← Back to course
+            </Link>
+          ) : (
+            <Link to="/my" className="text-primary hover:opacity-80">← Back</Link>
+          )}
+        </div>
+
+        {!assignment_id && (
+          <Alert variant="error">
+            <p className="font-medium">No assignment selected.</p>
+          </Alert>
         )}
-      </div>
 
-      {!assignment_id && (
-        <p style={{ color: "crimson" }}>No assignment selected.</p>
-      )}
+        {loading && <p className="text-center text-muted-foreground">Loading…</p>}
+        {err && (
+          <Alert variant="error">
+            <p className="font-medium">{err}</p>
+          </Alert>
+        )}
 
-      {loading && <p>Loading…</p>}
-      {err && <p style={{ color: "crimson" }}>{err}</p>}
+        {!a ? null : (
+          <>
+            <Card>
+              <h1 className="text-3xl font-bold mb-4">{a.title}</h1>
+              {a.description && <p className="text-foreground mb-4">{a.description}</p>}
 
-      {!a ? null : (
-        <>
-          <h1>{a.title}</h1>
-          {a.description && <p>{a.description}</p>}
-
-          <p style={{ color: "#555" }}>
-            Window: {a.start ? new Date(a.start).toLocaleString() : "—"} →{" "}
-            {a.stop ? new Date(a.stop).toLocaleString() : "—"}
-          </p>
-          <p style={{ color: "#555" }}>
-            Submission limit: {a.sub_limit == null ? "∞" : a.sub_limit}
-          </p>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  Window: {a.start ? new Date(a.start).toLocaleString() : "—"} →{" "}
+                  {a.stop ? new Date(a.stop).toLocaleString() : "—"}
+                </p>
+                <p>
+                  Submission limit: {a.sub_limit == null ? "∞" : a.sub_limit}
+                </p>
+              </div>
+            </Card>
 
           {isStudent && (
-            <>
-              <h2>Submit your code</h2>
-              <form onSubmit={onSubmit}>
-                <input
-                  type="file"
-                  accept=".py"
-                  aria-label="Submit your code"
-                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                  disabled={nowBlocked || limitReached}
-                />
-                <button type="submit" disabled={!file || nowBlocked || limitReached}>
+            <Card>
+              <h2 className="text-2xl font-semibold mb-4">Submit your code</h2>
+              <form onSubmit={onSubmit} className="space-y-4">
+                <div>
+                  <input
+                    type="file"
+                    accept=".py"
+                    aria-label="Submit your code"
+                    onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                    disabled={nowBlocked || limitReached}
+                    className="block text-sm text-foreground file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary file:text-primary-foreground hover:file:opacity-90 disabled:opacity-50"
+                  />
+                </div>
+                
+                <Button type="submit" disabled={!file || nowBlocked || limitReached}>
                   Submit
-                </button>
+                </Button>
+                
                 {nowBlocked && (
-                  <p style={{ color: "#b91c1c" }}>Submission window is closed.</p>
+                  <Alert variant="error">
+                    <p className="font-medium">Submission window is closed.</p>
+                  </Alert>
                 )}
                 {limitReached && (
-                  <p style={{ color: "#b91c1c" }}>
-                    You’ve reached the submission limit.
-                  </p>
+                  <Alert variant="error">
+                    <p className="font-medium">You've reached the submission limit.</p>
+                  </Alert>
                 )}
-                {submitMsg && <p style={{ color: "#334155" }}>{submitMsg}</p>}
+                {submitMsg && <p className="text-foreground">{submitMsg}</p>}
               </form>
 
               {/* Show grading results prominently */}
               {lastResult?.grading && (
-                <div
+                <Card 
+                  className="mt-3 text-center"
                   style={{
-                    marginTop: 12,
-                    padding: "16px",
-                    borderRadius: "8px",
-                    backgroundColor: lastResult.grading.passed ? "#f0fdf4" : "#fef2f2",
-                    border: `2px solid ${lastResult.grading.passed ? "#16a34a" : "#dc2626"}`,
+                    backgroundColor: lastResult.grading.passed ? "rgb(240, 253, 244)" : "rgb(254, 242, 242)",
+                    borderColor: lastResult.grading.passed ? "rgb(22, 163, 74)" : "rgb(220, 38, 38)",
+                    borderWidth: "2px"
                   }}
                 >
-                  <div
+                  <div 
+                    className="text-2xl font-bold mb-2"
                     style={{
-                      fontSize: "24px",
-                      fontWeight: "bold",
-                      color: lastResult.grading.passed ? "#16a34a" : "#dc2626",
-                      marginBottom: "8px",
+                      color: lastResult.grading.passed ? "rgb(22, 163, 74)" : "rgb(220, 38, 38)"
                     }}
                   >
                     {lastResult.grading.passed ? "PASS" : "FAIL"}
                   </div>
-                  <div style={{ fontSize: "14px", color: "#64748b" }}>
+                  <div className="text-sm text-muted-foreground">
                     {lastResult.grading.passed_tests} of {lastResult.grading.total_tests} tests passed
                   </div>
-                </div>
+                </Card>
               )}
 
               {lastResult && (
-                <div style={{ marginTop: 12 }}>
-                  <h3>Last run result</h3>
-                  <pre
-                    style={{
-                      background: "#f8fafc",
-                      border: "1px solid #e2e8f0",
-                      padding: 12,
-                      borderRadius: 8,
-                      whiteSpace: "pre-wrap",
-                    }}
-                  >
-                    {JSON.stringify(lastResult, null, 2)}
-                  </pre>
+                <div className="mt-3">
+                  <h3 className="text-lg font-semibold mb-2">Last run result</h3>
+                  <Card variant="muted">
+                    <pre className="whitespace-pre-wrap text-sm overflow-x-auto">
+                      {JSON.stringify(lastResult, null, 2)}
+                    </pre>
+                  </Card>
                 </div>
               )}
+            </Card>
+          )}
 
-              <h2 style={{ marginTop: 16 }}>Your attempts</h2>
+          {isStudent && (
+            <Card>
+              <h2 className="text-2xl font-semibold mb-4">Your attempts</h2>
               {!attempts.length ? (
-                <p>No attempts yet.</p>
+                <p className="text-muted-foreground">No attempts yet.</p>
               ) : (
-                <ul>
+                <ul className="space-y-2">
                   {attempts.map((t, idx) => (
-                    <li key={t.id}>
+                    <li key={t.id} className="text-foreground">
                       Attempt {idx + 1}: Grade {t.grade ?? "—"}
                     </li>
                   ))}
                 </ul>
               )}
-              <p>
+              <p className="mt-4 text-foreground">
                 Best grade:{" "}
-                <strong>
+                <strong className="text-primary">
                   {bestGrade == null || bestGrade < 0 ? "—" : bestGrade}
                 </strong>
               </p>
-            </>
+            </Card>
           )}
 
           {!isStudent && (
-  <div style={{ marginTop: 16 }}>
-    <h2>Grades (this assignment)</h2>
-    {facLoading && <p>Loading grades…</p>}
-    {facErr && <p style={{ color: "crimson" }}>{facErr}</p>}
+            <Card>
+              <h2 className="text-2xl font-semibold mb-4">Grades (this assignment)</h2>
+              {facLoading && <p className="text-muted-foreground">Loading grades…</p>}
+              {facErr && (
+                <Alert variant="error">
+                  <p className="font-medium">{facErr}</p>
+                </Alert>
+              )}
 
-    {!facLoading && !facErr && (facRows?.length ?? 0) === 0 && (
-      <p>No enrolled students or no data yet.</p>
-    )}
+              {!facLoading && !facErr && (facRows?.length ?? 0) === 0 && (
+                <p className="text-muted-foreground">No enrolled students or no data yet.</p>
+              )}
 
-    {!facLoading && !facErr && (facRows?.length ?? 0) > 0 && (
-      <div style={{ overflowX: "auto" }}>
-        <table
-          style={{
-            width: "100%",
-            borderCollapse: "collapse",
-            minWidth: 600,
-          }}
-        >
-          <thead>
-            <tr>
-              <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #e2e8f0" }}>
-                Student
-              </th>
-              {(() => {
-                const maxAttempts =
-                  facRows?.reduce((m, r) => Math.max(m, r.attempts.length), 0) ?? 0;
-                const headers = [];
-                for (let i = 0; i < maxAttempts; i++) {
-                  headers.push(
-                    <th
-                      key={`h-${i}`}
-                      style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #e2e8f0" }}
-                    >
-                      Attempt {i + 1}
-                    </th>
-                  );
-                }
-                headers.push(
-                  <th
-                    key="best"
-                    style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #e2e8f0" }}
-                  >
-                    Best
-                  </th>
-                );
-                return headers;
-              })()}
-            </tr>
-          </thead>
-          <tbody>
-            {facRows!.map((row) => {
-              const maxAttempts =
-                facRows?.reduce((m, r) => Math.max(m, r.attempts.length), 0) ?? 0;
-              return (
-                <tr key={row.student_id}>
-                  <td style={{ padding: 8, borderBottom: "1px solid #f1f5f9" }}>
-                    {row.username}
-                  </td>
-                  {[...Array(maxAttempts)].map((_, i) => {
-                    const att = row.attempts[i];
-                    return (
-                      <td key={i} style={{ padding: 8, borderBottom: "1px solid #f1f5f9" }}>
-                        {att ? (att.grade ?? "—") : "—"}
-                      </td>
-                    );
-                  })}
-                  <td style={{ padding: 8, borderBottom: "1px solid #f1f5f9", fontWeight: 600 }}>
-                    {row.best == null ? "—" : row.best}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    )}
-  </div>
-)}
+              {!facLoading && !facErr && (facRows?.length ?? 0) > 0 && (
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse min-w-[600px]">
+                    <thead>
+                      <tr>
+                        <th className="text-left p-2 border-b border-border">
+                          Student
+                        </th>
+                        {(() => {
+                          const maxAttempts =
+                            facRows?.reduce((m, r) => Math.max(m, r.attempts.length), 0) ?? 0;
+                          const headers = [];
+                          for (let i = 0; i < maxAttempts; i++) {
+                            headers.push(
+                              <th
+                                key={`h-${i}`}
+                                className="text-left p-2 border-b border-border"
+                              >
+                                Attempt {i + 1}
+                              </th>
+                            );
+                          }
+                          headers.push(
+                            <th
+                              key="best"
+                              className="text-left p-2 border-b border-border"
+                            >
+                              Best
+                            </th>
+                          );
+                          return headers;
+                        })()}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {facRows!.map((row) => {
+                        const maxAttempts =
+                          facRows?.reduce((m, r) => Math.max(m, r.attempts.length), 0) ?? 0;
+                        return (
+                          <tr key={row.student_id}>
+                            <td className="p-2 border-b border-border">
+                              {row.username}
+                            </td>
+                            {[...Array(maxAttempts)].map((_, i) => {
+                              const att = row.attempts[i];
+                              return (
+                                <td key={i} className="p-2 border-b border-border">
+                                  {att ? (att.grade ?? "—") : "—"}
+                                </td>
+                              );
+                            })}
+                            <td className="p-2 border-b border-border font-semibold">
+                              {row.best == null ? "—" : row.best}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
+          )}
 
         </>
       )}
-    </div>
+      </div>
+    </AppShell>
   );
 }
 

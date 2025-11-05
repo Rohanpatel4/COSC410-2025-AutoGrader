@@ -1,6 +1,8 @@
 import React, { useRef, useState } from "react";
 import { BASE } from "../api/client";
 import { useNavigate, useLocation } from "react-router-dom";
+import { AppShell } from "../components/layout/AppShell";
+import { Button, Input, Label, Card } from "../components/ui";
 
 /**
  * Faculty: upload a test file that's attached to a specific assignment.
@@ -70,31 +72,40 @@ const UploadTestFile: React.FC = () => {
   }
 
   return (
-    <form onSubmit={onSubmit}>
-      <h2>Upload Test File</h2>
+    <AppShell>
+      <div className="container py-12">
+        <Card className="max-w-2xl mx-auto">
+          <h2 className="text-2xl font-bold mb-6">Upload Test File</h2>
+          
+          <form onSubmit={onSubmit} className="space-y-6">
+            <div>
+              <Label htmlFor="assignmentId">Assignment ID</Label>
+              <Input
+                id="assignmentId"
+                value={assignmentId}
+                onChange={(e) => setAssignmentId(e.target.value)}
+                placeholder="e.g., 1"
+              />
+            </div>
 
-      <label style={{ display: "block", marginBottom: 8 }}>
-        Assignment ID
-        <input
-          style={{ marginLeft: 8 }}
-          value={assignmentId}
-          onChange={(e) => setAssignmentId(e.target.value)}
-          placeholder="e.g., 1"
-          // no `required` so our custom validation can run in tests
-        />
-      </label>
+            <div>
+              <Label htmlFor="test-file">Test file (.py)</Label>
+              <input
+                id="test-file"
+                ref={fileInputRef}
+                type="file"
+                accept=".py, text/x-python, application/x-python, text/plain, */*"
+                className="block mt-1.5 text-sm text-foreground file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary file:text-primary-foreground hover:file:opacity-90"
+              />
+            </div>
 
-      <label htmlFor="test-file">Test file</label>
-      <input
-        id="test-file"
-        ref={fileInputRef}
-        type="file"
-        accept=".py, text/x-python, application/x-python, text/plain, */*"
-      />
-
-      <button type="submit">Upload Test File</button>
-      <p>{msg}</p>
-    </form>
+            <Button type="submit">Upload Test File</Button>
+            
+            {msg && <p className="text-foreground">{msg}</p>}
+          </form>
+        </Card>
+      </div>
+    </AppShell>
   );
 };
 

@@ -5,8 +5,9 @@ from typing import List
 
 class Settings(BaseSettings):
     # --- Database ---
-    # Use absolute path to avoid confusion between multiple app.db files
-    DATABASE_URL: str = "sqlite:////Users/rohan/Desktop/school/Computer Science/COSC 410/COSC410-2025-AutoGrader/backend/app.db"
+    # Relative path works in Docker (working_dir=/app/backend)
+    # Can be overridden via environment variable
+    DATABASE_URL: str = "sqlite:///./app.db"
 
     # --- CORS ---
     CORS_ORIGINS: List[str] = [
