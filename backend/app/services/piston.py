@@ -119,7 +119,6 @@ def _combine_code(student_code: str, test_code: str) -> str:
     """Combine student code and test code with unittest test runner and custom points decorator."""
     return f"""import sys
 import unittest
-import functools
 
 # Custom points decorator for test functions
 _points_registry = {{}}
@@ -223,10 +222,10 @@ if __name__ == "__main__":
 """
 
 
-def _map_status_to_judge0(returncode: int, timed_out: bool = False) -> int:
+def _map_status_to_result(returncode: int, timed_out: bool = False) -> int:
     """
-    Map Piston execution result to Judge0-compatible status IDs.
-    Maintains compatibility with existing grading logic.
+    Map Piston execution result to status IDs.
+    Returns status codes compatible with existing grading logic.
     """
     if timed_out:
         return 5  # Time Limit Exceeded
@@ -253,7 +252,7 @@ async def execute_code(
         timeout_ms: Execution timeout in milliseconds
         
     Returns:
-        Dictionary with execution results in Judge0-compatible format
+        Dictionary with execution results from Piston API
     """
     piston_url = settings.PISTON_URL
     
@@ -307,12 +306,12 @@ async def execute_code(
             # Parse test output for grading
             grading = _parse_pytest_output(stdout, stderr)
             
-            # Build response in Judge0-compatible format
+            # Build response in Piston execution result format
             return {
                 "stdout": stdout,
                 "stderr": stderr,
                 "returncode": code,
-                "status": {"id": _map_status_to_judge0(code, timed_out)},
+                "status": {"id": _map_status_to_result(code, timed_out)},
                 "time": None,  # Piston doesn't provide precise timing
                 "memory": None,  # Piston doesn't provide precise memory
                 "language_id_used": 71,  # Python 3

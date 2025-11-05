@@ -4,7 +4,6 @@ omit =
     test_*
     debug_combined.py
     scripts/*
-    test_examples/*
 
 [report]
 exclude_lines =

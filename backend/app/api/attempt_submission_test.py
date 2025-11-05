@@ -1,10 +1,8 @@
 # backend/app/api/attempt_submission_test.py
-from typing import Any, Dict
 import importlib, inspect
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from starlette import status
-from app.core.settings import settings
 from app.services.piston import execute_code
 
 # ----- converter import (robust) -----
@@ -27,8 +25,6 @@ def _import_converter_module():
         + ". Ensure backend/app/services/file_converter.py exists and exports file_to_text(UploadFile)."
     ) from last_err
 
-fc = _import_converter_module()
-
 def _get_callable(mod, name: str):
     obj = getattr(mod, name, None)
     return obj if callable(obj) else None
@@ -42,8 +38,6 @@ async def _call_safely(fn, *args, **kwargs):
     return res
 
 router = APIRouter(tags=["attempts"])
-print(f"[DEBUG] Router created: {router}", flush=True)
-print(f"[DEBUG] About to define attempt_submission_test_bridge", flush=True)
 
 @router.post("/bridge", status_code=status.HTTP_201_CREATED)
 async def attempt_submission_test_bridge(
@@ -71,10 +65,6 @@ async def attempt_submission_test_bridge(
     return result
 
 
-@router.get("/test-route")
-async def test_route_registration():
-    return {"message": "Test route works"}
-
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def attempt_submission_test(
     submission: UploadFile = File(..., description="Student .py submission"),
@@ -97,13 +87,3 @@ async def attempt_submission_test(
     # Execute with Piston
     result = await execute_code(student_code, test_case)
     return result
-
-@router.get("/")
-def get_attempts():
-    """Temporary stub route."""
-    return {"message": "attempts route working"}
-
-@router.post("/")
-def create_attempt():
-    """Temporary POST route stub."""
-    return {"message": "attempt created"}

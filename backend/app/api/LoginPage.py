@@ -45,8 +45,3 @@ def login(payload: dict, db: Session = Depends(get_db)):
         "token": None,
     }
 
-    
-    
-
-
-

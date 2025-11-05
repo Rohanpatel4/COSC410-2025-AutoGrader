@@ -246,7 +246,6 @@ async def submit_to_assignment(
     """
     Create a StudentSubmission for this assignment and run it against the
     assignment's stored test file (latest TestCase row).
-    # TODO: Replace with Piston implementation
     """
     a = db.get(Assignment, assignment_id)
     if not a:

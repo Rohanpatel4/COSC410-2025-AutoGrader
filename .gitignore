@@ -16,5 +16,11 @@ dist/
 .vscode/
 .idea/
 .venv/
+
+# Coverage reports
+.coverage
+.coverage.*
+coverage.lcov
+*.lcov
 coverage/
 htmlcov/
