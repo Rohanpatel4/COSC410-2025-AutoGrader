@@ -11,6 +11,8 @@ from .courses import router as courses_router
 from .registrations import router as registrations_router
 from .assignments import router as assignments_router
 
+# startup hook
+from app.services.piston import _ensure_python312
 
 # App
 app = FastAPI(title="AutoGrader API", version="1.0.0")
@@ -27,6 +29,14 @@ app.add_middleware(
     allow_methods=["*"],   # you can tighten later
     allow_headers=["*"],   # you can tighten later
 )
+
+@app.on_event("startup")
+async def _piston_bootstrap():
+    try:
+        version = await _ensure_python312()
+        print(f"[piston] Python ready: {version}", flush=True)
+    except Exception as e:
+        print(f"[piston] ensure python warning: {e}", flush=True)
 
 # Routers
 app.include_router(login_router,       prefix="/api/v1",             tags=["login"])

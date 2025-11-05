@@ -11,6 +11,7 @@ from app.models.models import (
     Assignment, Course, StudentSubmission, TestCase,
     User, RoleEnum, user_course_association
 )
+from app.services.piston import execute_code
 
 router = APIRouter()
 
@@ -190,6 +191,10 @@ async def upload_test_file_for_assignment(
     except Exception as e:
         raise HTTPException(400, f"Failed to read test file: {e}")
 
+    # Validate that the file content is not empty
+    if not content.strip():
+        raise HTTPException(400, "Test file cannot be empty")
+
     # Replace any existing test rows for this assignment (simple policy)
     db.query(TestCase).filter(TestCase.assignment_id == assignment_id).delete()
 
@@ -285,11 +290,34 @@ async def submit_to_assignment(
     except Exception as e:
         raise HTTPException(400, f"Failed to read submission: {e}")
 
-     # TODO: Replace with Piston implementation
-    raise HTTPException(
-        status_code=501,
-        detail="Judge0 integration has been removed. Assignment submission will be replaced with Piston."
+    # Execute with Piston
+    test_code = tc.filename
+    result = await execute_code(student_code, test_code)
+    
+    # Check for invalid test configuration (missing points)
+    if result["grading"].get("error"):
+        raise HTTPException(400, f"Invalid test file: {result['grading']['error']}")
+    
+    # Calculate grade as sum of earned points
+    grade = result["grading"].get("earned_points", 0)
+    
+    # Create submission record
+    submission_record = StudentSubmission(
+        student_id=student_id,
+        assignment_id=assignment_id,
+        grade=grade
     )
+    db.add(submission_record)
+    db.commit()
+    db.refresh(submission_record)
+    
+    # Return complete result
+    return {
+        "ok": True,
+        "submission_id": submission_record.id,
+        "grade": grade,
+        "result": result
+    }
 @router.get("/{assignment_id}/grades", response_model=dict)
 def grades_for_assignment(assignment_id: int, db: Session = Depends(get_db)):
     """

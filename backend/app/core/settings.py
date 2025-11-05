@@ -17,7 +17,7 @@ class Settings(BaseSettings):
         # "http://192.168.1.10:5173",
     ]
 
-
+    PISTON_URL: str = "http://localhost:2000"
 
     # --- Debug ---
     DEBUG: bool = True
