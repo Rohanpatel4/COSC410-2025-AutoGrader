@@ -12,53 +12,53 @@
     /* Using hex format for color picker support */
     --background: #ffffff;
     --foreground: #0e1327;
-    
+
     --card: #ffffff;
     --card-foreground: #0e1327;
-    
-    --primary: #5b7fdb;
+
+    --primary: #b8860b; /* Gold */
     --primary-foreground: #ffffff;
-    
+
     --muted: #f3f4f8;
     --muted-foreground: #6b7280;
-    
-    --accent: #00a4a6;
+
+    --accent: #daa520; /* Goldenrod */
     --accent-foreground: #ffffff;
-    
+
     --danger: #d6458e;
     --danger-foreground: #ffffff;
-    
+
     --warning: #e6a700;
     --warning-foreground: #ffffff;
-    
+
     --border: #e2e8f0;
-    --ring: #5b7fdb;
+    --ring: #b8860b;
   }
   
   .dark {
     --background: #090b14;
     --foreground: #f2f2f7;
-    
+
     --card: #0c0f18;
     --card-foreground: #f2f2f7;
-    
-    --primary: #5b7fdb;
+
+    --primary: #daa520; /* Goldenrod */
     --primary-foreground: #ffffff;
-    
+
     --muted: #1e293b;
     --muted-foreground: #94a3b8;
-    
-    --accent: #00a4a6;
+
+    --accent: #b8860b; /* Gold */
     --accent-foreground: #ffffff;
-    
+
     --danger: #d6458e;
     --danger-foreground: #ffffff;
-    
+
     --warning: #e6a700;
     --warning-foreground: #ffffff;
-    
+
     --border: #1e293b;
-    --ring: #5b7fdb;
+    --ring: #daa520;
   }
 
   * {
@@ -204,5 +204,80 @@
 
   table tbody td {
     @apply text-sm text-foreground;
+  }
+
+  /* Gold gradient theme components */
+  .hero-header {
+    @apply h-80 bg-gradient-to-br from-amber-600 via-yellow-600 to-orange-600 rounded-3xl p-8 flex items-end relative overflow-hidden;
+  }
+
+  .hero-header::before {
+    content: '';
+    @apply absolute inset-0 bg-gradient-to-t from-black/20 to-transparent;
+  }
+
+  .hero-title {
+    @apply text-5xl font-bold text-white drop-shadow-lg mb-2 relative z-10;
+  }
+
+  .hero-subtitle {
+    @apply text-xl text-white/90 font-medium relative z-10;
+  }
+
+  /* Improved hero header for better spacing */
+  .hero-header-improved {
+    @apply h-96 bg-gradient-to-br from-amber-600 via-yellow-600 to-orange-600 p-10 relative overflow-hidden;
+  }
+
+  .hero-header-improved::before {
+    content: '';
+    @apply absolute inset-0 bg-gradient-to-t from-black/30 to-transparent;
+  }
+
+  .hero-title-improved {
+    @apply text-4xl md:text-5xl font-bold text-white drop-shadow-lg mb-3;
+  }
+
+  .hero-subtitle-improved {
+    @apply text-lg md:text-xl text-white/95 font-medium;
+  }
+
+  .hero-stats {
+    @apply w-full;
+  }
+
+  .hero-stat-card {
+    @apply bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20 text-center;
+  }
+
+  .content-row {
+    @apply mb-6;
+  }
+
+  .content-row-title {
+    @apply text-2xl font-bold text-gray-900 mb-6;
+  }
+
+  /* Button styles */
+  .btn-primary {
+    @apply bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-700 hover:to-yellow-700 text-white font-medium py-3 px-6 rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl;
+  }
+
+  .btn-secondary {
+    @apply bg-white/10 backdrop-blur-sm border border-white/20 text-white hover:bg-white/20 font-medium py-3 px-6 rounded-xl transition-all duration-200;
+  }
+
+  .btn-lg {
+    @apply h-14 px-10 py-5 text-lg;
+  }
+
+  /* Glass card effect */
+  .glass-card {
+    @apply bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 shadow-lg;
+  }
+
+  /* Sidebar styling */
+  .sidebar-item {
+    @apply flex items-center gap-3 rounded-xl px-4 py-3 text-white/80 transition-all duration-200 hover:bg-white/10 hover:text-white;
   }
 }

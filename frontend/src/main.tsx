@@ -7,6 +7,7 @@ import LoginPage from "./webpages/LoginPage";
 import StudentDashboard from "./webpages/StudentDashboard";
 import FacultyDashboard from "./webpages/FacultyDashboard";
 import CoursePage from "./webpages/CoursePage";
+import CoursesPage from "./webpages/CoursesPage";
 import AssignmentsPage from "./webpages/AssignmentsPage";
 import AssignmentDetailPage from "./webpages/AssignmentDetailPage";
 import GradebookPage from "./webpages/GradebookPage";
@@ -19,6 +20,7 @@ import UploadStudentFile from "./webpages/UploadStudentFile";
 
 import "./styles/index.css";
 import { AuthProvider, Protected, useAuth } from "./auth/AuthContext";
+import { Layout } from "./components/layout";
 
 function RoleRouter() {
   const location = useLocation();
@@ -26,8 +28,20 @@ function RoleRouter() {
   const stateRole = (location.state as { role?: "faculty" | "student" } | undefined)?.role;
   const effectiveRole = role ?? stateRole;
 
-  if (effectiveRole === "faculty") return <FacultyDashboard />;
-  if (effectiveRole === "student") return <StudentDashboard />;
+  if (effectiveRole === "faculty") {
+    return (
+      <Layout title="Faculty Dashboard">
+        <FacultyDashboard />
+      </Layout>
+    );
+  }
+  if (effectiveRole === "student") {
+    return (
+      <Layout title="Student Dashboard">
+        <StudentDashboard />
+      </Layout>
+    );
+  }
   return <Navigate to="/login" replace />;
 }
 
@@ -52,7 +66,9 @@ function AppRouter() {
           path="/courses/new"
           element={
             <Protected>
-              <CreateCoursePage />
+              <Layout title="Create Course">
+                <CreateCoursePage />
+              </Layout>
             </Protected>
           }
         />
@@ -62,7 +78,21 @@ function AppRouter() {
           path="/courses/join"
           element={
             <Protected>
-              <JoinCoursePage />
+              <Layout title="Join Course">
+                <JoinCoursePage />
+              </Layout>
+            </Protected>
+          }
+        />
+
+        {/* Courses index */}
+        <Route
+          path="/courses"
+          element={
+            <Protected>
+              <Layout title="Courses">
+                <CoursesPage />
+              </Layout>
             </Protected>
           }
         />
@@ -72,7 +102,9 @@ function AppRouter() {
           path="/courses/:course_id"
           element={
             <Protected>
-              <CoursePage />
+              <Layout title="Course Details">
+                <CoursePage />
+              </Layout>
             </Protected>
           }
         />
@@ -82,7 +114,9 @@ function AppRouter() {
           path="/courses/:course_id/gradebook"
           element={
             <Protected>
-              <GradebookPage />
+              <Layout title="Gradebook">
+                <GradebookPage />
+              </Layout>
             </Protected>
           }
         />
@@ -92,7 +126,9 @@ function AppRouter() {
           path="/assignments"
           element={
             <Protected>
-              <AssignmentsPage />
+              <Layout title="Assignments">
+                <AssignmentsPage />
+              </Layout>
             </Protected>
           }
         />
@@ -102,7 +138,9 @@ function AppRouter() {
           path="/assignments/:assignment_id"
           element={
             <Protected>
-              <AssignmentDetailPage />
+              <Layout title="Assignment Details">
+                <AssignmentDetailPage />
+              </Layout>
             </Protected>
           }
         />
@@ -112,7 +150,9 @@ function AppRouter() {
           path="/upload/test"
           element={
             <Protected>
-              <UploadTestFile />
+              <Layout title="Upload Test File">
+                <UploadTestFile />
+              </Layout>
             </Protected>
           }
         />
@@ -120,7 +160,9 @@ function AppRouter() {
           path="/upload/student"
           element={
             <Protected>
-              <UploadStudentFile />
+              <Layout title="Upload Student File">
+                <UploadStudentFile />
+              </Layout>
             </Protected>
           }
         />

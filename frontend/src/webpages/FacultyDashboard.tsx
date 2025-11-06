@@ -4,7 +4,7 @@ import { useAuth } from "../auth/AuthContext";
 import { fetchJson } from "../api/client";
 import type { Course } from "../types/courses";
 import { Button, Input, Label, Card, Badge, Alert } from "../components/ui";
-import { AppShell } from "../components/layout/AppShell";
+import { HeroHeader, ContentRow, ContentCard } from "../components/ui";
 
 export default function FacultyDashboard() {
   const { userId, logout } = useAuth();
@@ -41,134 +41,106 @@ export default function FacultyDashboard() {
   React.useEffect(() => { loadMine(); }, [professorId]);
 
   return (
-    <AppShell>
-      <main className="page-container space-y-8 py-12">
-        <header className="rounded-3xl border border-border/80 bg-card/90 p-8 shadow-soft">
-          <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-            <div className="space-y-2">
-              <Badge variant="default">
-                Faculty
-              </Badge>
-              <div>
-                <h1 className="text-3xl font-semibold tracking-tight">Welcome back</h1>
-                <p className="text-sm text-muted-foreground">
-                  User ID <span className="font-semibold text-foreground">{userId ?? "—"}</span>
-                </p>
-              </div>
-            </div>
+    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-yellow-50/50 to-orange-50/30">
+      <HeroHeader
+        title="Faculty Dashboard"
+        subtitle="Manage your courses and assignments"
+        stats={[
+          { label: "My Courses", value: mine.length },
+          { label: "Total Students", value: 0 },
+          { label: "Active Assignments", value: 0 }
+        ]}
+        className="hero-header-improved"
+      />
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <Button variant="secondary" onClick={onLogout}>
-                Log out
-              </Button>
-            </div>
-          </div>
-        </header>
-
+      <div className="relative z-10 -mt-8 px-6 pb-8">
         {/* Alert Messages */}
         {msg && (
-          <Alert variant={msg.includes("failed") || msg.includes("fail") ? "error" : "success"}>
+          <div className={`p-4 rounded-xl mb-6 ${msg.includes("failed") || msg.includes("fail") ? "bg-red-50 border border-red-200 text-red-700" : "bg-green-50 border border-green-200 text-green-700"}`}>
             <p className="font-medium">{msg}</p>
-          </Alert>
+          </div>
         )}
 
+        {/* Quick Actions */}
+        <div className="flex justify-end mb-8">
+          <Button
+            className="flex items-center gap-2"
+            onClick={() => navigate("/courses/new")}
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v12m6-6H6" />
+            </svg>
+            Create Course
+          </Button>
+        </div>
+
         {/* My Courses Section */}
-        <Card>
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent/10 text-accent">
-                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                </svg>
-              </div>
-              <h2 className="text-xl font-semibold tracking-tight text-foreground">
-                My courses
-              </h2>
-            </div>
-
-            <div className="flex items-center gap-3">
-              {!loading && (
-                <Badge variant="info">
-                  {mine.length} {mine.length === 1 ? "course" : "courses"}
-                </Badge>
-              )}
-              <Button size="sm" onClick={() => navigate("/courses/new")}>
-                <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v12m6-6H6" />
-                </svg>
-                Create Course
-              </Button>
-            </div>
-          </div>
-
-            <div className="mt-6">
-              {loading ? (
-                <div className="flex items-center justify-center py-10">
-                  <svg className="h-8 w-8 animate-spin text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                </div>
-              ) : (mine?.length ?? 0) > 0 ? (
-                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                  {(mine ?? []).map((c) => (
-                    <Link
-                      key={c.id}
-                      to={`/courses/${encodeURIComponent(c.course_code)}`}
-                      className="group flex min-h-[180px] flex-col rounded-2xl border border-border bg-card/90 p-6 shadow-sm transition-all duration-300 ease-soft hover:-translate-y-[2px] hover:border-primary/30 hover:shadow-glow active:scale-[.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-                    >
-                      <article className="flex flex-1 flex-col justify-between gap-4">
-                        <div className="space-y-2">
-                          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                            {c.course_code}
-                          </p>
-                          <h3 className="text-lg font-semibold leading-tight text-foreground line-clamp-2">
-                            {c.name}
-                          </h3>
-                        </div>
-                        
-                        <div className="space-y-3">
-                          {c.enrollment_key && (
-                            <div className="rounded-lg border border-border bg-muted/50 px-3 py-2">
-                              <p className="text-xs font-medium text-muted-foreground mb-1">Enrollment key</p>
-                              <code className="code-inline text-xs">{c.enrollment_key}</code>
-                            </div>
-                          )}
-                          <div className="flex items-center justify-end">
-                            <svg 
-                              className="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary" 
-                              fill="none" 
-                              stroke="currentColor" 
-                              viewBox="0 0 24 24"
-                            >
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                            </svg>
-                          </div>
-                        </div>
-                      </article>
-                    </Link>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center">
-                  <div className="flex flex-col items-center gap-4 rounded-2xl bg-muted px-6 py-10">
-                    <svg className="h-12 w-12 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                    </svg>
-                    <div className="space-y-1">
-                      <p className="text-sm font-semibold text-foreground">
-                        No courses yet
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Create your first course using the form above.
-                      </p>
+        {mine.length > 0 && (
+          <ContentRow>
+            {mine.map((c) => (
+              <ContentCard
+                key={c.id}
+                onClick={() => navigate(`/courses/${encodeURIComponent(c.course_code)}`)}
+              >
+                <div className="p-6">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center">
+                        <svg className="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-gray-900 text-lg">{c.name}</h3>
+                        <Badge variant="secondary" className="mt-1">{c.course_code}</Badge>
+                      </div>
                     </div>
+                    {c.enrollment_key && (
+                      <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
+                        Key: {c.enrollment_key}
+                      </Badge>
+                    )}
+                  </div>
+
+                  <p className="text-gray-600 line-clamp-2 mb-4">
+                    {c.description || "No description available"}
+                  </p>
+
+                  <div className="flex items-center justify-between text-sm text-gray-500">
+                    <span className="flex items-center gap-1">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                      Manage Course
+                    </span>
                   </div>
                 </div>
-              )}
-            </div>
-        </Card>
-      </main>
-    </AppShell>
+              </ContentCard>
+            ))}
+          </ContentRow>
+        )}
+
+        {/* Empty State */}
+        {!loading && mine.length === 0 && (
+          <div className="text-center py-16">
+            <svg className="h-16 w-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+            </svg>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">No courses created</h3>
+            <p className="text-gray-600 mb-6">
+              You haven't created any courses yet. Use the button above to create your first course.
+            </p>
+          </div>
+        )}
+
+        {/* Loading State */}
+        {loading && (
+          <div className="text-center py-16">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-500 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading your courses...</p>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
