@@ -8,9 +8,11 @@ import StudentDashboard from "./webpages/StudentDashboard";
 import FacultyDashboard from "./webpages/FacultyDashboard";
 import CoursePage from "./webpages/CoursePage";
 import CoursesPage from "./webpages/CoursesPage";
+import { Layout } from "./components/layout";
 import AssignmentsPage from "./webpages/AssignmentsPage";
 import AssignmentDetailPage from "./webpages/AssignmentDetailPage";
 import GradebookPage from "./webpages/GradebookPage";
+import GradebookIndexPage from "./webpages/GradebookIndexPage";
 import CreateCoursePage from "./webpages/CreateCoursePage";
 import JoinCoursePage from "./webpages/JoinCoursePage";
 
@@ -20,7 +22,46 @@ import UploadStudentFile from "./webpages/UploadStudentFile";
 
 import "./styles/index.css";
 import { AuthProvider, Protected, useAuth } from "./auth/AuthContext";
-import { Layout } from "./components/layout";
+import { Button } from "./components/ui/button";
+import { useNavigate } from "react-router-dom";
+import { Plus, BookOpen } from "lucide-react";
+
+function CoursesLayoutWrapper() {
+  const navigate = useNavigate();
+  const { role } = useAuth();
+  const isFaculty = role === "faculty";
+
+  const actions = (
+    <>
+      {isFaculty && (
+        <Button
+          className="flex items-center gap-2"
+          onClick={() => navigate("/courses/new")}
+        >
+          <Plus className="h-4 w-4" />
+          Create Course
+        </Button>
+      )}
+
+      {!isFaculty && (
+        <Button
+          variant="secondary"
+          className="flex items-center gap-2"
+          onClick={() => navigate("/courses/join")}
+        >
+          <BookOpen className="h-4 w-4" />
+          Join Course
+        </Button>
+      )}
+    </>
+  );
+
+  return (
+    <Layout title="Courses" actions={actions}>
+      <CoursesPage />
+    </Layout>
+  );
+}
 
 function RoleRouter() {
   const location = useLocation();
@@ -90,9 +131,7 @@ function AppRouter() {
           path="/courses"
           element={
             <Protected>
-              <Layout title="Courses">
-                <CoursesPage />
-              </Layout>
+              <CoursesLayoutWrapper />
             </Protected>
           }
         />
@@ -128,6 +167,18 @@ function AppRouter() {
             <Protected>
               <Layout title="Assignments">
                 <AssignmentsPage />
+              </Layout>
+            </Protected>
+          }
+        />
+
+        {/* Gradebook index (faculty) */}
+        <Route
+          path="/gradebook"
+          element={
+            <Protected>
+              <Layout title="Gradebook">
+                <GradebookIndexPage />
               </Layout>
             </Protected>
           }

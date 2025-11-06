@@ -47,11 +47,11 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 w-64 bg-gradient-to-b from-amber-800 to-orange-900 text-white shadow-xl transition-transform duration-300 ease-in-out",
+          "fixed inset-y-0 left-0 z-40 w-64 bg-gradient-to-b from-yellow-700 via-yellow-800 to-amber-900 text-white shadow-xl transition-transform duration-300 ease-in-out",
           isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         )}
       >
-        <div className="flex h-16 items-center justify-between px-6">
+        <div className="flex h-24 items-center justify-between px-6">
           <Link to="/my" className="flex items-center gap-2 text-2xl font-bold">
             <GraduationCap className="h-8 w-8 text-yellow-300" />
             AutoGrader

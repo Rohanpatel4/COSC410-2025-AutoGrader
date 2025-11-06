@@ -27,7 +27,7 @@ export function ContentCard({ children, className, ...props }: ContentCardProps)
   return (
     <div
       className={cn(
-        "flex-none w-72 bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 cursor-pointer",
+        "flex-none w-72 bg-card border border-border rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 cursor-pointer",
         className
       )}
       {...props}

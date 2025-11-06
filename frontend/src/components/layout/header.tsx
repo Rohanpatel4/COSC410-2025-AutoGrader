@@ -15,8 +15,8 @@ export function Header({ onMenuClick }: HeaderProps) {
   };
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-16 items-center justify-between px-4">
+    <header className="sticky top-0 z-50 w-full bg-black border-b border-gray-800">
+      <div className="flex h-24 items-center justify-between px-6">
         <div className="flex items-center gap-4">
           <Button
             variant="ghost"
@@ -28,23 +28,23 @@ export function Header({ onMenuClick }: HeaderProps) {
           </Button>
 
           <div className="flex items-center gap-2">
-            <GraduationCap className="h-6 w-6 text-primary" />
-            <span className="font-semibold text-lg">AutoGrader</span>
+            <GraduationCap className="h-6 w-6 text-yellow-400" />
+            <span className="font-semibold text-lg text-white">AutoGrader</span>
           </div>
         </div>
 
         <div className="flex items-center gap-4">
-          <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="hidden sm:flex items-center gap-2 text-sm text-gray-300">
             <User className="h-4 w-4" />
-            <span>{userId}</span>
-            <span className="capitalize">({role})</span>
+            <span className="text-white">{userId}</span>
+            <span className="capitalize text-gray-300">({role})</span>
           </div>
 
           <Button
             variant="ghost"
             size="sm"
             onClick={handleLogout}
-            className="text-muted-foreground hover:text-foreground"
+            className="text-gray-300 hover:text-white"
           >
             <LogOut className="h-4 w-4" />
           </Button>
