@@ -1,5 +1,4 @@
 import React from "react";
-import { ThemeToggle } from "../ui/ThemeToggle";
 
 export interface AppShellProps {
   children: React.ReactNode;
@@ -15,10 +14,6 @@ export interface AppShellProps {
 export function AppShell({ children, className = "" }: AppShellProps) {
   return (
     <div className={`min-h-screen bg-background text-foreground ${className}`.trim()}>
-      {/* Theme toggle - fixed top-right for easy testing. Remove this div to revert. */}
-      <div className="fixed top-4 right-4 z-50">
-        <ThemeToggle />
-      </div>
       {children}
     </div>
   );

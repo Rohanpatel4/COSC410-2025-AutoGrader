@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { Navigate } from "react-router-dom";
 
 export type Role = "faculty" | "student";
 
@@ -67,10 +68,10 @@ export function useAuth() {
   return v;
 }
 
-/** Simple gate used in routing layouts; returns null when logged out. */
+/** Simple gate used in routing layouts; redirects to login when not authenticated. */
 export function Protected({ children }: { children: React.ReactNode }) {
   const { role } = useAuth();
-  if (!role) return null;
+  if (!role) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
 

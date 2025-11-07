@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import { BASE } from "../api/client";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
-import { AppShell } from "../components/layout/AppShell";
 import { Button, Input, Label, Card, Alert, Badge } from "../components/ui";
 
 /**
@@ -69,8 +68,7 @@ const UploadStudentFile: React.FC = () => {
   }
 
   return (
-    <AppShell>
-      <div className="container py-12">
+    <div className="container py-12">
         <Card className="max-w-3xl mx-auto">
           <h2 className="text-2xl font-bold mb-6">Upload Student Code</h2>
           
@@ -146,8 +144,7 @@ const UploadStudentFile: React.FC = () => {
             </Card>
           )}
         </Card>
-      </div>
-    </AppShell>
+    </div>
   );
 };
 

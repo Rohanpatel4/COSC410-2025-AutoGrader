@@ -2,7 +2,6 @@
 import React from "react";
 import { useParams, Link } from "react-router-dom";
 import { fetchJson } from "../api/client";
-import { AppShell } from "../components/layout/AppShell";
 import { Card, Alert } from "../components/ui";
 
 type GBPayload = {
@@ -37,8 +36,7 @@ export default function GradebookPage() {
   const aIds = data?.assignments.map((a) => a.id) ?? [];
 
   return (
-    <AppShell>
-      <div className="container py-12">
+    <div className="container py-12">
         <div className="mb-3">
           <Link to={`/courses/${encodeURIComponent(course_id)}`} className="text-primary hover:opacity-80">
             ← Back to course
@@ -103,7 +101,6 @@ export default function GradebookPage() {
             </>
           )}
         </Card>
-      </div>
-    </AppShell>
+    </div>
   );
 }

@@ -1,6 +1,5 @@
-import React, { useState } from "react";
-import { Header } from "./header";
-import { Sidebar } from "./sidebar";
+import React from "react";
+import { Navigation } from "./Navigation";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -9,14 +8,11 @@ interface LayoutProps {
 }
 
 export function Layout({ children, title, actions }: LayoutProps) {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
   return (
     <div className="min-h-screen bg-background">
-      <Header onMenuClick={() => setSidebarOpen(true)} />
-      <Sidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(false)} />
+      <Navigation />
 
-      <main className="lg:pl-64">
+      <main className="lg:pl-64 pt-24">
         <div className="py-6">
           {(title || actions) && (
             <div className="mb-6 flex items-center justify-between">

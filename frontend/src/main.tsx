@@ -86,11 +86,24 @@ function RoleRouter() {
   return <Navigate to="/login" replace />;
 }
 
+// Root route that redirects based on auth state
+function RootRoute() {
+  const { role } = useAuth();
+  
+  // If authenticated, redirect to dashboard
+  if (role) {
+    return <Navigate to="/my" replace />;
+  }
+  
+  // If not authenticated, redirect to login
+  return <Navigate to="/login" replace />;
+}
+
 function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="/" element={<RootRoute />} />
         <Route path="/login" element={<LoginPage />} />
 
         <Route
@@ -218,10 +231,23 @@ function AppRouter() {
           }
         />
 
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        <Route path="*" element={<CatchAllRoute />} />
       </Routes>
     </BrowserRouter>
   );
+}
+
+// Catch-all route that redirects based on auth state
+function CatchAllRoute() {
+  const { role } = useAuth();
+  
+  // If authenticated, redirect to dashboard
+  if (role) {
+    return <Navigate to="/my" replace />;
+  }
+  
+  // If not authenticated, redirect to login
+  return <Navigate to="/login" replace />;
 }
 
 const root = document.getElementById("root");

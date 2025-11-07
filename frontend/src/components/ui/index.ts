@@ -5,7 +5,6 @@ export { Select, type SelectProps } from "./Select";
 export { Card, type CardProps } from "./Card";
 export { Badge, type BadgeProps } from "./Badge";
 export { Alert, type AlertProps } from "./Alert";
-export { ThemeToggle } from "./ThemeToggle";
 export { HeroHeader } from "./hero-header";
 export { ContentRow, ContentCard } from "./content-row";
 
