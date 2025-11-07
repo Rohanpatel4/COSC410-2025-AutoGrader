@@ -7,9 +7,12 @@ import LoginPage from "./webpages/LoginPage";
 import StudentDashboard from "./webpages/StudentDashboard";
 import FacultyDashboard from "./webpages/FacultyDashboard";
 import CoursePage from "./webpages/CoursePage";
+import CoursesPage from "./webpages/CoursesPage";
+import { Layout } from "./components/layout";
 import AssignmentsPage from "./webpages/AssignmentsPage";
 import AssignmentDetailPage from "./webpages/AssignmentDetailPage";
 import GradebookPage from "./webpages/GradebookPage";
+import GradebookIndexPage from "./webpages/GradebookIndexPage";
 import CreateCoursePage from "./webpages/CreateCoursePage";
 import JoinCoursePage from "./webpages/JoinCoursePage";
 
@@ -19,6 +22,46 @@ import UploadStudentFile from "./webpages/UploadStudentFile";
 
 import "./styles/index.css";
 import { AuthProvider, Protected, useAuth } from "./auth/AuthContext";
+import { Button } from "./components/ui/button";
+import { useNavigate } from "react-router-dom";
+import { Plus, BookOpen } from "lucide-react";
+
+function CoursesLayoutWrapper() {
+  const navigate = useNavigate();
+  const { role } = useAuth();
+  const isFaculty = role === "faculty";
+
+  const actions = (
+    <>
+      {isFaculty && (
+        <Button
+          className="flex items-center gap-2"
+          onClick={() => navigate("/courses/new")}
+        >
+          <Plus className="h-4 w-4" />
+          Create Course
+        </Button>
+      )}
+
+      {!isFaculty && (
+        <Button
+          variant="secondary"
+          className="flex items-center gap-2"
+          onClick={() => navigate("/courses/join")}
+        >
+          <BookOpen className="h-4 w-4" />
+          Join Course
+        </Button>
+      )}
+    </>
+  );
+
+  return (
+    <Layout title="Courses" actions={actions}>
+      <CoursesPage />
+    </Layout>
+  );
+}
 
 function RoleRouter() {
   const location = useLocation();
@@ -26,8 +69,33 @@ function RoleRouter() {
   const stateRole = (location.state as { role?: "faculty" | "student" } | undefined)?.role;
   const effectiveRole = role ?? stateRole;
 
-  if (effectiveRole === "faculty") return <FacultyDashboard />;
-  if (effectiveRole === "student") return <StudentDashboard />;
+  if (effectiveRole === "faculty") {
+    return (
+      <Layout title="Faculty Dashboard">
+        <FacultyDashboard />
+      </Layout>
+    );
+  }
+  if (effectiveRole === "student") {
+    return (
+      <Layout title="Student Dashboard">
+        <StudentDashboard />
+      </Layout>
+    );
+  }
+  return <Navigate to="/login" replace />;
+}
+
+// Root route that redirects based on auth state
+function RootRoute() {
+  const { role } = useAuth();
+  
+  // If authenticated, redirect to dashboard
+  if (role) {
+    return <Navigate to="/my" replace />;
+  }
+  
+  // If not authenticated, redirect to login
   return <Navigate to="/login" replace />;
 }
 
@@ -35,7 +103,7 @@ function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="/" element={<RootRoute />} />
         <Route path="/login" element={<LoginPage />} />
 
         <Route
@@ -52,7 +120,9 @@ function AppRouter() {
           path="/courses/new"
           element={
             <Protected>
-              <CreateCoursePage />
+              <Layout title="Create Course">
+                <CreateCoursePage />
+              </Layout>
             </Protected>
           }
         />
@@ -62,7 +132,19 @@ function AppRouter() {
           path="/courses/join"
           element={
             <Protected>
-              <JoinCoursePage />
+              <Layout title="Join Course">
+                <JoinCoursePage />
+              </Layout>
+            </Protected>
+          }
+        />
+
+        {/* Courses index */}
+        <Route
+          path="/courses"
+          element={
+            <Protected>
+              <CoursesLayoutWrapper />
             </Protected>
           }
         />
@@ -72,7 +154,9 @@ function AppRouter() {
           path="/courses/:course_id"
           element={
             <Protected>
-              <CoursePage />
+              <Layout title="Course Details">
+                <CoursePage />
+              </Layout>
             </Protected>
           }
         />
@@ -82,7 +166,9 @@ function AppRouter() {
           path="/courses/:course_id/gradebook"
           element={
             <Protected>
-              <GradebookPage />
+              <Layout title="Gradebook">
+                <GradebookPage />
+              </Layout>
             </Protected>
           }
         />
@@ -92,7 +178,21 @@ function AppRouter() {
           path="/assignments"
           element={
             <Protected>
-              <AssignmentsPage />
+              <Layout title="Assignments">
+                <AssignmentsPage />
+              </Layout>
+            </Protected>
+          }
+        />
+
+        {/* Gradebook index (faculty) */}
+        <Route
+          path="/gradebook"
+          element={
+            <Protected>
+              <Layout title="Gradebook">
+                <GradebookIndexPage />
+              </Layout>
             </Protected>
           }
         />
@@ -102,7 +202,9 @@ function AppRouter() {
           path="/assignments/:assignment_id"
           element={
             <Protected>
-              <AssignmentDetailPage />
+              <Layout title="Assignment Details">
+                <AssignmentDetailPage />
+              </Layout>
             </Protected>
           }
         />
@@ -112,7 +214,9 @@ function AppRouter() {
           path="/upload/test"
           element={
             <Protected>
-              <UploadTestFile />
+              <Layout title="Upload Test File">
+                <UploadTestFile />
+              </Layout>
             </Protected>
           }
         />
@@ -120,15 +224,30 @@ function AppRouter() {
           path="/upload/student"
           element={
             <Protected>
-              <UploadStudentFile />
+              <Layout title="Upload Student File">
+                <UploadStudentFile />
+              </Layout>
             </Protected>
           }
         />
 
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        <Route path="*" element={<CatchAllRoute />} />
       </Routes>
     </BrowserRouter>
   );
+}
+
+// Catch-all route that redirects based on auth state
+function CatchAllRoute() {
+  const { role } = useAuth();
+  
+  // If authenticated, redirect to dashboard
+  if (role) {
+    return <Navigate to="/my" replace />;
+  }
+  
+  // If not authenticated, redirect to login
+  return <Navigate to="/login" replace />;
 }
 
 const root = document.getElementById("root");

@@ -6,59 +6,31 @@
 
 @layer base {
   :root {
-    color-scheme: light dark;
-    
-    /* Semantic color tokens - Light theme */
+    /* Semantic color tokens */
     /* Using hex format for color picker support */
     --background: #ffffff;
-    --foreground: #0e1327;
-    
+    --foreground: #0f270e;
+
     --card: #ffffff;
     --card-foreground: #0e1327;
-    
-    --primary: #5b7fdb;
+
+    --primary: #b8860b; /* Gold */
     --primary-foreground: #ffffff;
-    
+
     --muted: #f3f4f8;
     --muted-foreground: #6b7280;
-    
-    --accent: #00a4a6;
+
+    --accent: #daa520; /* Goldenrod */
     --accent-foreground: #ffffff;
-    
+
     --danger: #d6458e;
     --danger-foreground: #ffffff;
-    
+
     --warning: #e6a700;
     --warning-foreground: #ffffff;
-    
+
     --border: #e2e8f0;
-    --ring: #5b7fdb;
-  }
-  
-  .dark {
-    --background: #090b14;
-    --foreground: #f2f2f7;
-    
-    --card: #0c0f18;
-    --card-foreground: #f2f2f7;
-    
-    --primary: #5b7fdb;
-    --primary-foreground: #ffffff;
-    
-    --muted: #1e293b;
-    --muted-foreground: #94a3b8;
-    
-    --accent: #00a4a6;
-    --accent-foreground: #ffffff;
-    
-    --danger: #d6458e;
-    --danger-foreground: #ffffff;
-    
-    --warning: #e6a700;
-    --warning-foreground: #ffffff;
-    
-    --border: #1e293b;
-    --ring: #5b7fdb;
+    --ring: #b8860b;
   }
 
   * {
@@ -204,5 +176,80 @@
 
   table tbody td {
     @apply text-sm text-foreground;
+  }
+
+  /* Gold gradient theme components */
+  .hero-header {
+    @apply h-80 bg-gradient-to-br from-primary via-accent to-primary/80 rounded-3xl p-8 flex items-end relative overflow-hidden;
+  }
+
+  .hero-header::before {
+    content: '';
+    @apply absolute inset-0 bg-gradient-to-t from-card/20 to-transparent;
+  }
+
+  .hero-title {
+    @apply text-5xl font-bold text-primary-foreground drop-shadow-lg mb-2 relative z-10;
+  }
+
+  .hero-subtitle {
+    @apply text-xl text-primary-foreground/90 font-medium relative z-10;
+  }
+
+  /* Improved hero header for better spacing */
+  .hero-header-improved {
+    @apply h-96 bg-gradient-to-br from-primary via-accent to-primary/80 p-10 relative overflow-hidden;
+  }
+
+  .hero-header-improved::before {
+    content: '';
+    @apply absolute inset-0 bg-gradient-to-t from-card/30 to-transparent;
+  }
+
+  .hero-title-improved {
+    @apply text-4xl md:text-5xl font-bold text-primary-foreground drop-shadow-lg mb-3;
+  }
+
+  .hero-subtitle-improved {
+    @apply text-lg md:text-xl text-primary-foreground/95 font-medium;
+  }
+
+  .hero-stats {
+    @apply w-full;
+  }
+
+  .hero-stat-card {
+    @apply bg-primary-foreground/10 backdrop-blur-sm rounded-xl p-4 border border-primary-foreground/20 text-center;
+  }
+
+  .content-row {
+    @apply mb-6;
+  }
+
+  .content-row-title {
+    @apply text-2xl font-bold text-foreground mb-6;
+  }
+
+  /* Button styles */
+  .btn-primary {
+    @apply bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 text-primary-foreground font-medium py-3 px-6 rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl;
+  }
+
+  .btn-secondary {
+    @apply bg-muted/10 backdrop-blur-sm border border-border text-foreground hover:bg-muted/20 font-medium py-3 px-6 rounded-xl transition-all duration-200;
+  }
+
+  .btn-lg {
+    @apply h-14 px-10 py-5 text-lg;
+  }
+
+  /* Glass card effect */
+  .glass-card {
+    @apply bg-card/10 backdrop-blur-sm rounded-xl border border-border/20 shadow-lg;
+  }
+
+  /* Sidebar styling */
+  .sidebar-item {
+    @apply flex items-center gap-3 rounded-xl px-4 py-3 text-primary-foreground/80 transition-all duration-200 hover:bg-primary-foreground/10 hover:text-primary-foreground;
   }
 }

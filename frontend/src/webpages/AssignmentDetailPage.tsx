@@ -4,7 +4,6 @@ import { useParams, Link } from "react-router-dom";
 import { fetchJson, BASE } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import type { Assignment } from "../types/assignments";
-import { AppShell } from "../components/layout/AppShell";
 import { Button, Card, Alert, Badge } from "../components/ui";
 
 type Attempt = { id: number; grade: number | null };
@@ -161,8 +160,7 @@ export default function AssignmentDetailPage() {
   }
 
   return (
-    <AppShell>
-      <div className="container py-12 space-y-6">
+    <div className="container py-12 space-y-6">
         <div className="mb-3">
           {a?.course_id ? (
             <Link to={`/courses/${encodeURIComponent(a.course_id)}`} className="text-primary hover:opacity-80">
@@ -375,8 +373,7 @@ export default function AssignmentDetailPage() {
 
         </>
       )}
-      </div>
-    </AppShell>
+    </div>
   );
 }
 

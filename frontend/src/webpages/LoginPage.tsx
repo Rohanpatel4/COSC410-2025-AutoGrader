@@ -18,6 +18,13 @@ export default function LoginPage() {
   const [shouldClearPasswordOnNextInput, setShouldClearPasswordOnNextInput] = React.useState(false);
   const [emailError, setEmailError] = React.useState<string | null>(null);
 
+  // Redirect to dashboard if already authenticated
+  React.useEffect(() => {
+    if (authCtx?.role) {
+      navigate("/my", { replace: true });
+    }
+  }, [authCtx?.role, navigate]);
+
   // Helper to parse auth errors from the server
   async function parseAuthError(res: Response): Promise<string> {
     try {

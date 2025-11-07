@@ -2,7 +2,6 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchJson } from "../api/client";
 import type { Assignment } from "../types/assignments";
-import { AppShell } from "../components/layout/AppShell";
 import { Button, Input, Label, Card, Badge } from "../components/ui";
 
 // datetime-local helpers
@@ -61,8 +60,7 @@ export default function AssignmentsPage() {
   }, []);
 
   return (
-    <AppShell>
-      <div className="container py-12">
+    <div className="container py-12">
         <Card>
           <h1 className="text-3xl font-bold mb-6">All Assignments</h1>
           {loading ? (
@@ -136,7 +134,6 @@ export default function AssignmentsPage() {
             </ul>
           )}
         </Card>
-      </div>
-    </AppShell>
+    </div>
   );
 }

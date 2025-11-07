@@ -11,7 +11,7 @@ def multiply(a, b):
 
 def subtract(a, b):
     """Subtract b from a - CORRECT"""
-    return a - b
+    return a + b
 
 def divide(a, b):
     """Divide a by b - WRONG (using subtraction instead)"""

@@ -298,8 +298,7 @@ async def submit_to_assignment(
         raise HTTPException(400, f"Invalid test file: {result['grading']['error']}")
     
     # Calculate grade as sum of earned points
-    grade = result["grading"].get("earned_points", 0)
-    
+    grade = (result["grading"].get("earned_points", 0)/result["grading"].get("total_points", 0))*100
     # Create submission record
     submission_record = StudentSubmission(
         student_id=student_id,

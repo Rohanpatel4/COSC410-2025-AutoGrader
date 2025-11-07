@@ -3,7 +3,6 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { fetchJson } from "../api/client";
 import { Button, Input, Label, Card, Alert } from "../components/ui";
-import { AppShell } from "../components/layout/AppShell";
 
 export default function JoinCoursePage() {
   const { userId } = useAuth();
@@ -41,8 +40,7 @@ export default function JoinCoursePage() {
   }
 
   return (
-    <AppShell>
-      <main className="page-container space-y-8 py-12">
+    <main className="page-container space-y-8 py-12">
         <div>
           <Link to="/my" className="text-primary hover:opacity-80">
             ← Back to dashboard
@@ -110,8 +108,7 @@ export default function JoinCoursePage() {
             </form>
           </Card>
         </div>
-      </main>
-    </AppShell>
+    </main>
   );
 }
 

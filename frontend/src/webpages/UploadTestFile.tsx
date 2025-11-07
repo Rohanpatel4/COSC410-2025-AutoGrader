@@ -1,7 +1,6 @@
 import React, { useRef, useState } from "react";
 import { BASE } from "../api/client";
 import { useNavigate, useLocation } from "react-router-dom";
-import { AppShell } from "../components/layout/AppShell";
 import { Button, Input, Label, Card } from "../components/ui";
 
 /**
@@ -72,8 +71,7 @@ const UploadTestFile: React.FC = () => {
   }
 
   return (
-    <AppShell>
-      <div className="container py-12">
+    <div className="container py-12">
         <Card className="max-w-2xl mx-auto">
           <h2 className="text-2xl font-bold mb-6">Upload Test File</h2>
           
@@ -104,8 +102,7 @@ const UploadTestFile: React.FC = () => {
             {msg && <p className="text-foreground">{msg}</p>}
           </form>
         </Card>
-      </div>
-    </AppShell>
+    </div>
   );
 };
 

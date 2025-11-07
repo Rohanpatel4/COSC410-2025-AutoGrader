@@ -4,7 +4,6 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { fetchJson, BASE } from "../api/client";
 import type { Assignment } from "../types/assignments";
 import { useAuth } from "../auth/AuthContext";
-import { AppShell } from "../components/layout/AppShell";
 import { Button, Input, Label, Card, Alert, Badge } from "../components/ui";
 
 type Student = { id: number; name?: string; role: "student" };
@@ -356,8 +355,7 @@ export default function CoursePage() {
   }
 
   return (
-    <AppShell>
-      <div className="container py-12 space-y-8">
+    <div className="container py-12 space-y-8">
         <div className="mb-3">
           <Link to="/my" className="text-primary hover:opacity-80">
             ← Back to dashboard
@@ -623,7 +621,7 @@ export default function CoursePage() {
                 {/* Delete Student Confirmation Dialog */}
                 {studentToDelete && (
                   <div 
-                    className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+                    className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-50 p-4"
                     onClick={() => setStudentToDelete(null)}
                   >
                     <Card 
@@ -994,6 +992,5 @@ export default function CoursePage() {
           </>
         )}
       </div>
-    </AppShell>
   );
 }
