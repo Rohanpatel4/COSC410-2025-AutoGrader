@@ -2,7 +2,8 @@ import React, { useState } from "react";
 import { BASE } from "../api/client";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
-import { Button, Input, Label, Card, Alert, Badge } from "../components/ui";
+import { Button, Input, Label, Card, Alert } from "../components/ui";
+import { formatGradeDisplay } from "../utils/formatGrade";
 
 /**
  * Student: upload a submission for a specific assignment.
@@ -61,7 +62,7 @@ const UploadStudentFile: React.FC = () => {
       }
 
       setResult(data);
-      setMsg(`Submitted. Grade: ${data?.grade ?? "—"}`);
+      setMsg(`Submitted. Grade: ${formatGradeDisplay(data?.grade)}`);
     } catch (err: any) {
       setMsg(err?.message || "Network error");
     }

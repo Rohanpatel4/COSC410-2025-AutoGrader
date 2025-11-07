@@ -9,132 +9,88 @@ import { renderWithProviders } from "./renderWithProviders";
 import { server } from "./server";
 import { resetDb, __testDb } from "./handlers";
 
-// Stub route to confirm navigation
 function CourseStub() {
   const { course_code = "" } = useParams();
   return <div>COURSE PAGE {course_code}</div>;
 }
 
-describe("StudentDashboard (MSW, updated)", () => {
-  beforeEach(() => {
-    resetDb();
-  });
+function JoinStub() {
+  return <div>JOIN PAGE</div>;
+}
 
-  test("shows empty state, registers with enrollment key, and opens course", async () => {
-    renderWithProviders(
+describe("StudentDashboard", () => {
+  beforeEach(() => resetDb());
+
+  function renderDashboard() {
+    return renderWithProviders(
       <Routes>
         <Route path="/" element={<StudentDashboard />} />
         <Route path="/courses/:course_code" element={<CourseStub />} />
+        <Route path="/courses/join" element={<JoinStub />} />
       </Routes>,
       { route: "/", auth: { role: "student", userId: "201" } }
     );
+  }
 
-    // Empty state text
-    expect(await screen.findByText(/not enrolled/i)).toBeInTheDocument();
+  test("renders CTA cards", async () => {
+    renderDashboard();
 
-    const registerBtn = screen.getByRole("button", { name: /register/i });
-    expect(registerBtn).toBeDisabled();
+    expect(await screen.findByText(/Join a Course/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Join Course/i })).toBeInTheDocument();
+    expect(await screen.findByText(/My Courses/i)).toBeInTheDocument();
+    expect(screen.getByText(/0 courses/i)).toBeInTheDocument();
+    expect(screen.getByText(/No courses enrolled yet/i)).toBeInTheDocument();
+  });
 
-    // Input labeled “Enrollment Key”
-    const input = screen.getByLabelText(/enrollment key/i);
-    await userEvent.type(input, "ABC123XYZ789"); // seeded key for COSC-410 / FirstCourse
-    expect(registerBtn).toBeEnabled();
+  test("join course button navigates to join flow", async () => {
+    renderDashboard();
 
-    // Submit registration
-    await userEvent.click(registerBtn);
+    await userEvent.click(screen.getByRole("button", { name: /Join Course/i }));
+    expect(await screen.findByText(/JOIN PAGE/i)).toBeInTheDocument();
+  });
 
-    // Confirm success message
-    expect(await screen.findByText(/firstcourse/i)).toBeInTheDocument();
+  test("displays enrolled courses returned by the API", async () => {
+    __testDb.state.enrollmentsByStudent = __testDb.state.enrollmentsByStudent ?? {};
+    __testDb.state.enrollmentsByStudent[201] = [
+      {
+        id: 42,
+        course_code: "COSC-410",
+        name: "AutoGrader",
+        description: "Testing course",
+        professor_id: 301,
+      },
+    ];
 
-    expect((screen.getByLabelText(/enrollment key/i) as HTMLInputElement).value).toBe("");
+    renderDashboard();
 
-    // Course list reloads and displays new course
-    // UI shows "COSC-410 - FirstCourse"
-    expect(await screen.findByText(/firstcourse/i)).toBeInTheDocument();
+    expect(await screen.findByText(/AutoGrader/i)).toBeInTheDocument();
+    expect(screen.getByText(/COSC-410/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 course/i)).toBeInTheDocument();
 
-    // Open course navigation works (param is course_code)
-    await userEvent.click(screen.getByRole("button", { name: /open/i }));
+    await userEvent.click(screen.getByText(/AutoGrader/i));
     expect(await screen.findByText(/COURSE PAGE COSC-410/i)).toBeInTheDocument();
-
-    // DB shows new enrollment
-    expect(__testDb.getStudentCourses(201)).toHaveLength(1);
   });
 
-  test("disables register button when input is blank or whitespace", async () => {
-    renderWithProviders(<StudentDashboard />, {
-      route: "/",
-      auth: { role: "student", userId: "201" },
-    });
+  test("shows empty state when student has no courses", async () => {
+    __testDb.state.enrollmentsByStudent = __testDb.state.enrollmentsByStudent ?? {};
+    __testDb.state.enrollmentsByStudent[201] = [];
 
-    const btn = screen.getByRole("button", { name: /register/i });
-    expect(btn).toBeDisabled();
+    renderDashboard();
 
-    const input = screen.getByLabelText(/enrollment key/i);
-    await userEvent.type(input, "   ");
-    expect(btn).toBeDisabled();
-
-    await userEvent.clear(input);
-    await userEvent.type(input, "SOMEKEY");
-    expect(btn).toBeEnabled();
-
-    await userEvent.clear(input);
-    expect(btn).toBeDisabled();
+    expect(await screen.findByText(/No courses enrolled yet/i)).toBeInTheDocument();
   });
 
-  test("shows an error message if GET /students/:id/courses fails", async () => {
+  test("shows error alert when GET fails", async () => {
     server.use(
       http.get("**/api/v1/students/:id/courses", () =>
         HttpResponse.text("whoops", { status: 500 })
       )
     );
 
-    renderWithProviders(<StudentDashboard />, {
-      route: "/",
-      auth: { role: "student", userId: "201" },
-    });
+    renderDashboard();
 
-    const status = await screen.findByRole("status");
-    expect(status.textContent?.toLowerCase()).toMatch(/whoops|failed/);
-  });
-
-  test("shows backend error if POST /registrations fails", async () => {
-    server.use(
-      http.post("**/api/v1/registrations", () =>
-        HttpResponse.text("boom", { status: 500 })
-      )
-    );
-
-    renderWithProviders(<StudentDashboard />, {
-      route: "/",
-      auth: { role: "student", userId: "201" },
-    });
-
-    const input = screen.getByLabelText(/enrollment key/i);
-    await userEvent.type(input, "ABC123XYZ789");
-    await userEvent.click(screen.getByRole("button", { name: /register/i }));
-
-    const status = await screen.findByRole("status");
-    expect(status).toHaveTextContent(/boom|failed/i);
-  });
-
-  test("handles unknown enrollment key (404 from server)", async () => {
-    server.use(
-      http.post("**/api/v1/registrations", () =>
-        HttpResponse.text("Not Found", { status: 404 })
-      )
-    );
-
-    renderWithProviders(<StudentDashboard />, {
-      route: "/",
-      auth: { role: "student", userId: "201" },
-    });
-
-    const input = screen.getByLabelText(/enrollment key/i);
-    await userEvent.type(input, "INVALIDTAG123");
-    await userEvent.click(screen.getByRole("button", { name: /register/i }));
-
-    const status = await screen.findByRole("status");
-    expect(status).toHaveTextContent(/not found|failed|course/i);
+    expect(await screen.findByText(/Failed to load courses|whoops/i)).toBeInTheDocument();
+    expect(screen.getByText(/No courses enrolled yet/i)).toBeInTheDocument();
   });
 });
 

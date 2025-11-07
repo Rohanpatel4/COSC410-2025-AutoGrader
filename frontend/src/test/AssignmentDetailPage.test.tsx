@@ -81,7 +81,7 @@ describe("AssignmentDetailPage (MSW, updated)", () => {
     renderAsStudent();
 
     expect(await screen.findByText(/^submission limit/i)).toBeInTheDocument(); // ← anchor start
-    expect(await screen.findByText(/you’ve reached the submission limit/i)).toBeInTheDocument();
+    expect(await screen.findByText(/you've reached the submission limit/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /submit/i })).toBeDisabled();
   });
 
@@ -123,20 +123,10 @@ describe("AssignmentDetailPage (MSW, updated)", () => {
     expect(screen.getByText(/bad upload/i)).toBeInTheDocument();
   });
 
-  test.skip("submits .py successfully and updates attempts + best grade", async () => {
+  test("submits .py successfully and updates attempts + best grade", async () => {
     renderAsStudent();
 
     await screen.findByRole("heading", { name: /seeded assignment/i });
-
-    // Mock successful POST submission
-    server.use(
-      http.post("**/api/v1/assignments/:id/submit", async () =>
-        HttpResponse.json({
-          grade: 95,
-          grading: { passed: true, passed_tests: 5, total_tests: 5 },
-        })
-      )
-    );
 
     const fileInput = screen.getByLabelText(/submit your code/i);
     const file = new File(["print('hi')"], "sol.py", { type: "text/x-python" });
@@ -144,11 +134,10 @@ describe("AssignmentDetailPage (MSW, updated)", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /submit/i }));
 
-    expect(await screen.findByText(/submitted/i)).toBeInTheDocument();
-    expect(await screen.findByText(/grade:\s*95/i)).toBeInTheDocument();
-    expect(await screen.findByText(/pass/i)).toBeInTheDocument();
-    expect(await screen.findByText(/your attempts/i)).toBeInTheDocument();
-    expect(await screen.findByText(/best grade/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Submitted\. Grade: 95/i)).toBeInTheDocument();
+    expect(await screen.findByText(/^PASS$/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Attempt 1: Grade 95/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Best grade/i)).toHaveTextContent(/Best grade:\s*95/);
   });
 
   // --- FACULTY TESTS ---

@@ -4,7 +4,8 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { fetchJson, BASE } from "../api/client";
 import type { Assignment } from "../types/assignments";
 import { useAuth } from "../auth/AuthContext";
-import { Button, Input, Label, Card, Alert, Badge } from "../components/ui";
+import { Button, Input, Card, Alert, Badge } from "../components/ui";
+import { formatGradeDisplay } from "../utils/formatGrade";
 
 type Student = { id: number; name?: string; role: "student" };
 type Faculty = { id: number; name?: string; role: "faculty" };
@@ -380,20 +381,25 @@ export default function CoursePage() {
                         aria-label="Search participants"
                       />
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Label htmlFor="items-per-page" className="whitespace-nowrap text-sm">
-                        Show per page:
-                      </Label>
-                      <select
-                        id="items-per-page"
-                        value={itemsPerPage}
-                        onChange={(e) => setItemsPerPage(Number(e.target.value))}
-                        className="rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:ring-2 focus:ring-ring/25 focus:outline-none"
-                      >
-                        <option value={10}>10</option>
-                        <option value={20}>20</option>
-                        <option value={50}>50</option>
-                      </select>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                      <span className="text-sm font-medium text-muted-foreground whitespace-nowrap text-center sm:text-left">Show per page:</span>
+                      <div className="inline-flex rounded-md border border-border bg-muted/40 p-0.5" role="group" aria-label="Participants per page">
+                        {[10, 20, 50].map((value) => (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => setItemsPerPage(value)}
+                            aria-pressed={itemsPerPage === value}
+                            className={`px-3 py-1.5 text-sm font-medium transition-colors rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
+                              itemsPerPage === value
+                                ? "bg-primary text-primary-foreground shadow"
+                                : "text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            {value}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
 
@@ -519,7 +525,7 @@ export default function CoursePage() {
 
                       {/* Pagination */}
                       {totalPages > 1 && (
-                        <div className="flex items-center justify-between mt-6 pt-4 border-t border-border">
+                        <div className="mt-6 pt-4 border-t border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                           <p className="text-sm text-muted-foreground">
                             Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
                             {Math.min(currentPage * itemsPerPage, filteredAndSortedParticipants.length)} of{" "}
@@ -547,7 +553,6 @@ export default function CoursePage() {
                                 </Button>
                               );
                             })}
-                            {totalPages > 5 && <span className="text-muted-foreground">...</span>}
                             <Button
                               size="sm"
                               variant="secondary"
@@ -745,15 +750,21 @@ export default function CoursePage() {
                                         <td className="sticky left-0 bg-card z-10 p-3 font-medium border-r border-border">
                                           {s.username}
                                         </td>
-                                        {gradebook.assignments.map((a) => (
-                                          <td key={a.id} className="p-3 text-center">
-                                            {s.grades[String(a.id)] == null ? (
-                                              <span className="text-muted-foreground">—</span>
-                                            ) : (
-                                              <span className="font-medium">{s.grades[String(a.id)]}</span>
-                                            )}
-                                          </td>
-                                        ))}
+                                        {gradebook.assignments.map((a) => {
+                                          const gradeValue = s.grades[String(a.id)];
+                                          const displayGrade = formatGradeDisplay(gradeValue);
+                                          const isMissing = displayGrade === "—";
+
+                                          return (
+                                            <td key={a.id} className="p-3 text-center">
+                                              {isMissing ? (
+                                                <span className="text-muted-foreground">—</span>
+                                              ) : (
+                                                <span className="font-medium">{displayGrade}</span>
+                                              )}
+                                            </td>
+                                          );
+                                        })}
                                       </tr>
                                     );
                                   })}
@@ -823,16 +834,15 @@ export default function CoursePage() {
                                           );
                                           return Array.from({ length: maxAttempts }, (_, i) => {
                                             const attempt = assignmentAttempts[i];
+                                            const displayGrade = formatGradeDisplay(attempt?.grade ?? null);
+                                            const isMissing = displayGrade === "—";
+
                                             return (
                                               <td key={i} className="p-3 text-center">
-                                                {attempt ? (
-                                                  attempt.grade == null ? (
-                                                    <span className="text-muted-foreground">—</span>
-                                                  ) : (
-                                                    <span className="font-medium">{attempt.grade}</span>
-                                                  )
-                                                ) : (
+                                                {isMissing ? (
                                                   <span className="text-muted-foreground">—</span>
+                                                ) : (
+                                                  <span className="font-medium">{displayGrade}</span>
                                                 )}
                                               </td>
                                             );
@@ -842,7 +852,7 @@ export default function CoursePage() {
                                           {bestScore == null || bestScore === -Infinity ? (
                                             <span className="text-muted-foreground">—</span>
                                           ) : (
-                                            <span>{bestScore}</span>
+                                            <span>{formatGradeDisplay(bestScore)}</span>
                                           )}
                                         </td>
                                       </tr>

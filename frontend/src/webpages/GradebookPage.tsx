@@ -3,6 +3,7 @@ import React from "react";
 import { useParams, Link } from "react-router-dom";
 import { fetchJson } from "../api/client";
 import { Card, Alert } from "../components/ui";
+import { formatGradeDisplay } from "../utils/formatGrade";
 
 type GBPayload = {
   course: { id: number; name: string; course_code: string };
@@ -81,11 +82,16 @@ export default function GradebookPage() {
                           <td className="p-2 border-b border-border font-semibold">
                             {s.username}
                           </td>
-                          {aIds.map((aid) => (
-                            <td key={aid} className="p-2 border-b border-border">
-                              {s.grades[String(aid)] == null ? "—" : s.grades[String(aid)]}
-                            </td>
-                          ))}
+                          {aIds.map((aid) => {
+                            const gradeValue = s.grades[String(aid)];
+                            const displayGrade = formatGradeDisplay(gradeValue);
+
+                            return (
+                              <td key={aid} className="p-2 border-b border-border">
+                                {displayGrade}
+                              </td>
+                            );
+                          })}
                         </tr>
                       ))}
                     </tbody>

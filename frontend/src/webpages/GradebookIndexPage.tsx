@@ -65,12 +65,6 @@ export default function GradebookIndexPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-8">
-      <div className="mb-8">
-        <h2 className="text-xl font-semibold text-foreground mb-4">
-          Select a course to view its gradebook:
-        </h2>
-      </div>
-
       {/* Courses Grid */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {courses.map((course) => (

@@ -4,7 +4,8 @@ import { useParams, Link } from "react-router-dom";
 import { fetchJson, BASE } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import type { Assignment } from "../types/assignments";
-import { Button, Card, Alert, Badge } from "../components/ui";
+import { Button, Card, Alert } from "../components/ui";
+import { formatGradeDisplay } from "../utils/formatGrade";
 
 type Attempt = { id: number; grade: number | null };
 
@@ -144,7 +145,7 @@ export default function AssignmentDetailPage() {
         return;
       }
 
-      setSubmitMsg(`Submitted. Grade: ${data?.grade ?? "—"}`);
+      setSubmitMsg(`Submitted. Grade: ${formatGradeDisplay(data?.grade)}`);
       setLastResult(data ?? null);
 
       // refresh attempts
@@ -279,7 +280,7 @@ export default function AssignmentDetailPage() {
                 <ul className="space-y-2">
                   {attempts.map((t, idx) => (
                     <li key={t.id} className="text-foreground">
-                      Attempt {idx + 1}: Grade {t.grade ?? "—"}
+                      Attempt {idx + 1}: Grade {formatGradeDisplay(t.grade)}
                     </li>
                   ))}
                 </ul>
@@ -287,7 +288,7 @@ export default function AssignmentDetailPage() {
               <p className="mt-4 text-foreground">
                 Best grade:{" "}
                 <strong className="text-primary">
-                  {bestGrade == null || bestGrade < 0 ? "—" : bestGrade}
+                  {bestGrade == null || bestGrade < 0 ? "—" : formatGradeDisplay(bestGrade)}
                 </strong>
               </p>
             </Card>
@@ -354,12 +355,12 @@ export default function AssignmentDetailPage() {
                               const att = row.attempts[i];
                               return (
                                 <td key={i} className="p-2 border-b border-border">
-                                  {att ? (att.grade ?? "—") : "—"}
+                              {formatGradeDisplay(att?.grade)}
                                 </td>
                               );
                             })}
                             <td className="p-2 border-b border-border font-semibold">
-                              {row.best == null ? "—" : row.best}
+                              {row.best == null ? "—" : formatGradeDisplay(row.best)}
                             </td>
                           </tr>
                         );

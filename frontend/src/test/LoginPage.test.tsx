@@ -1,117 +1,82 @@
 // src/test/LoginPage.test.tsx
 import React from "react";
-import { Route, Routes } from "react-router-dom";
-import { screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { Routes, Route } from "react-router-dom";
 import { http, HttpResponse } from "msw";
 
 import LoginPage from "../webpages/LoginPage";
-import { renderWithProviders } from "./renderWithProviders";
 import { server } from "./server";
+import { AuthProvider } from "../auth/AuthContext";
+import { MemoryRouter } from "react-router-dom";
+
+function renderLogin() {
+  return render(
+    <AuthProvider>
+      <MemoryRouter initialEntries={["/login"]}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/my" element={<div>MY DASH</div>} />
+        </Routes>
+      </MemoryRouter>
+    </AuthProvider>
+  );
+}
 
 describe("LoginPage", () => {
-  afterEach(() => {
+  beforeEach(() => {
     localStorage.clear();
   });
 
-  function renderAtLogin() {
-    return renderWithProviders(
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/my" element={<div>MY DASH</div>} />
-      </Routes>,
-      { route: "/login" }
-    );
-  }
+  test("validates email format before submitting", async () => {
+    renderLogin();
 
-  test("logs in as student and redirects to /my, storing auth", async () => {
-  server.use(
-    http.post("**/api/v1/login", async ({ request }) => {
-      const body = await request.json();
-      return HttpResponse.json(
-        { userId: 201, role: body?.role ?? "student", token: "tok123" },
-        { status: 200 }
-      );
-    })
-  );
+    await userEvent.type(screen.getByLabelText(/email/i), "invalid-email");
+    await userEvent.type(screen.getByLabelText(/password/i), "pw123");
+    await userEvent.click(screen.getByRole("button", { name: /sign in/i }));
 
-  renderWithProviders(
-    <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/my" element={<div>MY DASH</div>} />
-    </Routes>,
-    { route: "/login" }
-  );
+    expect(await screen.findByText(/enter a valid email/i)).toBeInTheDocument();
+    expect(localStorage.getItem("auth")).toBeNull();
+  });
 
-  await userEvent.type(screen.getByLabelText(/email/i), "s@wofford.edu");
-  await userEvent.type(screen.getByLabelText(/password/i), "pw123");
-  await userEvent.click(screen.getByRole("button", { name: /enter/i }));
-
-  // ✅ Just assert the final state (redirect + localStorage), not the transient label
-  expect(await screen.findByText(/my dash/i)).toBeInTheDocument();
-
-  const stored = JSON.parse(localStorage.getItem("auth") || "{}");
-  expect(stored).toMatchObject({ userId: "201", role: "student", token: "tok123" });
-});
-
-test("shows error on bad credentials and does not persist auth", async () => {
-  server.use(
-    http.post("**/api/v1/login", async () =>
-      HttpResponse.json({ message: "invalid credentials" }, { status: 401 })
-    )
-  );
-
-  renderWithProviders(<LoginPage />, { route: "/login" });
-
-  await userEvent.type(screen.getByLabelText(/email/i), "wrong@wofford.edu");
-  await userEvent.type(screen.getByLabelText(/password/i), "badpw");
-  await userEvent.click(screen.getByRole("button", { name: /enter/i }));
-
-  // ✅ Assert final error state
-  expect(await screen.findByText(/login failed|invalid credentials/i)).toBeInTheDocument();
-
-  // stays on login page
-  expect(screen.getByRole("heading", { name: /login/i })).toBeInTheDocument();
-
-  // no auth persisted
-  expect(localStorage.getItem("auth")).toBeNull();
-
-  // button label should be back to "Enter"
-  expect(screen.getByRole("button", { name: /enter/i })).toBeEnabled();
-});
-
-  test("logging in as faculty stores role 'faculty'", async () => {
+  test("successful login stores auth and navigates to dashboard", async () => {
     server.use(
-      http.post("**/api/v1/login", async ({ request }) => {
-        const body = await request.json() as any;
-        return HttpResponse.json(
-          {
-            userId: 301,
-            // even if backend echoes back something else, your code prefers server role
-            role: body?.role ?? "faculty",
-            token: "tok_fac",
-          },
-          { status: 200 }
-        );
-      })
+      http.post("**/api/v1/login", async () =>
+        HttpResponse.json({ user_id: 301, role: "faculty", token: "abc123" })
+      )
     );
 
-    renderAtLogin();
+    renderLogin();
 
-    // change role
     await userEvent.selectOptions(screen.getByLabelText(/select role/i), "faculty");
-
-    // fill fields
     await userEvent.type(screen.getByLabelText(/email/i), "prof@wofford.edu");
-    await userEvent.type(screen.getByLabelText(/password/i), "pw");
+    await userEvent.type(screen.getByLabelText(/password/i), "pw123");
+    await userEvent.click(screen.getByRole("button", { name: /sign in/i }));
 
-    await userEvent.click(screen.getByRole("button", { name: /enter/i }));
+    expect(await screen.findByText(/MY DASH/i)).toBeInTheDocument();
+    const stored = JSON.parse(localStorage.getItem("auth") ?? "{}");
+    expect(stored.role).toBe("faculty");
+    expect(stored.userId).toBe("301");
+  });
 
-    // redirected
-    expect(await screen.findByText(/my dash/i)).toBeInTheDocument();
+  test("failed login shows error and clears password on next input", async () => {
+    server.use(
+      http.post("**/api/v1/login", () => HttpResponse.text("Unauthorized", { status: 401 }))
+    );
 
-    // persisted as faculty
-    const auth = JSON.parse(localStorage.getItem("auth")!);
-    expect(auth).toMatchObject({ userId: "301", role: "faculty", token: "tok_fac" });
+    renderLogin();
+
+    const passwordInput = screen.getByLabelText(/password/i);
+
+    await userEvent.type(screen.getByLabelText(/email/i), "student@wofford.edu");
+    await userEvent.type(passwordInput, "wrongpass");
+    await userEvent.click(screen.getByRole("button", { name: /sign in/i }));
+
+    expect(await screen.findByText(/invalid username or password/i)).toBeInTheDocument();
+
+    // Next keystroke clears password field per UI logic
+    await userEvent.type(passwordInput, "x");
+    expect((passwordInput as HTMLInputElement).value).toBe("x");
+    expect(localStorage.getItem("auth")).toBeNull();
   });
 });
