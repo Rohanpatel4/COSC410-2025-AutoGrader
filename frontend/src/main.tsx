@@ -14,6 +14,7 @@ import AssignmentDetailPage from "./webpages/AssignmentDetailPage";
 import GradebookPage from "./webpages/GradebookPage";
 import GradebookIndexPage from "./webpages/GradebookIndexPage";
 import CreateCoursePage from "./webpages/CreateCoursePage";
+import CreateAssignmentPage from "./webpages/CreateAssignmentPage";
 import JoinCoursePage from "./webpages/JoinCoursePage";
 
 // Upload pages
@@ -156,6 +157,18 @@ function AppRouter() {
             <Protected>
               <Layout title="Course Details">
                 <CoursePage />
+              </Layout>
+            </Protected>
+          }
+        />
+
+        {/* Create assignment (faculty) */}
+        <Route
+          path="/courses/:course_id/assignments/new"
+          element={
+            <Protected>
+              <Layout title="Create Assignment">
+                <CreateAssignmentPage />
               </Layout>
             </Protected>
           }

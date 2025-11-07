@@ -4,6 +4,7 @@ import { useAuth } from "../auth/AuthContext";
 import { fetchJson } from "../api/client";
 import type { Course } from "../types/courses";
 import { Button, Input, Label, Card, Alert } from "../components/ui";
+import { ArrowLeft } from "lucide-react";
 
 export default function CreateCoursePage() {
   const { userId } = useAuth();
@@ -46,29 +47,31 @@ export default function CreateCoursePage() {
   }
 
   return (
-    <main className="page-container space-y-8 py-12">
-        <div>
-          <Link to="/my" className="text-primary hover:opacity-80">
-            ← Back to dashboard
-          </Link>
-        </div>
+    <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-6">
+      {/* Back Link */}
+      <Link
+        to="/courses"
+        className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        Back to Courses
+      </Link>
 
-        <div className="mx-auto max-w-2xl">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">Create New Course</h1>
-            <p className="mt-2 text-muted-foreground">
-              Create a new course and get an enrollment key to share with your students.
-            </p>
-          </div>
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">Create New Course</h1>
+        <p className="mt-2 text-muted-foreground">
+          Create a new course and get an enrollment key to share with your students.
+        </p>
+      </div>
 
-          {msg && (
-            <Alert variant={msg.includes("failed") || msg.includes("fail") ? "error" : "success"}>
-              <p className="font-medium">{msg}</p>
-            </Alert>
-          )}
+      {msg && (
+        <Alert variant={msg.includes("failed") || msg.includes("fail") ? "error" : "success"} className="mb-6">
+          <p className="font-medium">{msg}</p>
+        </Alert>
+      )}
 
-          <Card>
-            <form onSubmit={onCreate} className="space-y-6">
+      <Card className="mb-8">
+        <form onSubmit={onCreate} className="space-y-6">
               <div>
                 <Label htmlFor="c-code">Course code *</Label>
                 <Input
@@ -136,8 +139,76 @@ export default function CreateCoursePage() {
               </p>
             </form>
           </Card>
+
+      {/* Sample Test File Instructions */}
+      <Card className="bg-card border-border">
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-xl font-semibold text-foreground mb-2">Test File Format Guide</h2>
+            <p className="text-muted-foreground text-sm">
+              When creating assignments, you'll need to upload a test file. Use the <code className="px-1.5 py-0.5 bg-muted rounded text-sm">@points(value)</code> decorator to assign point values to each test function.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-foreground">Example Test File:</h3>
+            <div className="bg-background border border-border rounded-lg p-4 overflow-x-auto">
+              <pre className="text-sm text-foreground font-mono">
+{`# Test Cases for Calculator Functions with Point Values
+# Upload this file as the test case for the assignment
+# Each test must use the @points(value) decorator to assign point values
+
+@points(7)
+def test_add_positive():
+    assert add(5, 3) == 8
+
+@points(5)
+def test_add_negative():
+    assert add(-2, -3) == -5
+
+@points(3)
+def test_add_zero():
+    assert add(0, 0) == 0
+    assert add(1, 1) == 2
+
+@points(10)
+def test_multiply_positive():
+    assert multiply(4, 5) == 20
+
+@points(5)
+def test_multiply_by_zero():
+    assert multiply(10, 0) == 0
+
+@points(5)
+def test_multiply_negative():
+    assert multiply(-3, 4) == -12
+
+@points(10)
+def test_subtract():
+    assert subtract(10, 3) == 7
+
+@points(5)
+def test_divide():
+    assert divide(20, 4) == 5
+
+# Total points: 50`}
+              </pre>
+            </div>
+          </div>
+
+          <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
+            <h3 className="text-sm font-semibold text-foreground mb-2">Key Points:</h3>
+            <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
+              <li>Each test function must have the <code className="px-1.5 py-0.5 bg-muted rounded text-xs">@points(value)</code> decorator</li>
+              <li>Test function names should start with <code className="px-1.5 py-0.5 bg-muted rounded text-xs">test_</code></li>
+              <li>Use standard Python <code className="px-1.5 py-0.5 bg-muted rounded text-xs">assert</code> statements</li>
+              <li>The total points across all tests will be the assignment's maximum score</li>
+              <li>Students will submit their implementation file (e.g., <code className="px-1.5 py-0.5 bg-muted rounded text-xs">calculator.py</code>) which will be tested against your test file</li>
+            </ul>
+          </div>
         </div>
-    </main>
+      </Card>
+    </div>
   );
 }
 

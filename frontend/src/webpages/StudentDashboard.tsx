@@ -53,7 +53,7 @@ export default function StudentDashboard() {
         )}
 
         {/* Main Content - Two Boxes */}
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid gap-6 md:grid-cols-2 max-w-5xl">
           {/* Join Course Box */}
           <div className="card bg-card text-card-foreground border border-border">
             <div className="flex items-center gap-3 mb-4">

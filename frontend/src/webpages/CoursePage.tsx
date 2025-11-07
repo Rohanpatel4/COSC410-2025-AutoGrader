@@ -67,15 +67,6 @@ export default function CoursePage() {
   const [studentToDelete, setStudentToDelete] = React.useState<{ id: number; name: string } | null>(null);
   const [isDeleting, setIsDeleting] = React.useState(false);
 
-  // Create assignment form state
-  const [showCreate, setShowCreate] = React.useState(false);
-  const [title, setTitle] = React.useState("");
-  const [description, setDescription] = React.useState("");
-  const [subLimit, setSubLimit] = React.useState<string>("");
-  const [start, setStart] = React.useState<string>("");
-  const [stop, setStop] = React.useState<string>("");
-  const [testFile, setTestFile] = React.useState<File | null>(null);
-
   // Load course, students, faculty, assignments
   async function loadAll() {
   setErr(null);
@@ -173,55 +164,6 @@ export default function CoursePage() {
     localStorage.setItem(`courseTab_${course_id}`, activeTab);
   }, [activeTab, course_id]);
 
-  async function createAssignment(e: React.FormEvent) {
-    e.preventDefault();
-    setErr(null);
-
-    const payload: any = {
-      title: title.trim(),
-      description: description.trim() || null,
-    };
-    const limitNum = subLimit.trim() ? Number(subLimit.trim()) : null;
-    if (limitNum != null && Number.isFinite(limitNum)) payload.sub_limit = limitNum;
-    if (start) payload.start = start;
-    if (stop) payload.stop = stop;
-
-    if (!payload.title) {
-      setErr("Title is required.");
-      return;
-    }
-
-    try {
-      const created = await fetchJson<Assignment>(
-        `/api/v1/courses/${encodeURIComponent(course_id)}/assignments`,
-        {
-        method: "POST",
-        body: JSON.stringify(payload),
-        }
-      );
-
-      setAssignments((prev) => [created, ...prev]);
-
-      if (testFile) {
-        const fd = new FormData();
-        fd.append("file", testFile);
-        await fetch(`${BASE}/api/v1/assignments/${created.id}/test-file`, {
-          method: "POST",
-          body: fd,
-        });
-      }
-
-      setTitle("");
-      setDescription("");
-      setSubLimit("");
-      setStart("");
-      setStop("");
-      setTestFile(null);
-      setShowCreate(false);
-    } catch (e: any) {
-      setErr(e?.message ?? "Create failed");
-    }
-  }
 
   // Handle tab navigation
   function handleTabChange(tab: TabType) {
@@ -335,15 +277,24 @@ export default function CoursePage() {
   }
 
   // Assignment status calculation
-  function getAssignmentStatus(assignment: Assignment): "overdue" | "due-soon" | "upcoming" {
-    if (!assignment.stop) return "upcoming";
+  function getAssignmentStatus(assignment: Assignment): "overdue" | "active" | "upcoming" {
+    // If no start and no stop, assignment is active
+    if (!assignment.start && !assignment.stop) return "active";
+    
+    // If no stop date, check start date
+    if (!assignment.stop) {
+      if (!assignment.start) return "active";
+      const startDate = new Date(assignment.start);
+      const now = new Date();
+      return now >= startDate ? "active" : "upcoming";
+    }
     
     const stopDate = new Date(assignment.stop);
     const now = new Date();
     const hoursUntilDue = (stopDate.getTime() - now.getTime()) / (1000 * 60 * 60);
 
     if (hoursUntilDue < 0) return "overdue";
-    if (hoursUntilDue < 72) return "due-soon";
+    if (hoursUntilDue < 72) return "active";
     return "upcoming";
   }
 
@@ -356,12 +307,6 @@ export default function CoursePage() {
 
   return (
     <div className="container py-12 space-y-8">
-        <div className="mb-3">
-          <Link to="/my" className="text-primary hover:opacity-80">
-            ← Back to dashboard
-          </Link>
-        </div>
-        
         {err && (
           <Alert variant="error">
             <p className="font-medium">{err}</p>
@@ -660,115 +605,38 @@ export default function CoursePage() {
               <div role="tabpanel" id="course-panel" aria-labelledby="course-tab">
       <Card>
         <div className="flex items-center justify-between gap-3 mb-6">
-                    <h2 className="text-2xl font-semibold m-0">Assignments</h2>
+          <h2 className="text-2xl font-semibold m-0">Assignments</h2>
           {isFaculty && (
-            <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => setShowCreate((v) => !v)}
-                        >
-                {showCreate ? "Cancel" : "Create Assignment"}
-              </Button>
-            </div>
+            <Button
+              size="sm"
+              onClick={() => navigate(`/courses/${course_id}/assignments/new`)}
+            >
+              Create Assignment
+            </Button>
           )}
         </div>
 
-        {isFaculty && showCreate && (
-          <Card variant="muted" className="mb-6">
-            <form noValidate onSubmit={createAssignment} className="space-y-4 max-w-2xl">
-              <div>
-                <Label htmlFor="title">Title</Label>
-                <Input 
-                  id="title"
-                  value={title} 
-                  onChange={(e) => setTitle(e.target.value)} 
-                  required 
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="description">Description</Label>
-                <textarea 
-                  id="description"
-                  value={description} 
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-foreground shadow-sm placeholder:text-muted-foreground transition-all duration-200 focus:border-primary focus:ring-4 focus:ring-ring/25 focus:outline-none min-h-[80px]"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="subLimit">Submission limit (blank = no limit)</Label>
-                <Input
-                  id="subLimit"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  placeholder="e.g., 3"
-                  value={subLimit}
-                  onChange={(e) => setSubLimit(e.target.value)}
-                />
-              </div>
-
-              <div className="flex gap-4 flex-wrap">
-                <div className="flex-1 min-w-[200px]">
-                  <Label htmlFor="start">Start</Label>
-                  <Input 
-                    id="start"
-                    type="datetime-local" 
-                    value={start} 
-                    onChange={(e) => setStart(e.target.value)} 
-                  />
-                </div>
-                <div className="flex-1 min-w-[200px]">
-                  <Label htmlFor="stop">Stop</Label>
-                  <Input 
-                    id="stop"
-                    type="datetime-local" 
-                    value={stop} 
-                    onChange={(e) => setStop(e.target.value)} 
-                  />
-                </div>
-              </div>
-
-              <div>
-                <Label htmlFor="testFile">Attach test file (.py) now (optional)</Label>
-                <input
-                  id="testFile"
-                  type="file"
-                  accept=".py"
-                  onChange={(e) => setTestFile(e.target.files?.[0] ?? null)}
-                  className="block mt-1.5 text-sm text-foreground file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary file:text-primary-foreground hover:file:opacity-90"
-                />
-              </div>
-
-              <div>
-                <Button type="submit">Save Assignment</Button>
-              </div>
-            </form>
-          </Card>
-        )}
-
         {assignments.length === 0 ? (
-                    <div className="text-center py-12">
-                      <p className="text-muted-foreground mb-4">No assignments yet.</p>
-                      {isFaculty && (
-                        <Button size="sm" onClick={() => setShowCreate(true)}>
-                          Create one
-                        </Button>
-                      )}
-                    </div>
-                  ) : (
+          <div className="text-center py-12">
+            <p className="text-muted-foreground mb-4">No assignments yet.</p>
+            {isFaculty && (
+              <Button size="sm" onClick={() => navigate(`/courses/${course_id}/assignments/new`)}>
+                Create one
+              </Button>
+            )}
+          </div>
+        ) : (
                     <div className="space-y-3">
                       {assignments.map((a) => {
                         const status = getAssignmentStatus(a);
                         const statusColors = {
                           overdue: "border-l-danger",
-                          "due-soon": "border-l-warning",
+                          active: "border-l-warning",
                           upcoming: "border-l-primary/50",
                         };
                         const statusLabels = {
                           overdue: "Overdue",
-                          "due-soon": "Due Soon",
+                          active: "Active",
                           upcoming: "Upcoming",
                         };
 
@@ -868,14 +736,10 @@ export default function CoursePage() {
                                         {a.title}
                                       </th>
                                     ))}
-                                    <th className="text-center p-3 font-semibold bg-muted/30 min-w-[120px]">
-                                      Best Score
-                                    </th>
                                   </tr>
                                 </thead>
                                 <tbody>
                                   {gradebook.students.map((s) => {
-                                    const bestScore = calculateBestScore(s.grades);
                                     return (
                                       <tr key={s.student_id} className="border-b border-border hover:bg-muted/50">
                                         <td className="sticky left-0 bg-card z-10 p-3 font-medium border-r border-border">
@@ -890,13 +754,6 @@ export default function CoursePage() {
                                             )}
                                           </td>
                                         ))}
-                                        <td className="p-3 text-center font-semibold bg-muted/30">
-                                          {bestScore == null ? (
-                                            <span className="text-muted-foreground">—</span>
-                                          ) : (
-                                            <span>{bestScore}</span>
-                                          )}
-                                        </td>
                                       </tr>
                                     );
                                   })}
@@ -941,6 +798,9 @@ export default function CoursePage() {
                                         </th>
                                       ));
                                     })()}
+                                    <th className="text-center p-3 font-semibold bg-muted/30 min-w-[120px]">
+                                      Best Score
+                                    </th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -948,6 +808,9 @@ export default function CoursePage() {
                                     const assignmentAttempts = studentAttempts.find(
                                       (sa) => sa.assignmentId === assignment.id
                                     )?.attempts || [];
+                                    const bestScore = assignmentAttempts.length > 0
+                                      ? Math.max(...assignmentAttempts.map(a => a.grade ?? -Infinity).filter(g => g !== -Infinity))
+                                      : null;
                                     return (
                                       <tr key={assignment.id} className="border-b border-border hover:bg-muted/50">
                                         <td className="sticky left-0 bg-card z-10 p-3 font-medium border-r border-border">
@@ -975,6 +838,13 @@ export default function CoursePage() {
                                             );
                                           });
                                         })()}
+                                        <td className="p-3 text-center font-semibold bg-muted/30">
+                                          {bestScore == null || bestScore === -Infinity ? (
+                                            <span className="text-muted-foreground">—</span>
+                                          ) : (
+                                            <span>{bestScore}</span>
+                                          )}
+                                        </td>
                                       </tr>
                                     );
                                   })}

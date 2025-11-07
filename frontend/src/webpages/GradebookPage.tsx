@@ -37,12 +37,6 @@ export default function GradebookPage() {
 
   return (
     <div className="container py-12">
-        <div className="mb-3">
-          <Link to={`/courses/${encodeURIComponent(course_id)}`} className="text-primary hover:opacity-80">
-            ← Back to course
-          </Link>
-        </div>
-
         <Card>
           <h1 className="text-3xl font-bold mb-6">
             Gradebook{" "}

@@ -31,8 +31,8 @@ export function HeroHeader({
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
               {stats.map((stat, index) => (
                 <div key={index} className="hero-stat-card">
-                  <div className="text-3xl font-bold text-primary-foreground mb-1">{stat.value}</div>
-                  <div className="text-sm font-medium text-primary-foreground/90">{stat.label}</div>
+                  <div className="text-3xl font-bold text-card-foreground mb-1">{stat.value}</div>
+                  <div className="text-sm font-medium text-card-foreground/80">{stat.label}</div>
                 </div>
               ))}
             </div>

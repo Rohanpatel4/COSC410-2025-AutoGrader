@@ -64,15 +64,15 @@ export default {
         "3xl": "1.35rem",
       },
       boxShadow: {
-        soft: "0 20px 35px -20px rgba(14, 19, 39, 0.26)",
-        glow: "0 25px 45px -20px rgba(40, 96, 225, 0.45)",
+        soft: "0 20px 35px -20px rgba(0, 0, 0, 0.6)",
+        glow: "0 25px 45px -20px rgba(136, 110, 76, 0.4)",
       },
       transitionTimingFunction: {
         soft: "cubic-bezier(0.22, 1, 0.36, 1)",
       },
       backgroundImage: {
         "grid-radial":
-          "radial-gradient(circle at center, rgba(40, 96, 225, 0.12) 0%, rgba(15, 18, 32, 0) 65%)",
+          "radial-gradient(circle at center, rgba(136, 110, 76, 0.12) 0%, rgba(26, 26, 27, 0) 65%)",
       },
     },
   },

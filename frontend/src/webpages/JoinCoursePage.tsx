@@ -41,12 +41,6 @@ export default function JoinCoursePage() {
 
   return (
     <main className="page-container space-y-8 py-12">
-        <div>
-          <Link to="/my" className="text-primary hover:opacity-80">
-            ← Back to dashboard
-          </Link>
-        </div>
-
         <div className="mx-auto max-w-2xl">
           <div className="mb-8">
             <h1 className="text-3xl font-bold tracking-tight text-foreground">Join a Course</h1>

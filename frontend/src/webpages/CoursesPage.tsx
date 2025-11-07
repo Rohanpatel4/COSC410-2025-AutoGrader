@@ -90,9 +90,6 @@ export default function CoursesPage() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center text-red-600">
           <p className="text-lg">Error: {error}</p>
-          <Button onClick={() => navigate("/my")} className="mt-4">
-            Back to Dashboard
-          </Button>
         </div>
       </div>
     );
@@ -107,20 +104,14 @@ export default function CoursesPage() {
             <div className="p-6">
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center">
+                  <div className="w-12 h-12 rounded-xl bg-primary text-primary-foreground flex items-center justify-center">
                     <BookOpen className="w-6 h-6 text-white" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-foreground text-lg">{course.name}</h3>
+                    <h3 className="font-semibold text-foreground text-base">{course.name}</h3>
                     <Badge variant="secondary" className="mt-1">{course.course_code}</Badge>
                   </div>
                 </div>
-
-                {isFaculty && course.enrollment_key && (
-                  <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
-                    Key: {course.enrollment_key}
-                  </Badge>
-                )}
               </div>
 
               <p className="text-muted-foreground line-clamp-2 mb-4">
@@ -154,7 +145,7 @@ export default function CoursesPage() {
           </p>
 
           {isFaculty && (
-            <Button className="bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-700 hover:to-yellow-700">
+            <Button className="bg-primary hover:bg-primary/90">
               <Plus className="h-4 w-4 mr-2" />
               Create Your First Course
             </Button>
