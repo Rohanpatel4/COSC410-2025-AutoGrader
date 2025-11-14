@@ -1,8 +1,8 @@
-"""0001 baseline schema
+"""update_schema_with_new_fields
 
-Revision ID: 6b1f4951fc18
+Revision ID: c658fbb9b36b
 Revises: 
-Create Date: 2025-10-23 18:55:46.668139
+Create Date: 2025-11-14 11:51:53.708621
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '6b1f4951fc18'
+revision: str = 'c658fbb9b36b'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -48,6 +48,7 @@ def upgrade() -> None:
     sa.Column('sub_limit', sa.Integer(), nullable=True),
     sa.Column('start', sa.DateTime(), nullable=True),
     sa.Column('stop', sa.DateTime(), nullable=True),
+    sa.Column('languages', sa.String(), nullable=True),
     sa.ForeignKeyConstraint(['course_id'], ['courses.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
@@ -64,7 +65,10 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('student_id', sa.Integer(), nullable=False),
     sa.Column('assignment_id', sa.Integer(), nullable=False),
-    sa.Column('grade', sa.Integer(), nullable=True),
+    sa.Column('attempt', sa.Integer(), nullable=True),
+    sa.Column('earned_point', sa.Integer(), nullable=True),
+    sa.Column('code', sa.Text(), nullable=True),
+    sa.Column('time_submitted', sa.DateTime(), nullable=True),
     sa.ForeignKeyConstraint(['assignment_id'], ['assignments.id'], ),
     sa.ForeignKeyConstraint(['student_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
@@ -72,7 +76,11 @@ def upgrade() -> None:
     op.create_table('test_files',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('assignment_id', sa.Integer(), nullable=False),
-    sa.Column('filename', sa.String(), nullable=False),
+    sa.Column('point_value', sa.Integer(), nullable=True),
+    sa.Column('visibility', sa.Boolean(), nullable=True),
+    sa.Column('test_case', sa.Text(), nullable=True),
+    sa.Column('order', sa.Integer(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=True),
     sa.ForeignKeyConstraint(['assignment_id'], ['assignments.id'], ),
     sa.PrimaryKeyConstraint('id')
     )

@@ -58,6 +58,7 @@ class Assignment(Base):
     sub_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
     start: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
     stop:  Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    languages: Mapped[str | None] = mapped_column(String, nullable=True)
 
     course: Mapped["Course"] = relationship(back_populates="assignments")
     test_files: Mapped[list["TestCase"]] = relationship(
@@ -68,7 +69,11 @@ class TestCase(Base):
     __tablename__ = "test_files"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     assignment_id: Mapped[int] = mapped_column(ForeignKey("assignments.id"), nullable=False)
-    filename: Mapped[str] = mapped_column(String, nullable=False)
+    point_value: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    visibility: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    test_case: Mapped[str | None] = mapped_column(Text, nullable=True)
+    order: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
     assignment: Mapped["Assignment"] = relationship(back_populates="test_files")
 
 class StudentSubmission(Base):
@@ -76,6 +81,9 @@ class StudentSubmission(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     student_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     assignment_id: Mapped[int] = mapped_column(ForeignKey("assignments.id"), nullable=False)
-    grade: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    attempt: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    earned_point: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    code: Mapped[str | None] = mapped_column(Text, nullable=True)
+    time_submitted: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
     student: Mapped["User"] = relationship()
     assignment: Mapped["Assignment"] = relationship()

@@ -59,6 +59,7 @@ class AssignmentCreate(BaseModel):
     sub_limit: Optional[int] = None
     start: Optional[datetime] = None
     stop: Optional[datetime] = None
+    languages: Optional[str] = None
 
 class AssignmentRead(BaseModel):
     id: int
@@ -68,29 +69,45 @@ class AssignmentRead(BaseModel):
     sub_limit: Optional[int] = None
     start: Optional[datetime] = None
     stop: Optional[datetime] = None
+    languages: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 # ---------- TEST CASES ----------
 class TestCaseCreate(BaseModel):
     assignment_id: int
-    filename: str
+    point_value: Optional[int] = None
+    visibility: Optional[bool] = None
+    test_case: Optional[str] = None
+    order: Optional[int] = None
+    created_at: Optional[datetime] = None
 
 class TestCaseRead(BaseModel):
     id: int
     assignment_id: int
-    filename: str
+    point_value: Optional[int] = None
+    visibility: Optional[bool] = None
+    test_case: Optional[str] = None
+    order: Optional[int] = None
+    created_at: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
 
 # ---------- STUDENT SUBMISSIONS ----------
 class StudentSubmissionCreate(BaseModel):
     student_id: int
     assignment_id: int
+    attempt: Optional[int] = None
+    earned_point: Optional[int] = None
+    code: Optional[str] = None
+    time_submitted: Optional[datetime] = None
 
 class StudentSubmissionRead(BaseModel):
     id: int
     student_id: int
     assignment_id: int
-    grade: Optional[int] = None
+    attempt: Optional[int] = None
+    earned_point: Optional[int] = None
+    code: Optional[str] = None
+    time_submitted: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
 
 
