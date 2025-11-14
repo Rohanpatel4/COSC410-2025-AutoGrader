@@ -12,7 +12,7 @@ from .registrations import router as registrations_router
 from .assignments import router as assignments_router
 
 # startup hook
-from app.services.piston import _ensure_python312
+from app.services.piston import get_runtimes
 
 # App
 app = FastAPI(title="AutoGrader API", version="1.0.0")
@@ -33,10 +33,14 @@ app.add_middleware(
 @app.on_event("startup")
 async def _piston_bootstrap():
     try:
-        version = await _ensure_python312()
-        print(f"[piston] Python ready: {version}", flush=True)
+        runtimes = await get_runtimes()
+        if "error" in runtimes:
+            print(f"[piston] Warning: Could not fetch runtimes: {runtimes['error']}", flush=True)
+        else:
+            languages = set(rt.get("language") for rt in runtimes if isinstance(rt, dict))
+            print(f"[piston] Available languages: {', '.join(sorted(languages))}", flush=True)
     except Exception as e:
-        print(f"[piston] ensure python warning: {e}", flush=True)
+        print(f"[piston] Warning: Could not check Piston status: {e}", flush=True)
 
 # Routers
 app.include_router(login_router,       prefix="/api/v1",             tags=["login"])

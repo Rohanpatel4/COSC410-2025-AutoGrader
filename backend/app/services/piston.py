@@ -1,38 +1,14 @@
 # backend/app/services/piston.py
 from typing import Any, Dict, Optional
 import httpx
+import re
+from pathlib import Path
+from string import Template
 from app.core.settings import settings
 
 
-async def _ensure_python312() -> str:
-    """Ensure Python 3.12 exists on Piston. Return resolved version (e.g., '3.12.0') or '3.12.x' selector."""
-    base = settings.PISTON_URL.rstrip("/")
-    want = "3.12.x"
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        # check
-        try:
-            r = await client.get(f"{base}/api/v2/runtimes")
-            r.raise_for_status()
-            for rt in r.json():
-                if rt.get("language") == "python" and rt.get("version", "").startswith("3.12"):
-                    return rt["version"]
-        except Exception:
-            pass
-        # install (idempotent)
-        try:
-            r = await client.post(f"{base}/api/v2/packages", json={"language":"python","version":want})
-            r.raise_for_status()
-        except httpx.HTTPStatusError:
-            pass
-        # re-check
-        r = await client.get(f"{base}/api/v2/runtimes")
-        r.raise_for_status()
-        for rt in r.json():
-            if rt.get("language") == "python" and rt.get("version", "").startswith("3.12"):
-                return rt["version"]
-    return want  # fall back to selector
 
-def _parse_pytest_output(stdout: str, stderr: str) -> Dict[str, Any]:
+def parse_test_output(stdout: str, stderr: str) -> Dict[str, Any]:
     """Parse test output to determine pass/fail status, test counts, and point values."""
     combined_output = (stdout or "") + "\n" + (stderr or "")
 
@@ -115,140 +91,35 @@ def _parse_pytest_output(stdout: str, stderr: str) -> Dict[str, Any]:
     return result
 
 
-def _combine_code(student_code: str, test_code: str) -> str:
-    """Combine student code and test code with unittest test runner and custom points decorator."""
-    return f"""import sys
-import unittest
-
-# Custom points decorator for test functions
-_points_registry = {{}}
-
-def points(value):
-    # Decorator to assign point values to test functions
-    def decorator(func):
-        _points_registry[func.__name__] = value
-        return func
-    return decorator
-
-# Student code
-{student_code}
-
-# Test code
-{test_code}
-
-# Convert test functions to unittest test cases
-class TestRunner(unittest.TestCase):
-    pass
-
-# Dynamically add test methods with point tracking
-test_functions = [obj for name, obj in globals().items()
-                  if name.startswith('test_') and callable(obj)]
-
-# Track which tests have points assigned
-tests_without_points = []
-
-for test_func in test_functions:
-    # Check if test has points assigned
-    if test_func.__name__ not in _points_registry:
-        tests_without_points.append(test_func.__name__)
-    
-    # Bind the test function as a method to the TestCase class
-    # Use a closure to capture the specific function
-    def make_test(func):
-        def test_method(self):
-            try:
-                func()
-            except AssertionError as e:
-                raise AssertionError(f"FAILED: {{func.__name__}}") from e
-            else:
-                print(f"PASSED: {{func.__name__}}")
-        return test_method
-    setattr(TestRunner, test_func.__name__, make_test(test_func))
-
-if __name__ == "__main__":
-    # Check for tests without points
-    if tests_without_points:
-        print(f"\\nERROR: Tests without point markers: {{', '.join(tests_without_points)}}")
-        print("All tests must use @points(value) decorator")
-        sys.exit(1)
-    
-    # Run tests with unittest
-    loader = unittest.TestLoader()
-    suite = loader.loadTestsFromTestCase(TestRunner)
-    
-    # Custom test result collector
-    class PointsTestResult(unittest.TestResult):
-        def __init__(self):
-            super().__init__()
-            self.test_results = []
-        
-        def addSuccess(self, test):
-            super().addSuccess(test)
-            test_name = test._testMethodName
-            points_value = _points_registry.get(test_name, 0)
-            self.test_results.append({{"name": test_name, "passed": True, "points": points_value}})
-        
-        def addFailure(self, test, err):
-            super().addFailure(test, err)
-            test_name = test._testMethodName
-            points_value = _points_registry.get(test_name, 0)
-            self.test_results.append({{"name": test_name, "passed": False, "points": points_value}})
-        
-        def addError(self, test, err):
-            super().addError(test, err)
-            test_name = test._testMethodName
-            points_value = _points_registry.get(test_name, 0)
-            self.test_results.append({{"name": test_name, "passed": False, "points": points_value}})
-    
-    result = PointsTestResult()
-    suite.run(result)
-    
-    # Calculate points
-    total_points = sum(r["points"] for r in result.test_results)
-    earned_points = sum(r["points"] for r in result.test_results if r["passed"])
-    passed_tests = sum(1 for r in result.test_results if r["passed"])
-    failed_tests = len(result.test_results) - passed_tests
-    
-    # Print summary in our format
-    print(f"\\n=== Test Results ===")
-    print(f"Passed: {{passed_tests}}")
-    print(f"Failed: {{failed_tests}}")
-    print(f"Total: {{len(result.test_results)}}")
-    print(f"Earned: {{earned_points}}")
-    print(f"TotalPoints: {{total_points}}")
-    
-    # Exit with appropriate code
-    sys.exit(0 if result.wasSuccessful() else 1)
-"""
 
 
-def _map_status_to_result(returncode: int, timed_out: bool = False) -> int:
+def _map_status_to_result(returncode: int | None, timed_out: bool = False) -> int:
     """
     Map Piston execution result to status IDs.
     Returns status codes compatible with existing grading logic.
     """
     if timed_out:
         return 5  # Time Limit Exceeded
+    if returncode is None:
+        return 13  # Internal Error (unknown state)
     if returncode == 0:
         return 3  # Accepted
     return 4  # Wrong Answer
 
 
-async def _get_python_version() -> str:
-    return await _ensure_python312()
-
-
 async def execute_code(
+    language: str,
     student_code: str,
-    test_code: str,
+    test_cases: list[dict],
     timeout_ms: int = 3000
 ) -> Dict[str, Any]:
     """
     Execute student code with tests using Piston API.
     
     Args:
+        language: The programming language (e.g., "python", "java", "cpp")
         student_code: The student's submission code
-        test_code: The test code to run
+        test_cases: List of test cases with {id, point_value, test_code}
         timeout_ms: Execution timeout in milliseconds
         
     Returns:
@@ -256,11 +127,27 @@ async def execute_code(
     """
     piston_url = settings.PISTON_URL
     
-    # Combine code
-    combined_code = _combine_code(student_code, test_code)
+    # Generate test harness using template system
+    try:
+        combined_code = generate_test_harness(language, student_code, test_cases)
+    except Exception as e:
+        return {
+            "stdout": "",
+            "stderr": f"Template generation error: {str(e)}",
+            "returncode": -1,
+            "status": {"id": 13},  # Internal Error
+            "time": None,
+            "memory": None,
+            "language_id_used": 0,
+            "grading": {"total_tests": 0, "passed_tests": 0, "failed_tests": 0, "earned_points": 0, "total_points": 0, "passed": False, "all_passed": False, "has_tests": False}
+        }
     
-    # Get available Python version (or install if needed)
-    python_version = await _get_python_version()
+    # Get language version from Piston
+    language_version = await get_language_version(language)
+    
+    # Get file extension and main file name
+    extension = get_file_extension(language)
+    main_file = f"main{extension}"
     
     # Piston API v2 execute endpoint
     # See: https://github.com/engineer-man/piston
@@ -270,15 +157,21 @@ async def execute_code(
     # Piston has a max run_timeout of 3000ms, so cap it
     capped_timeout = min(timeout_ms, 3000)
     
+    # Normalize language name for Piston API
+    # Users can use "gcc" in assignments, but Piston expects "c++" for C++ compilation
+    piston_language = language.lower()
+    if piston_language == "gcc":
+        piston_language = "c++"  # Piston uses "c++" for C++ compilation
+    
+    # For Java: Keep in single file but Main class comes first
+    # This ensures Piston sees Main (public class matching filename) first
+    # Student's Solution class is package-private and comes after Main
+    files = [{"name": main_file, "content": combined_code}]
+    
     request_body = {
-        "language": "python",
-        "version": python_version,
-        "files": [
-            {
-                "name": "main.py",
-                "content": combined_code
-            }
-        ],
+        "language": piston_language,
+        "version": language_version,
+        "files": files,
         "stdin": "",
         "args": [],
         "compile_timeout": 10000,
@@ -291,20 +184,43 @@ async def execute_code(
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(execute_url, json=request_body)
             if response.status_code == 400 and "runtime is unknown" in (response.text or ""):
-                # race or fresh volume: install and retry once
-                request_body["version"] = await _ensure_python312()
+                # Try to get latest version and retry
+                language_version = await get_language_version(language)
+                request_body["version"] = language_version
                 response = await client.post(execute_url, json=request_body)
             response.raise_for_status()
             result = response.json()
             
-            # Extract Piston response
-            stdout = result.get("run", {}).get("stdout", "")
-            stderr = result.get("run", {}).get("stderr", "")
-            code = result.get("run", {}).get("code", -1)
-            timed_out = "Timed out" in stderr or result.get("run", {}).get("signal", "") == "SIGKILL"
+            # Check for compilation errors first (Piston v2 structure)
+            compile_stderr = result.get("compile", {}).get("stderr", "")
+            if compile_stderr:
+                return {
+                    "stdout": "",
+                    "stderr": f"Compilation error: {compile_stderr}",
+                    "returncode": -1,
+                    "status": {"id": 13},  # Internal Error
+                    "time": None,
+                    "memory": None,
+                    "language_id_used": 0,
+                    "grading": {"total_tests": 0, "passed_tests": 0, "failed_tests": 0, "earned_points": 0, "total_points": 0, "passed": False, "all_passed": False, "has_tests": False}
+                }
+            
+            # Extract Piston response - handle case where "run" might not exist
+            run_result = result.get("run", {})
+            if not isinstance(run_result, dict):
+                run_result = {}
+            
+            stdout = run_result.get("stdout", "")
+            stderr = run_result.get("stderr", "")
+            code = run_result.get("code", -1)
+            # Handle None/null code values
+            if code is None:
+                code = -1
+            signal = run_result.get("signal", "")
+            timed_out = "Timed out" in stderr or signal == "SIGKILL"
             
             # Parse test output for grading
-            grading = _parse_pytest_output(stdout, stderr)
+            grading = parse_test_output(stdout, stderr)
             
             # Build response in Piston execution result format
             return {
@@ -314,7 +230,7 @@ async def execute_code(
                 "status": {"id": _map_status_to_result(code, timed_out)},
                 "time": None,  # Piston doesn't provide precise timing
                 "memory": None,  # Piston doesn't provide precise memory
-                "language_id_used": 71,  # Python 3
+                "language_id_used": 0,  # Language-agnostic
                 "grading": grading
             }
             
@@ -326,7 +242,7 @@ async def execute_code(
             "status": {"id": 5},  # Time Limit Exceeded
             "time": None,
             "memory": None,
-            "language_id_used": 71,
+            "language_id_used": 0,
             "grading": {"total_tests": 0, "passed_tests": 0, "failed_tests": 0, "earned_points": 0, "total_points": 0, "passed": False, "all_passed": False, "has_tests": False}
         }
     except httpx.HTTPStatusError as e:
@@ -337,7 +253,7 @@ async def execute_code(
             "status": {"id": 13},  # Internal Error
             "time": None,
             "memory": None,
-            "language_id_used": 71,
+            "language_id_used": 0,
             "grading": {"total_tests": 0, "passed_tests": 0, "failed_tests": 0, "earned_points": 0, "total_points": 0, "passed": False, "all_passed": False, "has_tests": False}
         }
     except Exception as e:
@@ -348,7 +264,7 @@ async def execute_code(
             "status": {"id": 13},  # Internal Error
             "time": None,
             "memory": None,
-            "language_id_used": 71,
+            "language_id_used": 0,
             "grading": {"total_tests": 0, "passed_tests": 0, "failed_tests": 0, "earned_points": 0, "total_points": 0, "passed": False, "all_passed": False, "has_tests": False}
         }
 
@@ -370,4 +286,268 @@ async def get_runtimes() -> Dict[str, Any]:
             return response.json()
     except Exception as e:
         return {"error": str(e)}
+
+
+# ============================================================================
+# Template System for Language-Agnostic Test Harness Generation
+# ============================================================================
+
+def get_file_extension(language: str) -> str:
+    """Get file extension for a language."""
+    extensions = {
+        "python": ".py",
+        "java": ".java",
+        "javascript": ".js",
+        "gcc": ".cpp",  # GCC is used for C++ compilation in Piston
+        "cpp": ".cpp",  # Keep for backward compatibility
+        "c": ".c",
+        "csharp": ".cs",
+        "go": ".go",
+        "rust": ".rs",
+        "ruby": ".rb",
+        "php": ".php",
+    }
+    return extensions.get(language.lower(), ".txt")
+
+
+def load_template(language: str) -> str:
+    """Load template file for a language."""
+    template_dir = Path(__file__).parent / "templates"
+    language_lower = language.lower()
+    
+    # Map gcc to cpp for template lookup (templates use cpp naming)
+    template_language = "cpp" if language_lower == "gcc" else language_lower
+    
+    extension = get_file_extension(language)
+    template_path = template_dir / f"{template_language}_test{extension}"
+    
+    # Try to load language-specific template
+    if template_path.exists():
+        return template_path.read_text(encoding="utf-8")
+    
+    # Fallback to generic template
+    generic_path = template_dir / "generic_test.txt"
+    if generic_path.exists():
+        return generic_path.read_text(encoding="utf-8")
+    
+    # Last resort: return empty template
+    return "# Template not found\n$student_code\n$test_execution_code"
+
+
+def _generate_python_test_execution(test_cases: list[dict]) -> str:
+    """Generate Python test execution code from test cases."""
+    code_parts = []
+    for test_case in test_cases:
+        test_id = test_case["id"]
+        points = test_case["point_value"]
+        test_code = test_case["test_code"]
+        
+        code_parts.append(f"""try:
+    {test_code}
+    test_results.append({{"id": {test_id}, "passed": True, "points": {points}}})
+    print("PASSED: test_case_{test_id}:{points}")
+except Exception as e:
+    test_results.append({{"id": {test_id}, "passed": False, "points": {points}}})
+    print("FAILED: test_case_{test_id}:{points}")
+""")
+    return "\n".join(code_parts)
+
+
+def _generate_java_test_execution(test_cases: list[dict]) -> str:
+    """Generate Java test execution code from test cases."""
+    code_parts = []
+    for test_case in test_cases:
+        test_id = test_case["id"]
+        points = test_case["point_value"]
+        test_code = test_case["test_code"]
+        
+        # Convert Java assert statements to if-throw statements
+        # Java assert: "assert condition;" or "assert condition : message;"
+        # Convert to: "if (!(condition)) throw new AssertionError();"
+        # Pattern to match: assert <condition>; or assert <condition> : <message>;
+        java_test_code = test_code
+        # Replace assert statements
+        java_test_code = re.sub(
+            r'assert\s+([^;]+);',
+            r'if (!(\1)) throw new AssertionError();',
+            java_test_code
+        )
+        
+        code_parts.append(f"""        try {{
+            Solution s = new Solution();
+            {java_test_code}
+            Map<String, Object> r{test_id} = new HashMap<>();
+            r{test_id}.put("id", {test_id});
+            r{test_id}.put("passed", true);
+            r{test_id}.put("points", {points});
+            testResults.add(r{test_id});
+            System.out.println("PASSED: test_case_{test_id}:{points}");
+        }} catch (Exception e) {{
+            Map<String, Object> r{test_id} = new HashMap<>();
+            r{test_id}.put("id", {test_id});
+            r{test_id}.put("passed", false);
+            r{test_id}.put("points", {points});
+            testResults.add(r{test_id});
+            System.out.println("FAILED: test_case_{test_id}:{points}");
+        }}
+""")
+    return "\n".join(code_parts)
+
+
+def _generate_cpp_test_execution(test_cases: list[dict]) -> str:
+    """Generate C++ test execution code from test cases."""
+    code_parts = []
+    for test_case in test_cases:
+        test_id = test_case["id"]
+        points = test_case["point_value"]
+        test_code = test_case["test_code"]
+        
+        # C++: Replace assert with test_assert (throws instead of aborting)
+        # This allows try-catch to work
+        # Also wrap the test code to catch exceptions
+        # Replace assert( with test_assert( in the test code
+        cpp_test_code = test_code.replace("assert(", "test_assert(").replace("assert ", "test_assert ")
+        
+        code_parts.append(f"""    {{
+        bool test_passed = true;
+        try {{
+            {cpp_test_code}
+        }} catch (...) {{
+            test_passed = false;
+        }}
+        TestResult r{test_id};
+        r{test_id}.id = {test_id};
+        r{test_id}.passed = test_passed;
+        r{test_id}.points = {points};
+        testResults.push_back(r{test_id});
+        if (test_passed) {{
+            std::cout << "PASSED: test_case_{test_id}:{points}" << std::endl;
+        }} else {{
+            std::cout << "FAILED: test_case_{test_id}:{points}" << std::endl;
+        }}
+    }}
+""")
+    return "\n".join(code_parts)
+
+
+def _generate_generic_test_execution(language: str, test_cases: list[dict]) -> str:
+    """Generate generic test execution code (fallback)."""
+    code_parts = []
+    for test_case in test_cases:
+        test_id = test_case["id"]
+        points = test_case["point_value"]
+        test_code = test_case["test_code"]
+        
+        code_parts.append(f"""# Test case {test_id} ({points} points)
+try:
+    {test_code}
+    print("PASSED: test_case_{test_id}:{points}")
+except:
+    print("FAILED: test_case_{test_id}:{points}")
+""")
+    return "\n".join(code_parts)
+
+
+def generate_test_execution_code(language: str, test_cases: list[dict]) -> str:
+    """Generate language-specific test execution code from test cases."""
+    language_lower = language.lower()
+    
+    if language_lower == "python":
+        return _generate_python_test_execution(test_cases)
+    elif language_lower == "java":
+        return _generate_java_test_execution(test_cases)
+    elif language_lower in ["gcc", "cpp", "c++"]:
+        return _generate_cpp_test_execution(test_cases)
+    else:
+        return _generate_generic_test_execution(language, test_cases)
+
+
+def generate_test_harness(language: str, student_code: str, test_cases: list[dict]) -> str:
+    """Generate complete test harness using template system."""
+    # For Java: Make student's class package-private (remove 'public' modifier)
+    # Java only allows one public class per file, and it must match the filename
+    # Since our file is 'main.java', only 'Main' can be public
+    if language.lower() == "java":
+        # Replace "public class" with "class" in student code to make it package-private
+        student_code = re.sub(r'\bpublic\s+class\s+(\w+)\b', r'class \1', student_code)
+    
+    # Load template
+    template_content = load_template(language)
+    template = Template(template_content)
+    
+    # Generate test execution code
+    test_execution_code = generate_test_execution_code(language, test_cases)
+    
+    # Render template
+    try:
+        rendered = template.substitute(
+            student_code=student_code,
+            test_execution_code=test_execution_code
+        )
+        return rendered
+    except KeyError as e:
+        # Handle missing placeholders
+        raise ValueError(f"Template missing placeholder: {e}")
+
+
+async def get_language_version(language: str, version: Optional[str] = None) -> str:
+    """Get available version for a language from Piston."""
+    piston_url = settings.PISTON_URL
+    
+    # Map user-facing language names to Piston runtime names
+    language_lower = language.lower()
+    piston_language = language_lower
+    if piston_language == "gcc":
+        piston_language = "c++"  # Piston uses "c++" for C++ runtimes
+    
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # First, check installed packages to see what's actually installed
+            packages_url = f"{piston_url}/api/v2/packages"
+            response = await client.get(packages_url)
+            response.raise_for_status()
+            packages = response.json()
+            
+            # Find installed packages matching the Piston language name
+            installed_packages = [
+                pkg for pkg in packages
+                if isinstance(pkg, dict) 
+                and pkg.get("language", "").lower() == piston_language
+                and pkg.get("installed", False)
+            ]
+            
+            # If we found installed packages, return the first one's version
+            if installed_packages:
+                return installed_packages[0].get("language_version", "latest")
+            
+            # If not installed, check available runtimes
+            runtimes_url = f"{piston_url}/api/v2/runtimes"
+            response = await client.get(runtimes_url)
+            response.raise_for_status()
+            runtimes = response.json()
+            
+            # Find matching language (using Piston's language name)
+            matching_runtimes = [
+                rt for rt in runtimes
+                if isinstance(rt, dict) and rt.get("language", "").lower() == piston_language
+            ]
+            
+            if not matching_runtimes:
+                # Language not found, return default version selector
+                return "latest"
+            
+            # If version specified, try to find exact match
+            if version:
+                for rt in matching_runtimes:
+                    if rt.get("version", "") == version:
+                        return version
+                # Version not found, return first available
+                return matching_runtimes[0].get("version", "latest")
+            
+            # Return first available version
+            return matching_runtimes[0].get("version", "latest")
+            
+    except Exception as e:
+        # Fallback to default
+        return "latest"
 

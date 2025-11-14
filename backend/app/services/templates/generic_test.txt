@@ -1,0 +1,20 @@
+# Generic test template - fallback for unknown languages
+# This template may require manual adjustment for specific languages
+
+# Student code
+$student_code
+
+# Test execution
+$test_execution_code
+
+# Output format (language-agnostic):
+# PASSED: test_case_{id}:{points}
+# FAILED: test_case_{id}:{points}
+# 
+# === Test Results ===
+# Passed: X
+# Failed: Y
+# Total: Z
+# Earned: A
+# TotalPoints: B
+
