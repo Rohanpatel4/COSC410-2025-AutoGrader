@@ -55,27 +55,34 @@ class Assignment(Base):
     title: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     course_id: Mapped[int] = mapped_column(ForeignKey("courses.id"), nullable=False)
+    language: Mapped[str] = mapped_column(String, nullable=False, default="python")
     sub_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
     start: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
     stop:  Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
 
     course: Mapped["Course"] = relationship(back_populates="assignments")
-    test_files: Mapped[list["TestCase"]] = relationship(
+    test_cases: Mapped[list["TestCase"]] = relationship(
         back_populates="assignment", cascade="all, delete-orphan"
     )
 
 class TestCase(Base):
-    __tablename__ = "test_files"
+    __tablename__ = "test_cases"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     assignment_id: Mapped[int] = mapped_column(ForeignKey("assignments.id"), nullable=False)
-    filename: Mapped[str] = mapped_column(String, nullable=False)
-    assignment: Mapped["Assignment"] = relationship(back_populates="test_files")
+    point_value: Mapped[int] = mapped_column(Integer, nullable=False)
+    visibility: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    test_code: Mapped[str] = mapped_column(Text, nullable=False)
+    order: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True, default=lambda: datetime.now(UTC))
+    assignment: Mapped["Assignment"] = relationship(back_populates="test_cases")
 
 class StudentSubmission(Base):
     __tablename__ = "student_submissions"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     student_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     assignment_id: Mapped[int] = mapped_column(ForeignKey("assignments.id"), nullable=False)
-    grade: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    earned_points: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    code: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
     student: Mapped["User"] = relationship()
     assignment: Mapped["Assignment"] = relationship()

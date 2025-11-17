@@ -68,11 +68,13 @@ def _assignment_to_dict(
     num_attempts = 0
     if attempts_by_aid is not None:
         num_attempts = int(attempts_by_aid.get(a.id, 0))
+    language = getattr(a, "language", "python")  # Default to python for backward compatibility
     return {
         "id": a.id,
         "course_id": a.course_id,
         "title": a.title,
         "description": a.description,
+        "language": language,
         "sub_limit": getattr(a, "sub_limit", None),
         "start": getattr(a, "start", None),
         "stop": getattr(a, "stop", None),
@@ -414,7 +416,7 @@ def create_assignment_for_course(
 ):
     """
     Create an assignment for the given course (course id or course_code).
-    Expected payload: { title, description?, sub_limit?, start?, stop? }
+    Expected payload: { title, description?, language?, sub_limit?, start?, stop? }
     """
     c = _course_by_key(db, course_key)
     if not c:
@@ -425,6 +427,9 @@ def create_assignment_for_course(
         raise HTTPException(400, "title is required")
 
     description = (payload.get("description") or "") or None
+    language = (payload.get("language") or "python").strip().lower()
+    if not language:
+        raise HTTPException(400, "language is required")
 
     # Handle sub_limit: empty string or None means unlimited (None)
     sub_limit_raw = payload.get("sub_limit", None)
@@ -447,6 +452,7 @@ def create_assignment_for_course(
         course_id=c.id,
         title=title,
         description=description,
+        language=language,
         sub_limit=sub_limit,
     )
     if hasattr(a, "start"):

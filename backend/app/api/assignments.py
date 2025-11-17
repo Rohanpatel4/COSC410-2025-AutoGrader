@@ -1,5 +1,5 @@
 # backend/app/api/assignments.py
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func, and_
 from typing import Optional
@@ -42,12 +42,14 @@ def _serialize_assignment(db: Session, a: Assignment) -> dict:
 
     start = getattr(a, "start", None)
     stop = getattr(a, "stop", None)
+    language = getattr(a, "language", "python")  # Default to python for backward compatibility
 
     return {
         "id": a.id,
         "course_id": a.course_id,
         "title": a.title,
         "description": a.description,
+        "language": language,
         "sub_limit": getattr(a, "sub_limit", None),
         "start": _to_iso_or_raw(start),
         "stop": _to_iso_or_raw(stop),
@@ -106,11 +108,12 @@ def get_one_assignment(assignment_id: int, db: Session = Depends(get_db)):
 def create_assignment(payload: dict, db: Session = Depends(get_db)):
     """
     Create an assignment.
-    Expected payload: { course_id, title, description?, sub_limit?, start?, stop? }
+    Expected payload: { course_id, title, description?, language?, sub_limit?, start?, stop? }
     """
     course_id = payload.get("course_id")
     title = (payload.get("title") or "").strip()
     description = payload.get("description") or None
+    language = (payload.get("language") or "python").strip().lower()
 
     # Handle sub_limit: empty string or None means unlimited (None)
     sub_limit_raw = payload.get("sub_limit", None)
@@ -133,6 +136,8 @@ def create_assignment(payload: dict, db: Session = Depends(get_db)):
         raise HTTPException(400, "course_id must be an integer")
     if not title:
         raise HTTPException(400, "title is required")
+    if not language:
+        raise HTTPException(400, "language is required")
 
     c = db.get(Course, course_id)
     if not c:
@@ -142,6 +147,7 @@ def create_assignment(payload: dict, db: Session = Depends(get_db)):
         course_id=course_id,
         title=title,
         description=description,
+        language=language,
         sub_limit=sub_limit,
     )
     # Only set if the columns exist (they do in your migration)
@@ -164,52 +170,230 @@ def delete_assignment(assignment_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"ok": True, "id": assignment_id}
 
-# ======================================================================
-# NEW: assignment-scoped test upload, attempts list, and submit endpoints
-# ======================================================================
+# ============================================================================
+# Test Case Management Endpoints
+# ============================================================================
 
-@router.post("/{assignment_id}/test-file", status_code=201)
-async def upload_test_file_for_assignment(
+@router.post("/{assignment_id}/test-cases/batch", status_code=201)
+async def create_test_cases_batch(
     assignment_id: int,
-    file: UploadFile = File(...),
+    payload: dict,
     db: Session = Depends(get_db),
 ):
     """
-    Attach a test file to an assignment.
-    For now we store the test code in test_files.filename (string column).
+    Create multiple test cases for an assignment at once.
+    Request body: { test_cases: [{ point_value, visibility, test_code, order? }, ...] }
     """
     a = db.get(Assignment, assignment_id)
     if not a:
         raise HTTPException(404, "Assignment not found")
-
-    if not file.filename or not file.filename.lower().endswith(".py"):
-        raise HTTPException(415, "Only .py files are accepted")
-
-    try:
-        content_bytes = await file.read()
-        content = content_bytes.decode("utf-8")
-    except Exception as e:
-        raise HTTPException(400, f"Failed to read test file: {e}")
-
-    # Validate that the file content is not empty
-    if not content.strip():
-        raise HTTPException(400, "Test file cannot be empty")
-
-    # Replace any existing test rows for this assignment (simple policy)
-    db.query(TestCase).filter(TestCase.assignment_id == assignment_id).delete()
-
-    tc = TestCase(assignment_id=assignment_id, filename=content)
-    db.add(tc)
+    
+    # Validate assignment has language set
+    language = getattr(a, "language", None)
+    if not language:
+        raise HTTPException(400, "Assignment language must be set before creating test cases")
+    
+    test_cases_data = payload.get("test_cases", [])
+    if not test_cases_data:
+        raise HTTPException(400, "test_cases array is required")
+    
+    # Validate test cases
+    for i, test_case in enumerate(test_cases_data):
+        if "point_value" not in test_case:
+            raise HTTPException(400, f"Test case {i}: point_value is required")
+        if "test_code" not in test_case:
+            raise HTTPException(400, f"Test case {i}: test_code is required")
+        if not isinstance(test_case["point_value"], int) or test_case["point_value"] < 0:
+            raise HTTPException(400, f"Test case {i}: point_value must be a non-negative integer")
+        if not test_case["test_code"].strip():
+            raise HTTPException(400, f"Test case {i}: test_code cannot be empty")
+    
+    # Delete existing test cases for this assignment (replace all)
+    existing_test_cases = db.execute(
+        select(TestCase).where(TestCase.assignment_id == assignment_id)
+    ).scalars().all()
+    for tc in existing_test_cases:
+        db.delete(tc)
+    db.flush()  # Flush deletes before creating new ones
+    
+    # Create all test cases in batch
+    created_test_cases = []
+    for test_case_data in test_cases_data:
+        tc = TestCase(
+            assignment_id=assignment_id,
+            point_value=test_case_data["point_value"],
+            visibility=test_case_data.get("visibility", True),
+            test_code=test_case_data["test_code"],
+            order=test_case_data.get("order")
+        )
+        db.add(tc)
+        created_test_cases.append(tc)
+    
     db.commit()
-    db.refresh(tc)
-
+    
+    # Refresh all test cases to get IDs
+    for tc in created_test_cases:
+        db.refresh(tc)
+    
+    # Serialize test cases
+    serialized_test_cases = [
+        {
+            "id": tc.id,
+            "assignment_id": tc.assignment_id,
+            "point_value": tc.point_value,
+            "visibility": tc.visibility,
+            "test_code": tc.test_code,
+            "order": tc.order,
+            "created_at": tc.created_at.isoformat() if tc.created_at else None
+        }
+        for tc in created_test_cases
+    ]
+    
     return {
         "ok": True,
-        "assignment_id": assignment_id,
-        "test_case_id": tc.id,
-        "filename": file.filename,
-        "size": len(content_bytes),
+        "test_cases": serialized_test_cases
     }
+
+
+@router.get("/{assignment_id}/test-cases", response_model=list[dict])
+def list_test_cases(
+    assignment_id: int,
+    student_id: Optional[int] = None,
+    include_hidden: bool = False,
+    db: Session = Depends(get_db),
+):
+    """
+    List all test cases for an assignment.
+    - If student_id is provided and user is a student, only visible test cases are returned
+    - If include_hidden is True or user is faculty, all test cases are returned
+    """
+    a = db.get(Assignment, assignment_id)
+    if not a:
+        raise HTTPException(404, "Assignment not found")
+    
+    # Determine if user is a student
+    is_student = False
+    if student_id:
+        user = db.get(User, student_id)
+        if user and user.role == RoleEnum.student:
+            is_student = True
+    
+    # Fetch test cases
+    query = select(TestCase).where(TestCase.assignment_id == assignment_id)
+    
+    # If student and not including hidden, filter by visibility
+    if is_student and not include_hidden:
+        query = query.where(TestCase.visibility == True)
+    
+    test_cases = db.execute(
+        query.order_by(TestCase.order.asc().nulls_last(), TestCase.id.asc())
+    ).scalars().all()
+    
+    # Serialize test cases
+    return [
+        {
+            "id": tc.id,
+            "assignment_id": tc.assignment_id,
+            "point_value": tc.point_value,
+            "visibility": tc.visibility,
+            "test_code": tc.test_code,
+            "order": tc.order,
+            "created_at": tc.created_at.isoformat() if tc.created_at else None
+        }
+        for tc in test_cases
+    ]
+
+
+@router.get("/{assignment_id}/test-cases/{test_case_id}", response_model=dict)
+def get_test_case(
+    assignment_id: int,
+    test_case_id: int,
+    db: Session = Depends(get_db),
+):
+    """Get a single test case."""
+    tc = db.get(TestCase, test_case_id)
+    if not tc:
+        raise HTTPException(404, "Test case not found")
+    if tc.assignment_id != assignment_id:
+        raise HTTPException(404, "Test case not found for this assignment")
+    
+    return {
+        "id": tc.id,
+        "assignment_id": tc.assignment_id,
+        "point_value": tc.point_value,
+        "visibility": tc.visibility,
+        "test_code": tc.test_code,
+        "order": tc.order,
+        "created_at": tc.created_at.isoformat() if tc.created_at else None
+    }
+
+
+@router.put("/{assignment_id}/test-cases/{test_case_id}", response_model=dict)
+def update_test_case(
+    assignment_id: int,
+    test_case_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+):
+    """Update a test case."""
+    tc = db.get(TestCase, test_case_id)
+    if not tc:
+        raise HTTPException(404, "Test case not found")
+    if tc.assignment_id != assignment_id:
+        raise HTTPException(404, "Test case not found for this assignment")
+    
+    # Update fields if provided
+    if "point_value" in payload:
+        if not isinstance(payload["point_value"], int) or payload["point_value"] < 0:
+            raise HTTPException(400, "point_value must be a non-negative integer")
+        tc.point_value = payload["point_value"]
+    
+    if "visibility" in payload:
+        tc.visibility = bool(payload["visibility"])
+    
+    if "test_code" in payload:
+        if not payload["test_code"].strip():
+            raise HTTPException(400, "test_code cannot be empty")
+        tc.test_code = payload["test_code"]
+    
+    if "order" in payload:
+        tc.order = payload["order"] if payload["order"] is not None else None
+    
+    db.commit()
+    db.refresh(tc)
+    
+    return {
+        "id": tc.id,
+        "assignment_id": tc.assignment_id,
+        "point_value": tc.point_value,
+        "visibility": tc.visibility,
+        "test_code": tc.test_code,
+        "order": tc.order,
+        "created_at": tc.created_at.isoformat() if tc.created_at else None
+    }
+
+
+@router.delete("/{assignment_id}/test-cases/{test_case_id}", response_model=dict)
+def delete_test_case(
+    assignment_id: int,
+    test_case_id: int,
+    db: Session = Depends(get_db),
+):
+    """Delete a test case."""
+    tc = db.get(TestCase, test_case_id)
+    if not tc:
+        raise HTTPException(404, "Test case not found")
+    if tc.assignment_id != assignment_id:
+        raise HTTPException(404, "Test case not found for this assignment")
+    
+    db.delete(tc)
+    db.commit()
+    
+    return {
+        "ok": True,
+        "id": test_case_id
+    }
+
 
 @router.get("/{assignment_id}/attempts", response_model=list[dict])
 def list_attempts_for_assignment(
@@ -234,22 +418,27 @@ def list_attempts_for_assignment(
         .order_by(StudentSubmission.id.asc())
     ).scalars().all()
 
-    return [{"id": s.id, "grade": s.grade} for s in rows]
+    return [{"id": s.id, "earned_points": s.earned_points} for s in rows]
 
 @router.post("/{assignment_id}/submit", status_code=201)
 async def submit_to_assignment(
     assignment_id: int,
-    submission: UploadFile = File(..., description="Student .py submission"),
+    submission: UploadFile = File(..., description="Student code submission"),
     student_id: int = Form(...),
     db: Session = Depends(get_db),
 ):
     """
     Create a StudentSubmission for this assignment and run it against the
-    assignment's stored test file (latest TestCase row).
+    assignment's test cases.
     """
     a = db.get(Assignment, assignment_id)
     if not a:
         raise HTTPException(404, "Assignment not found")
+
+    # Get assignment language
+    language = getattr(a, "language", "python")
+    if not language:
+        raise HTTPException(400, "Assignment language not set")
 
     # lightweight enrollment/role check (dev-friendly)
     stu = db.get(User, student_id)
@@ -269,18 +458,15 @@ async def submit_to_assignment(
     ).first()
     # If not enrollment: allow for now.
 
-    # fetch latest test code for this assignment
-    tc = db.execute(
+    # Fetch all test cases for this assignment (ordered by order or id)
+    test_cases = db.execute(
         select(TestCase)
         .where(TestCase.assignment_id == assignment_id)
-        .order_by(TestCase.id.desc())
-        .limit(1)
-    ).scalar_one_or_none()
-    if not tc or not (tc.filename or "").strip():
-        raise HTTPException(409, "No test file attached to this assignment")
-
-    if not submission.filename or not submission.filename.lower().endswith(".py"):
-        raise HTTPException(415, "Only .py files are accepted")
+        .order_by(TestCase.order.asc().nulls_last(), TestCase.id.asc())
+    ).scalars().all()
+    
+    if not test_cases:
+        raise HTTPException(409, "No test cases attached to this assignment")
 
     # read student code
     try:
@@ -289,33 +475,118 @@ async def submit_to_assignment(
     except Exception as e:
         raise HTTPException(400, f"Failed to read submission: {e}")
 
-    # Execute with Piston
-    test_code = tc.filename
-    result = await execute_code(student_code, test_code)
+    # Prepare test cases for execution (all test cases, including hidden ones)
+    test_cases_for_execution = [
+        {
+            "id": tc.id,
+            "point_value": tc.point_value,
+            "test_code": tc.test_code
+        }
+        for tc in test_cases
+    ]
+
+    # Execute with Piston using new template system
+    result = await execute_code(language, student_code, test_cases_for_execution)
     
-    # Check for invalid test configuration (missing points)
+    # Ensure grading structure exists
+    if "grading" not in result:
+        result["grading"] = {}
+    
+    # Check for invalid test configuration
     if result["grading"].get("error"):
-        raise HTTPException(400, f"Invalid test file: {result['grading']['error']}")
+        raise HTTPException(400, f"Invalid test configuration: {result['grading']['error']}")
     
-    # Calculate grade as sum of earned points
-    grade = (result["grading"].get("earned_points", 0)/result["grading"].get("total_points", 0))*100
+    # Calculate grade from all test cases (visible + hidden)
+    total_points = result["grading"].get("total_points", 0)
+    earned_points = result["grading"].get("earned_points", 0)
+    
+    # Handle division by zero
+    if total_points > 0:
+        grade = (earned_points / total_points) * 100
+    else:
+        grade = 0
+    
+    # Get test case results mapping
+    test_case_results = result["grading"].get("test_case_results", {})
+    
     # Create submission record
     submission_record = StudentSubmission(
         student_id=student_id,
         assignment_id=assignment_id,
-        grade=grade
+        earned_points=earned_points,
+        code=student_code,
+        created_at=datetime.now()
     )
     db.add(submission_record)
     db.commit()
     db.refresh(submission_record)
     
-    # Return complete result
+    # Filter visible test cases for student response and include pass/fail status
+    visible_test_cases = []
+    for tc in test_cases:
+        if tc.visibility:
+            test_result = test_case_results.get(tc.id, {})
+            visible_test_cases.append({
+                "id": tc.id,
+                "point_value": tc.point_value,
+                "test_code": tc.test_code,
+                "visibility": tc.visibility,
+                "order": tc.order,
+                "passed": test_result.get("passed", False),
+                "points_earned": test_result.get("points", 0) if test_result.get("passed", False) else 0
+            })
+    
+    # Return complete result with filtered test cases for students
     return {
         "ok": True,
         "submission_id": submission_record.id,
         "grade": grade,
-        "result": result
+        "result": result,
+        "test_cases": visible_test_cases  # Only visible test cases for students with pass/fail status
     }
+
+@router.get("/{assignment_id}/submissions/{submission_id}/code", response_model=dict)
+def get_submission_code(
+    assignment_id: int,
+    submission_id: int,
+    user_id: int = Query(..., description="User ID of faculty member"),
+    db: Session = Depends(get_db),
+):
+    """
+    Faculty endpoint to download student submission code.
+    Only faculty members can access this endpoint.
+    """
+    # Verify user is faculty
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(404, "User not found")
+    if user.role != RoleEnum.faculty:
+        raise HTTPException(403, "Only faculty members can access submission code")
+    
+    # Verify assignment exists
+    a = db.get(Assignment, assignment_id)
+    if not a:
+        raise HTTPException(404, "Assignment not found")
+    
+    # Get submission
+    submission = db.get(StudentSubmission, submission_id)
+    if not submission:
+        raise HTTPException(404, "Submission not found")
+    
+    # Verify submission belongs to the assignment
+    if submission.assignment_id != assignment_id:
+        raise HTTPException(404, "Submission not found for this assignment")
+    
+    # Return submission code
+    return {
+        "ok": True,
+        "submission_id": submission.id,
+        "student_id": submission.student_id,
+        "assignment_id": submission.assignment_id,
+        "code": submission.code or "",
+        "created_at": submission.created_at.isoformat() if submission.created_at else None
+    }
+
 @router.get("/{assignment_id}/grades", response_model=dict)
 def grades_for_assignment(assignment_id: int, db: Session = Depends(get_db)):
     """
@@ -350,7 +621,7 @@ def grades_for_assignment(assignment_id: int, db: Session = Depends(get_db)):
         select(
             StudentSubmission.student_id,
             StudentSubmission.id,
-            StudentSubmission.grade
+            StudentSubmission.earned_points
         )
         .where(
             and_(
@@ -364,13 +635,13 @@ def grades_for_assignment(assignment_id: int, db: Session = Depends(get_db)):
     attempts_by_student: dict[int, list[dict]] = defaultdict(list)
     best_by_student: dict[int, int | None] = {}
 
-    for sid, sub_id, grade in att_rows:
-        attempts_by_student[sid].append({"id": sub_id, "grade": grade})
-        if grade is not None:
+    for sid, sub_id, earned_points in att_rows:
+        attempts_by_student[sid].append({"id": sub_id, "earned_points": earned_points})
+        if earned_points is not None:
             if sid not in best_by_student:
-                best_by_student[sid] = grade
+                best_by_student[sid] = earned_points
             else:
-                best_by_student[sid] = max(best_by_student[sid], grade)
+                best_by_student[sid] = max(best_by_student[sid], earned_points)
 
     out_students = []
     for s in students:
@@ -434,7 +705,7 @@ def gradebook_for_course(course_key: str, db: Session = Depends(get_db)):
         select(
             StudentSubmission.student_id,
             StudentSubmission.assignment_id,
-            func.max(StudentSubmission.grade)
+            func.max(StudentSubmission.earned_points)
         )
         .where(
             StudentSubmission.assignment_id.in_(a_ids),

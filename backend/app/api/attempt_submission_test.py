@@ -41,18 +41,16 @@ router = APIRouter(tags=["attempts"])
 
 @router.post("/bridge", status_code=status.HTTP_201_CREATED)
 async def attempt_submission_test_bridge(
-    submission: UploadFile = File(..., description="Student .py submission"),
+    submission: UploadFile = File(..., description="Student code submission"),
     test_case: str = Form(..., description="Test case code (text)"),
+    language: str = Form(default="python", description="Programming language"),
     job_name: str = Form(default="submission", description="Optional job identifier"),
 ):
     """
     Submit code for grading via Piston.
     Direct execution with test cases.
+    Test/debug endpoint - defaults to Python for backward compatibility.
     """
-    # Validate file type
-    if not submission.filename or not submission.filename.lower().endswith(".py"):
-        raise HTTPException(415, "Only .py files are accepted")
-    
     # Read student code
     try:
         sub_bytes = await submission.read()
@@ -60,23 +58,30 @@ async def attempt_submission_test_bridge(
     except Exception as e:
         raise HTTPException(400, f"Failed to read submission: {e}")
     
-    # Execute with Piston
-    result = await execute_code(student_code, test_case)
+    # Convert test_case string to test_cases list format
+    test_cases = [
+        {
+            "id": 1,
+            "point_value": 1,  # Default to 1 point for test endpoint
+            "test_code": test_case
+        }
+    ]
+    
+    # Execute with Piston using new template system
+    result = await execute_code(language.lower(), student_code, test_cases)
     return result
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def attempt_submission_test(
-    submission: UploadFile = File(..., description="Student .py submission"),
+    submission: UploadFile = File(..., description="Student code submission"),
     test_case: str = Form(..., description="Test case code (text)"),
+    language: str = Form(default="python", description="Programming language"),
 ):
     """
     Submit code for grading via Piston.
+    Test/debug endpoint - defaults to Python for backward compatibility.
     """
-    # Validate file type
-    if not submission.filename or not submission.filename.lower().endswith(".py"):
-        raise HTTPException(415, "Only .py files are accepted")
-    
     # Read student code
     try:
         sub_bytes = await submission.read()
@@ -84,6 +89,15 @@ async def attempt_submission_test(
     except Exception as e:
         raise HTTPException(400, f"Failed to read submission: {e}")
     
-    # Execute with Piston
-    result = await execute_code(student_code, test_case)
+    # Convert test_case string to test_cases list format
+    test_cases = [
+        {
+            "id": 1,
+            "point_value": 1,  # Default to 1 point for test endpoint
+            "test_code": test_case
+        }
+    ]
+    
+    # Execute with Piston using new template system
+    result = await execute_code(language.lower(), student_code, test_cases)
     return result
