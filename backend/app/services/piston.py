@@ -19,6 +19,7 @@ def parse_test_output(stdout: str, stderr: str) -> Dict[str, Any]:
     earned_points = 0
     total_points = 0
     error_message = None
+    test_case_results: Dict[int, Dict[str, Any]] = {}  # test_case_id -> {passed: bool, points: int}
 
     # Check for error about missing points
     if "ERROR: Tests without point markers:" in combined_output:
@@ -28,13 +29,26 @@ def parse_test_output(stdout: str, stderr: str) -> Dict[str, Any]:
             error_end = len(combined_output)
         error_message = combined_output[error_start:error_end].strip()
 
-    # Count individual test results
+    # Parse individual test case results
+    # Lines look like: "PASSED: test_case_{id}:{points}" or "FAILED: test_case_{id}:{points}"
     for line in lines:
         line = line.strip()
         if line.startswith('PASSED:'):
             passed_tests += 1
+            # Extract test case ID and points
+            match = re.match(r'PASSED:\s*test_case_(\d+):(\d+)', line)
+            if match:
+                test_id = int(match.group(1))
+                points = int(match.group(2))
+                test_case_results[test_id] = {"passed": True, "points": points}
         elif line.startswith('FAILED:'):
             failed_tests += 1
+            # Extract test case ID and points
+            match = re.match(r'FAILED:\s*test_case_(\d+):(\d+)', line)
+            if match:
+                test_id = int(match.group(1))
+                points = int(match.group(2))
+                test_case_results[test_id] = {"passed": False, "points": points}
 
     # Look for summary section
     in_summary = False
@@ -82,7 +96,8 @@ def parse_test_output(stdout: str, stderr: str) -> Dict[str, Any]:
         "total_points": total_points,
         "passed": failed_tests == 0 and total_tests > 0,  # Frontend compatibility
         "all_passed": failed_tests == 0 and total_tests > 0,
-        "has_tests": total_tests > 0
+        "has_tests": total_tests > 0,
+        "test_case_results": test_case_results  # Mapping of test_case_id -> {passed: bool, points: int}
     }
     
     if error_message:

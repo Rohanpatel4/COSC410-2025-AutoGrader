@@ -1,5 +1,5 @@
 # backend/app/api/assignments.py
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func, and_
 from typing import Optional
@@ -418,7 +418,7 @@ def list_attempts_for_assignment(
         .order_by(StudentSubmission.id.asc())
     ).scalars().all()
 
-    return [{"id": s.id, "grade": s.grade} for s in rows]
+    return [{"id": s.id, "earned_points": s.earned_points} for s in rows]
 
 @router.post("/{assignment_id}/submit", status_code=201)
 async def submit_to_assignment(
@@ -488,6 +488,10 @@ async def submit_to_assignment(
     # Execute with Piston using new template system
     result = await execute_code(language, student_code, test_cases_for_execution)
     
+    # Ensure grading structure exists
+    if "grading" not in result:
+        result["grading"] = {}
+    
     # Check for invalid test configuration
     if result["grading"].get("error"):
         raise HTTPException(400, f"Invalid test configuration: {result['grading']['error']}")
@@ -502,28 +506,35 @@ async def submit_to_assignment(
     else:
         grade = 0
     
+    # Get test case results mapping
+    test_case_results = result["grading"].get("test_case_results", {})
+    
     # Create submission record
     submission_record = StudentSubmission(
         student_id=student_id,
         assignment_id=assignment_id,
-        grade=grade
+        earned_points=earned_points,
+        code=student_code,
+        created_at=datetime.now()
     )
     db.add(submission_record)
     db.commit()
     db.refresh(submission_record)
     
-    # Filter visible test cases for student response
-    visible_test_cases = [
-        {
-            "id": tc.id,
-            "point_value": tc.point_value,
-            "test_code": tc.test_code,
-            "visibility": tc.visibility,
-            "order": tc.order
-        }
-        for tc in test_cases
-        if tc.visibility
-    ]
+    # Filter visible test cases for student response and include pass/fail status
+    visible_test_cases = []
+    for tc in test_cases:
+        if tc.visibility:
+            test_result = test_case_results.get(tc.id, {})
+            visible_test_cases.append({
+                "id": tc.id,
+                "point_value": tc.point_value,
+                "test_code": tc.test_code,
+                "visibility": tc.visibility,
+                "order": tc.order,
+                "passed": test_result.get("passed", False),
+                "points_earned": test_result.get("points", 0) if test_result.get("passed", False) else 0
+            })
     
     # Return complete result with filtered test cases for students
     return {
@@ -531,8 +542,51 @@ async def submit_to_assignment(
         "submission_id": submission_record.id,
         "grade": grade,
         "result": result,
-        "test_cases": visible_test_cases  # Only visible test cases for students
+        "test_cases": visible_test_cases  # Only visible test cases for students with pass/fail status
     }
+
+@router.get("/{assignment_id}/submissions/{submission_id}/code", response_model=dict)
+def get_submission_code(
+    assignment_id: int,
+    submission_id: int,
+    user_id: int = Query(..., description="User ID of faculty member"),
+    db: Session = Depends(get_db),
+):
+    """
+    Faculty endpoint to download student submission code.
+    Only faculty members can access this endpoint.
+    """
+    # Verify user is faculty
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(404, "User not found")
+    if user.role != RoleEnum.faculty:
+        raise HTTPException(403, "Only faculty members can access submission code")
+    
+    # Verify assignment exists
+    a = db.get(Assignment, assignment_id)
+    if not a:
+        raise HTTPException(404, "Assignment not found")
+    
+    # Get submission
+    submission = db.get(StudentSubmission, submission_id)
+    if not submission:
+        raise HTTPException(404, "Submission not found")
+    
+    # Verify submission belongs to the assignment
+    if submission.assignment_id != assignment_id:
+        raise HTTPException(404, "Submission not found for this assignment")
+    
+    # Return submission code
+    return {
+        "ok": True,
+        "submission_id": submission.id,
+        "student_id": submission.student_id,
+        "assignment_id": submission.assignment_id,
+        "code": submission.code or "",
+        "created_at": submission.created_at.isoformat() if submission.created_at else None
+    }
+
 @router.get("/{assignment_id}/grades", response_model=dict)
 def grades_for_assignment(assignment_id: int, db: Session = Depends(get_db)):
     """
@@ -567,7 +621,7 @@ def grades_for_assignment(assignment_id: int, db: Session = Depends(get_db)):
         select(
             StudentSubmission.student_id,
             StudentSubmission.id,
-            StudentSubmission.grade
+            StudentSubmission.earned_points
         )
         .where(
             and_(
@@ -581,13 +635,13 @@ def grades_for_assignment(assignment_id: int, db: Session = Depends(get_db)):
     attempts_by_student: dict[int, list[dict]] = defaultdict(list)
     best_by_student: dict[int, int | None] = {}
 
-    for sid, sub_id, grade in att_rows:
-        attempts_by_student[sid].append({"id": sub_id, "grade": grade})
-        if grade is not None:
+    for sid, sub_id, earned_points in att_rows:
+        attempts_by_student[sid].append({"id": sub_id, "earned_points": earned_points})
+        if earned_points is not None:
             if sid not in best_by_student:
-                best_by_student[sid] = grade
+                best_by_student[sid] = earned_points
             else:
-                best_by_student[sid] = max(best_by_student[sid], grade)
+                best_by_student[sid] = max(best_by_student[sid], earned_points)
 
     out_students = []
     for s in students:
@@ -651,7 +705,7 @@ def gradebook_for_course(course_key: str, db: Session = Depends(get_db)):
         select(
             StudentSubmission.student_id,
             StudentSubmission.assignment_id,
-            func.max(StudentSubmission.grade)
+            func.max(StudentSubmission.earned_points)
         )
         .where(
             StudentSubmission.assignment_id.in_(a_ids),
