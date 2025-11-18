@@ -87,3 +87,5 @@ class StudentSubmission(Base):
     time_submitted: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
     student: Mapped["User"] = relationship()
     assignment: Mapped["Assignment"] = relationship()
+
+# Test me 
