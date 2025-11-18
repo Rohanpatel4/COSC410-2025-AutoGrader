@@ -2,6 +2,7 @@
 from typing import Any, Dict, Optional
 import httpx
 import re
+import textwrap
 from pathlib import Path
 from string import Template
 from app.core.settings import settings
@@ -357,8 +358,17 @@ def _generate_python_test_execution(test_cases: list[dict]) -> str:
         points = test_case["point_value"]
         test_code = test_case["test_code"]
         
+        # Dedent the test_code to remove common leading whitespace
+        # Then re-indent it properly within the try block
+        # Ensure test_code is a string and has proper newlines
+        test_code_str = str(test_code) if test_code else ""
+        # Dedent to remove common leading whitespace, then strip
+        dedented_code = textwrap.dedent(test_code_str).strip()
+        # Indent the entire test_code block by 4 spaces (inside try block)
+        indented_code = textwrap.indent(dedented_code, "    ")
+        
         code_parts.append(f"""try:
-    {test_code}
+{indented_code}
     test_results.append({{"id": {test_id}, "passed": True, "points": {points}}})
     print("PASSED: test_case_{test_id}:{points}")
 except Exception as e:
@@ -397,7 +407,7 @@ def _generate_java_test_execution(test_cases: list[dict]) -> str:
             r{test_id}.put("points", {points});
             testResults.add(r{test_id});
             System.out.println("PASSED: test_case_{test_id}:{points}");
-        }} catch (Exception e) {{
+        }} catch (Throwable e) {{
             Map<String, Object> r{test_id} = new HashMap<>();
             r{test_id}.put("id", {test_id});
             r{test_id}.put("passed", false);
@@ -421,7 +431,11 @@ def _generate_cpp_test_execution(test_cases: list[dict]) -> str:
         # This allows try-catch to work
         # Also wrap the test code to catch exceptions
         # Replace assert( with test_assert( in the test code
-        cpp_test_code = test_code.replace("assert(", "test_assert(").replace("assert ", "test_assert ")
+        # Only replace if test_code doesn't already use test_assert
+        if "test_assert" not in test_code:
+            cpp_test_code = test_code.replace("assert(", "test_assert(").replace("assert ", "test_assert ")
+        else:
+            cpp_test_code = test_code
         
         code_parts.append(f"""    {{
         bool test_passed = true;
@@ -512,7 +526,7 @@ async def get_language_version(language: str, version: Optional[str] = None) -> 
     # Map user-facing language names to Piston runtime names
     language_lower = language.lower()
     piston_language = language_lower
-    if piston_language == "gcc":
+    if piston_language == "gcc" or piston_language == "cpp":
         piston_language = "c++"  # Piston uses "c++" for C++ runtimes
     
     try:
