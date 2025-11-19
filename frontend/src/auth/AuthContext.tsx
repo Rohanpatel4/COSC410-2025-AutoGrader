@@ -3,10 +3,10 @@ import { Navigate } from "react-router-dom";
 
 export type Role = "faculty" | "student";
 
-type AuthState = { token: string | null; userId: string | null; role: Role | null };
+type AuthState = { token: string | null; userId: string | null; userEmail: string | null; role: Role | null };
 
 type Ctx = AuthState & {
-  login: (u: { userId: string; role: Role; token?: string | null }) => void;
+  login: (u: { userId: string; role: Role; token?: string | null; userEmail?: string | null }) => void;
   logout: () => void;
 };
 
@@ -25,6 +25,7 @@ export function AuthProvider({
   // initial state (tests can pass role/userId here)
   const [token, setToken] = useState<string | null>(initial?.token ?? null);
   const [userId, setUserId] = useState<string | null>(initial?.userId ?? null);
+  const [userEmail, setUserEmail] = useState<string | null>(initial?.userEmail ?? null);
   const [role, setRole] = useState<Role | null>(initial?.role ?? null);
 
   // hydrate from localStorage (only if not already provided by initial)
@@ -35,16 +36,18 @@ export function AuthProvider({
       if (raw) {
         const parsed = JSON.parse(raw) as Partial<AuthState>;
         setUserId(parsed.userId ?? null);
+        setUserEmail(parsed.userEmail ?? null);
         setRole((parsed.role as Role) ?? null);
         setToken(parsed.token ?? null);
       }
     } catch {
       // ignore
     }
-  }, [initial?.role, initial?.userId, initial?.token]);
+  }, [initial?.role, initial?.userId, initial?.token, initial?.userEmail]);
 
-  const login = ({ userId, role, token = null }: { userId: string; role: Role; token?: string | null }) => {
+  const login = ({ userId, role, token = null, userEmail: email = null }: { userId: string; role: Role; token?: string | null; userEmail?: string | null }) => {
     setUserId(userId);
+    setUserEmail(email);
     setRole(role);
     setToken(token);
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ userId, role, token }));
@@ -52,12 +55,13 @@ export function AuthProvider({
 
   const logout = () => {
     setUserId(null);
+    setUserEmail(null);
     setRole(null);
     setToken(null);
     localStorage.removeItem(STORAGE_KEY);
   };
 
-  const value = useMemo(() => ({ token, userId, role, login, logout }), [token, userId, role]);
+  const value = useMemo(() => ({ token, userId, userEmail, role, login, logout }), [token, userId, userEmail, role]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -79,15 +79,19 @@ export default function LoginPage() {
         role?: string;
         status?: string;
         token?: string | null;
+        username?: string;
+        email?: string;
       }>("/api/v1/login", {
         method: "POST",
         body: JSON.stringify({ username: email, email, password, role }),
       });
 
+      const trimmedEmail = (data.email ?? data.username ?? email.trim()).trim();
       const auth = {
         userId: String(data.userId ?? data.user_id ?? "u1"),
         role: (data.role ?? data.status ?? role) as Role,
         token: data.token ?? null,
+        userEmail: trimmedEmail,
       };
 
       localStorage.setItem("auth", JSON.stringify(auth));

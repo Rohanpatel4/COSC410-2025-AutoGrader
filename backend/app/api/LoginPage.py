@@ -43,5 +43,7 @@ def login(payload: dict, db: Session = Depends(get_db)):
         "role": user.role.value,
         "status": user.role.value,
         "token": None,
+        "username": user.username,
+        "email": user.username,
     }
 

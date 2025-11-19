@@ -30,7 +30,7 @@ const navigationItems = {
 
 export function Navigation() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { role, userId, logout } = useAuth();
+  const { role, userId, userEmail, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -112,7 +112,7 @@ export function Navigation() {
           <div className="flex items-center gap-4">
             <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground">
               <User className="h-4 w-4" />
-              <span className="text-foreground">{userId}</span>
+              <span className="text-foreground">{userEmail ?? userId}</span>
               <span className="capitalize text-muted-foreground">({role})</span>
             </div>
 
