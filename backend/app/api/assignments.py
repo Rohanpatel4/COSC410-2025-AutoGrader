@@ -1,5 +1,5 @@
 # backend/app/api/assignments.py
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func, and_
 from typing import Optional
@@ -169,6 +169,74 @@ def delete_assignment(assignment_id: int, db: Session = Depends(get_db)):
     db.delete(a)
     db.commit()
     return {"ok": True, "id": assignment_id}
+
+@router.put("/{assignment_id}", response_model=dict)
+def update_assignment(assignment_id: int, payload: dict, db: Session = Depends(get_db)):
+    """
+    Update an assignment with partial fields.
+    Only provided fields will be updated; others remain unchanged.
+    Expected payload: { title?, description?, language?, sub_limit?, start?, stop? }
+    """
+    a = db.get(Assignment, assignment_id)
+    if not a:
+        raise HTTPException(404, "Assignment not found")
+    
+    # Update title if provided
+    if "title" in payload:
+        title = (payload.get("title") or "").strip()
+        if not title:
+            raise HTTPException(400, "title cannot be empty")
+        a.title = title
+    
+    # Update description if provided
+    if "description" in payload:
+        description = payload.get("description") or None
+        if description is not None and not isinstance(description, str):
+            raise HTTPException(400, "description must be a string")
+        a.description = description
+    
+    # Update language if provided
+    if "language" in payload:
+        language = (payload.get("language") or "python").strip().lower()
+        if not language:
+            raise HTTPException(400, "language cannot be empty")
+        a.language = language
+    
+    # Update sub_limit if provided
+    if "sub_limit" in payload:
+        sub_limit_raw = payload.get("sub_limit", None)
+        if sub_limit_raw == "" or sub_limit_raw is None:
+            a.sub_limit = None
+        elif isinstance(sub_limit_raw, int):
+            if sub_limit_raw < 0:
+                raise HTTPException(400, "sub_limit must be a non-negative integer")
+            a.sub_limit = sub_limit_raw
+        elif isinstance(sub_limit_raw, str):
+            try:
+                sub_limit = int(sub_limit_raw) if sub_limit_raw.strip() else None
+                if sub_limit is not None and sub_limit < 0:
+                    raise HTTPException(400, "sub_limit must be a non-negative integer")
+                a.sub_limit = sub_limit
+            except ValueError:
+                raise HTTPException(400, "sub_limit must be a valid integer or empty for unlimited")
+        else:
+            a.sub_limit = None
+    
+    # Update start date if provided
+    if "start" in payload:
+        start = _parse_dt(payload.get("start", None))
+        if hasattr(a, "start"):
+            a.start = start
+    
+    # Update stop date if provided
+    if "stop" in payload:
+        stop = _parse_dt(payload.get("stop", None))
+        if hasattr(a, "stop"):
+            a.stop = stop
+    
+    db.commit()
+    db.refresh(a)
+    return _serialize_assignment(db, a)
 
 # ============================================================================
 # Test Case Management Endpoints
@@ -423,13 +491,15 @@ def list_attempts_for_assignment(
 @router.post("/{assignment_id}/submit", status_code=201)
 async def submit_to_assignment(
     assignment_id: int,
-    submission: UploadFile = File(..., description="Student code submission"),
+    submission: Optional[UploadFile] = File(None, description="Student code submission file"),
+    code: Optional[str] = Form(None, description="Student code as text"),
     student_id: int = Form(...),
     db: Session = Depends(get_db),
 ):
     """
     Create a StudentSubmission for this assignment and run it against the
     assignment's test cases.
+    Accepts either a file upload (submission) or text input (code), but at least one must be provided.
     """
     a = db.get(Assignment, assignment_id)
     if not a:
@@ -468,12 +538,41 @@ async def submit_to_assignment(
     if not test_cases:
         raise HTTPException(409, "No test cases attached to this assignment")
 
-    # read student code
-    try:
-        sub_bytes = await submission.read()
-        student_code = sub_bytes.decode("utf-8")
-    except Exception as e:
-        raise HTTPException(400, f"Failed to read submission: {e}")
+    # Read student code from either file or text input
+    student_code = None
+    if submission:
+        # Validate file extension based on assignment language
+        if submission.filename:
+            file_ext = submission.filename.split('.')[-1].lower() if '.' in submission.filename else ''
+            language_ext_map = {
+                "python": ["py"],
+                "java": ["java"],
+                "cpp": ["cpp", "cc", "cxx"],
+                "c++": ["cpp", "cc", "cxx"],
+                "gcc": ["cpp", "cc", "cxx", "c"],
+                "c": ["c"],
+            }
+            valid_extensions = language_ext_map.get(language.lower(), ["py"])  # Default to py
+            if file_ext not in valid_extensions:
+                raise HTTPException(
+                    status_code=415,
+                    detail=f"Invalid file format. Expected: {', '.join(valid_extensions)}, got: {file_ext}"
+                )
+        
+        # Read from file upload
+        try:
+            sub_bytes = await submission.read()
+            student_code = sub_bytes.decode("utf-8")
+        except Exception as e:
+            raise HTTPException(400, f"Failed to read submission file: {e}")
+    elif code is not None:
+        # Use text input directly
+        student_code = code
+    else:
+        raise HTTPException(400, "Either submission file or code text must be provided")
+    
+    if not student_code or not student_code.strip():
+        raise HTTPException(400, "Code cannot be empty")
 
     # Prepare test cases for execution (all test cases, including hidden ones)
     test_cases_for_execution = [
@@ -545,7 +644,7 @@ async def submit_to_assignment(
         "test_cases": visible_test_cases  # Only visible test cases for students with pass/fail status
     }
 
-@router.get("/{assignment_id}/submissions/{submission_id}/code", response_model=dict)
+@router.get("/{assignment_id}/submissions/{submission_id}/code")
 def get_submission_code(
     assignment_id: int,
     submission_id: int,
@@ -553,8 +652,9 @@ def get_submission_code(
     db: Session = Depends(get_db),
 ):
     """
-    Faculty endpoint to download student submission code.
+    Faculty endpoint to download student submission code as a .txt file.
     Only faculty members can access this endpoint.
+    Returns a downloadable text file with the student's code.
     """
     # Verify user is faculty
     user = db.get(User, user_id)
@@ -577,15 +677,17 @@ def get_submission_code(
     if submission.assignment_id != assignment_id:
         raise HTTPException(404, "Submission not found for this assignment")
     
-    # Return submission code
-    return {
-        "ok": True,
-        "submission_id": submission.id,
-        "student_id": submission.student_id,
-        "assignment_id": submission.assignment_id,
-        "code": submission.code or "",
-        "created_at": submission.created_at.isoformat() if submission.created_at else None
-    }
+    # Get code content (empty string if None)
+    code_content = submission.code or ""
+    
+    # Return as downloadable text file
+    return Response(
+        content=code_content,
+        media_type="text/plain",
+        headers={
+            "Content-Disposition": f'attachment; filename="submission_{submission_id}.txt"'
+        }
+    )
 
 @router.get("/{assignment_id}/grades", response_model=dict)
 def grades_for_assignment(assignment_id: int, db: Session = Depends(get_db)):

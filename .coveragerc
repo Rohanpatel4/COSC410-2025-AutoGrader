@@ -1,12 +1,11 @@
 [run]
+source = backend/app
 omit =
-    tests/*
-    test_*
-    debug_combined.py
-    scripts/*
-    */FileConverter.py
+    */tests/*
+    */test_*
+    */debug_combined.py
+    */scripts/*
     **/FileConverter.py
-    app/services/FileConverter.py
 
 [report]
 exclude_lines =
@@ -17,3 +16,4 @@ exclude_lines =
     if __name__ == .__main__.:
     class .*\bProtocol\):
     @(abc\.)?abstractmethod
+

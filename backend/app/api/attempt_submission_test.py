@@ -39,6 +39,11 @@ async def _call_safely(fn, *args, **kwargs):
 
 router = APIRouter(tags=["attempts"])
 
+@router.get("/test-route")
+def test_route_registration():
+    """Test route endpoint for health checks."""
+    return {"message": "Test route works"}
+
 @router.post("/bridge", status_code=status.HTTP_201_CREATED)
 async def attempt_submission_test_bridge(
     submission: UploadFile = File(..., description="Student code submission"),
@@ -51,6 +56,10 @@ async def attempt_submission_test_bridge(
     Direct execution with test cases.
     Test/debug endpoint - defaults to Python for backward compatibility.
     """
+    # Validate file extension (only .py files accepted)
+    if submission.filename and not submission.filename.endswith('.py'):
+        raise HTTPException(status_code=415, detail="Only .py files are accepted")
+    
     # Read student code
     try:
         sub_bytes = await submission.read()
@@ -68,8 +77,11 @@ async def attempt_submission_test_bridge(
     ]
     
     # Execute with Piston using new template system
-    result = await execute_code(language.lower(), student_code, test_cases)
-    return result
+    try:
+        result = await execute_code(language.lower(), student_code, test_cases)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Execution error: {str(e)}")
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -99,5 +111,8 @@ async def attempt_submission_test(
     ]
     
     # Execute with Piston using new template system
-    result = await execute_code(language.lower(), student_code, test_cases)
-    return result
+    try:
+        result = await execute_code(language.lower(), student_code, test_cases)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Execution error: {str(e)}")

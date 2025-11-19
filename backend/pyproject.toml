@@ -19,3 +19,20 @@ dependencies = [
 
 [tool.pytest.ini_options]
 addopts = "-q"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+# Ignore directories that contain non-test files
+norecursedirs = [".git", "__pycache__", "*.egg", "venv", "env", "app"]
+# Only collect tests from tests directory, ignore everything else
+
+[tool.coverage.run]
+# Exclude FileConverter.py from coverage (unused file)
+omit = [
+    "*/FileConverter.py",
+    "*/__pycache__/*",
+    "*/tests/*",
+    "*/venv/*",
+    "*/env/*",
+]
