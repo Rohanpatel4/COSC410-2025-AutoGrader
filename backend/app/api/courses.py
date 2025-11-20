@@ -97,9 +97,11 @@ def get_identity(
 
 
 # ---------- course CRUD / listing ----------
-@router.post("", status_code=status.HTTP_201_CREATED)
+from app.schemas.schemas import AssignmentCreate, CourseCreate, CourseRead
+
+@router.post("", response_model=CourseRead, status_code=status.HTTP_201_CREATED)
 def create_course(
-    payload: dict,  # { course_code, name, description? }
+    payload: CourseCreate,
     ident=Depends(get_identity),
     db: Session = Depends(get_db),
 ):
@@ -148,8 +150,10 @@ def create_course(
         "description": course.description,
     }
 
+from app.schemas.schemas import CourseRead
+from typing import List
 
-@router.get("")
+@router.get("", response_model=dict)
 def list_courses(
     # Back-compat: allow query param filtering if provided
     professor_id: int | None = Query(None, alias="professor_id"),
@@ -194,7 +198,7 @@ def list_courses(
 
 
 # NEW: path-based faculty listing (mirrors students' explicit path style)
-@router.get("/faculty/{faculty_id}", response_model=list[dict])
+@router.get("/faculty/{faculty_id}", response_model=List[CourseRead])
 def faculty_courses(faculty_id: int, db: Session = Depends(get_db)):
     rows = (
         db.execute(
@@ -220,7 +224,7 @@ def faculty_courses(faculty_id: int, db: Session = Depends(get_db)):
     ]
 
 
-@router.get("/{course_key}")
+@router.get("/{course_key}", response_model=CourseRead)
 def get_course(course_key: str, db: Session = Depends(get_db)):
     c = _course_by_key(db, course_key)
     if not c:
@@ -260,10 +264,16 @@ def course_faculty(course_key: str, db: Session = Depends(get_db)):
     ]
 
 
+from app.schemas.schemas import FacultyAddRequest  # You'll need to create this simple schema
+# Or use a simple Pydantic model inline:
+from pydantic import BaseModel
+class FacultyAddRequest(BaseModel):
+    faculty_id: int
+
 @router.post("/{course_key}/faculty", status_code=status.HTTP_201_CREATED)
 def add_co_instructor(
     course_key: str,
-    payload: dict,  # { faculty_id: int }
+    payload: FacultyAddRequest,
     db: Session = Depends(get_db),
 ):
     c = _course_by_key(db, course_key)
@@ -376,7 +386,9 @@ def remove_student_from_course(
 
 
 # ---------- assignments ----------
-@router.get("/{course_key}/assignments", response_model=list[dict])
+from app.schemas.schemas import AssignmentRead
+
+@router.get("/{course_key}/assignments", response_model=List[AssignmentRead])
 def list_assignments_for_course(
     course_key: str,
     student_id: int | None = None,
@@ -408,10 +420,10 @@ def list_assignments_for_course(
     return [_assignment_to_dict(a, attempts) for a in rows]
 
 
-@router.post("/{course_key}/assignments", response_model=dict, status_code=status.HTTP_201_CREATED)
+@router.post("/{course_key}/assignments", response_model=AssignmentRead, status_code=status.HTTP_201_CREATED)
 def create_assignment_for_course(
     course_key: str,
-    payload: dict,
+    payload: AssignmentCreate,
     db: Session = Depends(get_db),
 ):
     """
