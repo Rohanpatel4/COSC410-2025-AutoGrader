@@ -339,24 +339,59 @@ async def install_package(language: str, version: str = "*") -> Dict[str, Any]:
     # Map user-facing language names to Piston language names
     language_lower = language.lower()
     piston_language = language_lower
-    if piston_language == "gcc" or piston_language == "cpp":
-        piston_language = "c++"  # Piston uses "c++" for C++ runtimes
+    # Piston uses "gcc" as the package name for C++ compilation
+    if piston_language == "c++" or piston_language == "cpp":
+        piston_language = "gcc"
+    # If already "gcc", keep it as is
     
     # Piston API v2 package installation endpoint
-    # Format: POST /api/v2/packages/{language}/{version}
-    install_url = f"{piston_url}/api/v2/packages/{piston_language}/{version}"
+    # Format: POST /api/v2/packages with JSON body {"language": "...", "version": "..."}
+    install_url = f"{piston_url}/api/v2/packages"
+    
+    # Get the actual version if "*" is specified
+    if version == "*":
+        # Try to get the version from available packages
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                packages_response = await client.get(f"{piston_url}/api/v2/packages")
+                packages_response.raise_for_status()
+                packages = packages_response.json()
+                matching_packages = [
+                    pkg for pkg in packages
+                    if isinstance(pkg, dict)
+                    and pkg.get("language", "").lower() == piston_language
+                ]
+                if matching_packages:
+                    version = matching_packages[0].get("language_version", "*")
+        except:
+            version = "*"  # Fallback to * if we can't determine version
+    
+    request_body = {"language": piston_language, "version": version}
     
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:  # Longer timeout for installation
-            response = await client.post(install_url)
-            # 200 = success, 201 = created, 400 = already installed or invalid
+            headers = {"Content-Type": "application/json"}
+            response = await client.post(install_url, headers=headers, json=request_body)
+            # 200 = success, 201 = created
             if response.status_code in [200, 201]:
-                return {"success": True, "message": f"Installed {piston_language} {version}"}
+                try:
+                    response_data = response.json()
+                    message = response_data.get("message", f"Installed {piston_language} {version}")
+                    # "Already installed" is also a success
+                    if "already installed" in message.lower():
+                        return {"success": True, "message": f"{piston_language} already installed"}
+                    return {"success": True, "message": message}
+                except:
+                    return {"success": True, "message": f"Installed {piston_language} {version}"}
             elif response.status_code == 400:
                 # Package might already be installed or invalid request
                 try:
                     error_data = response.json()
-                    return {"success": False, "error": error_data.get("message", "Installation failed")}
+                    error_msg = error_data.get("message", "Installation failed")
+                    # Check if it's actually "already installed" (success case)
+                    if "already installed" in error_msg.lower():
+                        return {"success": True, "message": f"{piston_language} already installed"}
+                    return {"success": False, "error": error_msg}
                 except:
                     return {"success": False, "error": response.text or "Installation failed"}
             else:
@@ -414,19 +449,24 @@ async def ensure_languages_installed() -> Dict[str, Any]:
     if not piston_languages:
         return {"error": "No template languages found"}
     
-    # Get currently installed packages (optional - if this fails, we'll still try to install)
+    # Get currently installed packages and available packages
     packages_result = await get_packages()
     installed_languages = set()
+    available_package_languages = set()  # Languages available as packages (even if not installed)
     
     # Handle both list and dict response formats from packages endpoint
     if "error" not in packages_result:
         packages = packages_result if isinstance(packages_result, list) else packages_result.get("packages", [])
         
         for pkg in packages:
-            if isinstance(pkg, dict) and pkg.get("installed", False):
+            if isinstance(pkg, dict):
                 lang = pkg.get("language", "").lower()
                 if lang:
-                    installed_languages.add(lang)
+                    # Track available package languages (even if not installed)
+                    available_package_languages.add(lang)
+                    # Track installed languages
+                    if pkg.get("installed", False):
+                        installed_languages.add(lang)
     else:
         # If packages endpoint fails, log warning but continue
         print(f"[piston] Warning: Could not fetch packages: {packages_result.get('error', 'Unknown error')}. Will attempt installation anyway.", flush=True)
@@ -434,7 +474,7 @@ async def ensure_languages_installed() -> Dict[str, Any]:
     # Also check runtimes endpoint to see what's available
     # This helps identify if a language exists even if package endpoint fails
     runtimes_result = await get_runtimes()
-    available_languages = set()
+    available_runtime_languages = set()
     if "error" not in runtimes_result:
         runtimes = runtimes_result if isinstance(runtimes_result, list) else []
         for rt in runtimes:
@@ -442,12 +482,23 @@ async def ensure_languages_installed() -> Dict[str, Any]:
                 lang = rt.get("language", "").lower()
                 version = rt.get("version", "")
                 if lang and version:
-                    available_languages.add(lang)
+                    available_runtime_languages.add(lang)
+    
+    # Combine both sources - a language is available if it's in either runtimes or packages
+    # Also normalize language names: gcc, cpp, and c++ are all C++
+    available_languages = available_runtime_languages | available_package_languages
+    
+    # Normalize C++ variants: if any variant exists, mark all as available
+    cpp_variants = {"c++", "cpp", "gcc"}
+    has_cpp = any(variant in available_languages for variant in cpp_variants)
+    if has_cpp:
+        available_languages.update(cpp_variants)
     
     results = {}
     # Check each required language and install if missing
     for template_file, piston_lang in template_languages.items():
         piston_lang_lower = piston_lang.lower()
+        original_lang = piston_lang
         
         # Check if already installed
         if piston_lang_lower in installed_languages:
@@ -455,20 +506,47 @@ async def ensure_languages_installed() -> Dict[str, Any]:
             print(f"[piston] ✓ {piston_lang} already installed", flush=True)
             continue
         
-        # Check if language is available (exists in Piston)
+        # Check if language is available (exists in Piston runtimes or packages)
         if available_languages and piston_lang_lower not in available_languages:
-            # Try alternative names (e.g., "cpp" vs "c++")
+            # Try alternative names (e.g., "cpp" vs "c++" vs "gcc")
             if piston_lang_lower == "c++":
                 if "cpp" in available_languages:
                     piston_lang = "cpp"
+                    piston_lang_lower = "cpp"
+                elif "gcc" in available_languages:
+                    piston_lang = "gcc"
+                    piston_lang_lower = "gcc"
             elif piston_lang_lower == "cpp":
                 if "c++" in available_languages:
                     piston_lang = "c++"
+                    piston_lang_lower = "c++"
+                elif "gcc" in available_languages:
+                    piston_lang = "gcc"
+                    piston_lang_lower = "gcc"
+            elif piston_lang_lower == "gcc":
+                if "c++" in available_languages:
+                    piston_lang = "c++"
+                    piston_lang_lower = "c++"
+                elif "cpp" in available_languages:
+                    piston_lang = "cpp"
+                    piston_lang_lower = "cpp"
+        
+        # Check if language exists in runtimes or packages before attempting installation
+        if available_languages and piston_lang_lower not in available_languages:
+            error_msg = f"Language '{original_lang}' is not available in Piston (checked runtimes and packages). Available languages: {', '.join(sorted(available_languages))}"
+            print(f"[piston] ✗ {error_msg}", flush=True)
+            results[original_lang] = {"success": False, "error": error_msg}
+            continue
+        
+        # Map to Piston package name before installation (install_package will do this too, but for logging)
+        install_lang = piston_lang
+        if install_lang.lower() in ["c++", "cpp"]:
+            install_lang = "gcc"
         
         # Attempt installation
-        print(f"[piston] Installing {piston_lang} (from {template_file})...", flush=True)
+        print(f"[piston] Installing {install_lang} (from {template_file}, mapped from {original_lang})...", flush=True)
         install_result = await install_package(piston_lang, "*")  # Install latest version
-        results[piston_lang] = install_result
+        results[original_lang] = install_result
         
         if install_result.get("success"):
             print(f"[piston] ✓ Successfully installed {piston_lang}", flush=True)
@@ -477,7 +555,7 @@ async def ensure_languages_installed() -> Dict[str, Any]:
             # If error mentions already installed, treat as success
             if "already" in error_msg.lower() or "installed" in error_msg.lower():
                 print(f"[piston] ✓ {piston_lang} already installed", flush=True)
-                results[piston_lang] = {"success": True, "message": "Already installed"}
+                results[original_lang] = {"success": True, "message": "Already installed"}
             else:
                 print(f"[piston] ✗ Failed to install {piston_lang}: {error_msg}", flush=True)
     
@@ -704,10 +782,18 @@ async def get_language_version(language: str, version: Optional[str] = None) -> 
     piston_url = settings.PISTON_URL
     
     # Map user-facing language names to Piston runtime names
+    # Note: For packages, Piston uses "gcc" for C++, but for execution it might use "c++"
+    # We'll check both when looking for versions
     language_lower = language.lower()
-    piston_language = language_lower
-    if piston_language == "gcc" or piston_language == "cpp":
-        piston_language = "c++"  # Piston uses "c++" for C++ runtimes
+    
+    # Determine which Piston language names to check
+    if language_lower in ["gcc", "cpp", "c++"]:
+        # For C++, check both "gcc" (packages) and "c++" (runtimes)
+        package_language = "gcc"
+        runtime_language = "c++"
+    else:
+        package_language = language_lower
+        runtime_language = language_lower
     
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -721,7 +807,7 @@ async def get_language_version(language: str, version: Optional[str] = None) -> 
             installed_packages = [
                 pkg for pkg in packages
                 if isinstance(pkg, dict) 
-                and pkg.get("language", "").lower() == piston_language
+                and pkg.get("language", "").lower() == package_language
                 and pkg.get("installed", False)
             ]
             
@@ -735,10 +821,10 @@ async def get_language_version(language: str, version: Optional[str] = None) -> 
             response.raise_for_status()
             runtimes = response.json()
             
-            # Find matching language (using Piston's language name)
+            # Find matching language (using Piston's runtime language name)
             matching_runtimes = [
                 rt for rt in runtimes
-                if isinstance(rt, dict) and rt.get("language", "").lower() == piston_language
+                if isinstance(rt, dict) and rt.get("language", "").lower() == runtime_language
             ]
             
             if not matching_runtimes:

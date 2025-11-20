@@ -57,8 +57,8 @@ class AssignmentCreate(BaseModel):
     title: str
     description: str
     sub_limit: Optional[int] = None
-    start: Optional[datatime] = None 
-    stop: Optional[datatime] = None 
+    start: Optional[datetime] = None 
+    stop: Optional[datetime] = None 
 
 class AssignmentRead(BaseModel):
     id: int
