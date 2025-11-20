@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import select, and_
 from app.core.db import get_db
+from typing import List
 from app.models.models import Course, User, RoleEnum, user_course_association
 # StudentRegistration is DEPRECATED - now using user_course_association for all enrollments
 
