@@ -467,6 +467,13 @@ async def ensure_languages_installed() -> Dict[str, Any]:
                     # Track installed languages
                     if pkg.get("installed", False):
                         installed_languages.add(lang)
+        
+        # Normalize C++ variants in installed_languages too
+        # If any C++ variant (gcc, cpp, c++) is installed, mark all as installed
+        cpp_variants_installed = {"c++", "cpp", "gcc"}
+        installed_cpp = any(variant in installed_languages for variant in cpp_variants_installed)
+        if installed_cpp:
+            installed_languages.update(cpp_variants_installed)
     else:
         # If packages endpoint fails, log warning but continue
         print(f"[piston] Warning: Could not fetch packages: {packages_result.get('error', 'Unknown error')}. Will attempt installation anyway.", flush=True)
