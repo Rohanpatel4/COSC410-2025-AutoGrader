@@ -57,8 +57,8 @@ class AssignmentCreate(BaseModel):
     title: str
     description: str
     sub_limit: Optional[int] = None
-    start: Optional[datetime] = None
-    stop: Optional[datetime] = None
+    start: Optional[datatime] = None 
+    stop: Optional[datatime] = None 
 
 class AssignmentRead(BaseModel):
     id: int
@@ -66,20 +66,31 @@ class AssignmentRead(BaseModel):
     title: str
     description: str
     sub_limit: Optional[int] = None
-    start: Optional[datetime] = None
-    stop: Optional[datetime] = None
+    start: Optional[str] = None             #changed from Optional[datetime] = None
+    stop: Optional[str] = None              #changed from Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
 
 # ---------- TEST CASES ----------
 class TestCaseCreate(BaseModel):
     assignment_id: int
-    filename: str
+    point_value: int  
+    visibility: bool = True  
+    test_code: str  
+    order: Optional[int] = None  
 
 class TestCaseRead(BaseModel):
     id: int
     assignment_id: int
-    filename: str
+    point_value: int
+    visibility: bool
+    test_code: str
+    order: Optional[int] = None
+    created_at: Optional[str] = None  
     model_config = ConfigDict(from_attributes=True)
+
+# Batch create for test cases (matches API endpoint)
+class TestCaseBatchCreate(BaseModel):
+    test_cases: list[TestCaseCreate]
 
 # ---------- STUDENT SUBMISSIONS ----------
 class StudentSubmissionCreate(BaseModel):
@@ -90,7 +101,40 @@ class StudentSubmissionRead(BaseModel):
     id: int
     student_id: int
     assignment_id: int
-    grade: Optional[int] = None
+    earned_points: Optional[int] = None  
+    code: Optional[str] = None  
+    created_at: Optional[str] = None  
     model_config = ConfigDict(from_attributes=True)
 
+class StudentSubmissionAttempt(BaseModel):
+    id: int
+    earned_points: Optional[int] = None
 
+
+# ---------- REGISTRATIONS ----------
+class RegistrationCreate(BaseModel):
+    student_id: int
+    course_id: Optional[int] = None
+    enrollment_key: Optional[str] = None
+    # Note: Either course_id OR enrollment_key should be provided
+
+class RegistrationRead(BaseModel):
+    id: int
+    student_id: int
+    course_id: int
+
+
+# ---------- LOGIN ----------
+class LoginRequest(BaseModel):
+    username: str  # Email address
+    password: str
+    role: RoleEnum
+
+class LoginResponse(BaseModel):
+    user_id: int
+    userId: int  # Duplicate for frontend compatibility
+    role: str
+    status: str  # Duplicate for frontend compatibility
+    token: Optional[str] = None
+    username: Optional[str] = None  # Email/username
+    email: Optional[str] = None  # Email/username (same as username)

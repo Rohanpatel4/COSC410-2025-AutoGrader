@@ -8,6 +8,7 @@ from app.models.models import User, RoleEnum
 
 router = APIRouter()
 
+
 @router.post("/login")
 def login(payload: dict, db: Session = Depends(get_db)):
     # Frontend sends username (email), password, role
