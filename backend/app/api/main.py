@@ -12,7 +12,7 @@ from .registrations import router as registrations_router
 from .assignments import router as assignments_router
 
 # startup hook
-from app.services.piston import get_runtimes
+from app.services.piston import get_runtimes, ensure_languages_installed
 
 # App
 app = FastAPI(title="AutoGrader API", version="1.0.0")
@@ -32,13 +32,24 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def _piston_bootstrap():
+    """Bootstrap Piston: check status and ensure required languages are installed."""
     try:
+        # First, check Piston is accessible
         runtimes = await get_runtimes()
         if "error" in runtimes:
             print(f"[piston] Warning: Could not fetch runtimes: {runtimes['error']}", flush=True)
+            print(f"[piston] Skipping language installation check.", flush=True)
         else:
             languages = set(rt.get("language") for rt in runtimes if isinstance(rt, dict))
             print(f"[piston] Available languages: {', '.join(sorted(languages))}", flush=True)
+            
+            # Ensure template-supported languages are installed
+            print(f"[piston] Ensuring required languages are installed...", flush=True)
+            install_results = await ensure_languages_installed()
+            if "error" in install_results:
+                print(f"[piston] Warning: Could not ensure languages installed: {install_results['error']}", flush=True)
+            else:
+                print(f"[piston] Language installation check complete.", flush=True)
     except Exception as e:
         print(f"[piston] Warning: Could not check Piston status: {e}", flush=True)
 

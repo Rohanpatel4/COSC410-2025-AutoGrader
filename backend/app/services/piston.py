@@ -304,6 +304,186 @@ async def get_runtimes() -> Dict[str, Any]:
         return {"error": str(e)}
 
 
+async def get_packages() -> Dict[str, Any]:
+    """
+    Fetch installed packages from Piston API.
+    
+    Returns:
+        Dictionary with installed packages and their status
+    """
+    piston_url = settings.PISTON_URL
+    packages_url = f"{piston_url}/api/v2/packages"
+    
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(packages_url)
+            response.raise_for_status()
+            return response.json()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+async def install_package(language: str, version: str = "*") -> Dict[str, Any]:
+    """
+    Install a language package in Piston via API.
+    
+    Args:
+        language: The language name (e.g., "python", "java", "c++")
+        version: The version to install, or "*" for latest
+        
+    Returns:
+        Dictionary with installation result
+    """
+    piston_url = settings.PISTON_URL
+    
+    # Map user-facing language names to Piston language names
+    language_lower = language.lower()
+    piston_language = language_lower
+    if piston_language == "gcc" or piston_language == "cpp":
+        piston_language = "c++"  # Piston uses "c++" for C++ runtimes
+    
+    # Piston API v2 package installation endpoint
+    # Format: POST /api/v2/packages/{language}/{version}
+    install_url = f"{piston_url}/api/v2/packages/{piston_language}/{version}"
+    
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:  # Longer timeout for installation
+            response = await client.post(install_url)
+            # 200 = success, 201 = created, 400 = already installed or invalid
+            if response.status_code in [200, 201]:
+                return {"success": True, "message": f"Installed {piston_language} {version}"}
+            elif response.status_code == 400:
+                # Package might already be installed or invalid request
+                try:
+                    error_data = response.json()
+                    return {"success": False, "error": error_data.get("message", "Installation failed")}
+                except:
+                    return {"success": False, "error": response.text or "Installation failed"}
+            else:
+                response.raise_for_status()
+                return {"success": True, "message": response.json()}
+    except httpx.HTTPStatusError as e:
+        return {"success": False, "error": f"HTTP {e.response.status_code}: {e.response.text[:200]}"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def get_template_languages() -> Dict[str, str]:
+    """
+    Detect which languages we have templates for by scanning the templates directory.
+    Maps template filenames to Piston language names.
+    
+    Returns:
+        Dictionary mapping template language names to Piston language names
+        Example: {"python": "python", "java": "java", "cpp": "c++"}
+    """
+    template_dir = Path(__file__).parent / "templates"
+    template_languages = {}
+    
+    # Map of template filename patterns to Piston language names
+    # Format: {template_file_pattern: piston_language_name}
+    language_map = {
+        "python_test.py": "python",
+        "java_test.java": "java",
+        "cpp_test.cpp": "c++",  # Piston uses "c++" not "cpp"
+    }
+    
+    # Scan templates directory for existing template files
+    if template_dir.exists():
+        for template_file in template_dir.iterdir():
+            if template_file.is_file() and not template_file.name.startswith("."):
+                filename = template_file.name
+                if filename in language_map:
+                    template_languages[filename] = language_map[filename]
+    
+    return template_languages
+
+
+async def ensure_languages_installed() -> Dict[str, Any]:
+    """
+    Ensure all template-supported languages are installed in Piston.
+    Checks what's installed and installs missing languages.
+    
+    Returns:
+        Dictionary with installation results for each language
+    """
+    # Get languages we have templates for
+    template_languages = get_template_languages()
+    piston_languages = set(template_languages.values())
+    
+    if not piston_languages:
+        return {"error": "No template languages found"}
+    
+    # Get currently installed packages (optional - if this fails, we'll still try to install)
+    packages_result = await get_packages()
+    installed_languages = set()
+    
+    # Handle both list and dict response formats from packages endpoint
+    if "error" not in packages_result:
+        packages = packages_result if isinstance(packages_result, list) else packages_result.get("packages", [])
+        
+        for pkg in packages:
+            if isinstance(pkg, dict) and pkg.get("installed", False):
+                lang = pkg.get("language", "").lower()
+                if lang:
+                    installed_languages.add(lang)
+    else:
+        # If packages endpoint fails, log warning but continue
+        print(f"[piston] Warning: Could not fetch packages: {packages_result.get('error', 'Unknown error')}. Will attempt installation anyway.", flush=True)
+    
+    # Also check runtimes endpoint to see what's available
+    # This helps identify if a language exists even if package endpoint fails
+    runtimes_result = await get_runtimes()
+    available_languages = set()
+    if "error" not in runtimes_result:
+        runtimes = runtimes_result if isinstance(runtimes_result, list) else []
+        for rt in runtimes:
+            if isinstance(rt, dict):
+                lang = rt.get("language", "").lower()
+                version = rt.get("version", "")
+                if lang and version:
+                    available_languages.add(lang)
+    
+    results = {}
+    # Check each required language and install if missing
+    for template_file, piston_lang in template_languages.items():
+        piston_lang_lower = piston_lang.lower()
+        
+        # Check if already installed
+        if piston_lang_lower in installed_languages:
+            results[piston_lang] = {"success": True, "message": "Already installed"}
+            print(f"[piston] ✓ {piston_lang} already installed", flush=True)
+            continue
+        
+        # Check if language is available (exists in Piston)
+        if available_languages and piston_lang_lower not in available_languages:
+            # Try alternative names (e.g., "cpp" vs "c++")
+            if piston_lang_lower == "c++":
+                if "cpp" in available_languages:
+                    piston_lang = "cpp"
+            elif piston_lang_lower == "cpp":
+                if "c++" in available_languages:
+                    piston_lang = "c++"
+        
+        # Attempt installation
+        print(f"[piston] Installing {piston_lang} (from {template_file})...", flush=True)
+        install_result = await install_package(piston_lang, "*")  # Install latest version
+        results[piston_lang] = install_result
+        
+        if install_result.get("success"):
+            print(f"[piston] ✓ Successfully installed {piston_lang}", flush=True)
+        else:
+            error_msg = install_result.get("error", "Unknown error")
+            # If error mentions already installed, treat as success
+            if "already" in error_msg.lower() or "installed" in error_msg.lower():
+                print(f"[piston] ✓ {piston_lang} already installed", flush=True)
+                results[piston_lang] = {"success": True, "message": "Already installed"}
+            else:
+                print(f"[piston] ✗ Failed to install {piston_lang}: {error_msg}", flush=True)
+    
+    return results
+
+
 # ============================================================================
 # Template System for Language-Agnostic Test Harness Generation
 # ============================================================================
