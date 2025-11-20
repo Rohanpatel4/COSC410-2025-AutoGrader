@@ -16,8 +16,10 @@ def _course_by_input(db: Session, *, course_id: int | None, enrollment_key: str 
         return db.execute(select(Course).where(Course.enrollment_key == enrollment_key)).scalar_one_or_none()
     return None
 
-@router.post("/registrations", response_model=dict, status_code=201)
-def register(payload: dict, db: Session = Depends(get_db)):
+from app.schemas.schemas import RegistrationCreate, RegistrationRead
+
+@router.post("/registrations", response_model=RegistrationRead, status_code=201)
+def register(payload: RegistrationCreate, db: Session = Depends(get_db)):
     student_id = payload.get("student_id")
     course_id = payload.get("course_id")
     enrollment_key = payload.get("enrollment_key")
@@ -58,7 +60,9 @@ def register(payload: dict, db: Session = Depends(get_db)):
     inserted_id = result.lastrowid
     return {"id": inserted_id, "student_id": student_id, "course_id": course.id}
 
-@router.get("/students/{student_id}/courses", response_model=list[dict])
+from app.schemas.schemas import CourseRead
+
+@router.get("/students/{student_id}/courses", response_model=List[CourseRead])
 def student_courses(student_id: int, db: Session = Depends(get_db)):
     # Query courses from user_course_association
     courses = db.execute(
