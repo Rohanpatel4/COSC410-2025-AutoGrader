@@ -20,6 +20,10 @@ class RoleEnum(str, Enum):
     faculty = "faculty"
     admin = "admin"
 
+class DeleteResponse(BaseModel):
+    ok: bool
+    id: int
+
 # ---------- USERS ----------
 class UserCreate(BaseModel):
     username: str
@@ -56,6 +60,7 @@ class AssignmentCreate(BaseModel):
     course_id: int
     title: str
     description: str
+    language: str
     sub_limit: Optional[int] = None
     start: Optional[datatime] = None 
     stop: Optional[datatime] = None 
@@ -65,10 +70,27 @@ class AssignmentRead(BaseModel):
     course_id: int
     title: str
     description: str
+    language: Optional[str] = None
     sub_limit: Optional[int] = None
-    start: Optional[str] = None             #changed from Optional[datetime] = None
-    stop: Optional[str] = None              #changed from Optional[datetime] = None
+    start: Optional[str] = None
+    stop: Optional[str] = None
+    num_attempts: int
     model_config = ConfigDict(from_attributes=True)
+
+class AssignmentUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    language: Optional[str] = None
+    sub_limit: Optional[int] = None
+    start: Optional[str] = None
+    stop: Optional[str] = None
+
+class AssignmentSubmissionResponse(BaseModel):
+    ok: bool
+    submission_id: int
+    grade: float
+    result: dict
+    test_cases: list[dict]
 
 # ---------- TEST CASES ----------
 class TestCaseCreate(BaseModel):
@@ -91,6 +113,12 @@ class TestCaseRead(BaseModel):
 # Batch create for test cases (matches API endpoint)
 class TestCaseBatchCreate(BaseModel):
     test_cases: list[TestCaseCreate]
+
+class TestCaseUpdate(BaseModel):
+    point_value: Optional[int] = None
+    visibility: Optional[bool] = None
+    test_code: Optional[str] = None
+    order: Optional[int] = None
 
 # ---------- STUDENT SUBMISSIONS ----------
 class StudentSubmissionCreate(BaseModel):
@@ -138,3 +166,15 @@ class LoginResponse(BaseModel):
     token: Optional[str] = None
     username: Optional[str] = None  # Email/username
     email: Optional[str] = None  # Email/username (same as username)
+
+
+
+# ---------- GRADEBOOK ----------
+class GradesResponse(BaseModel):
+    assignment: dict
+    students: list[dict]
+
+class GradebookResponse(BaseModel):
+    course: dict
+    assignments: list[dict]
+    students: list[dict]

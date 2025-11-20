@@ -5,6 +5,7 @@ from sqlalchemy import select, func, and_
 from typing import Optional
 from datetime import datetime
 from collections import defaultdict
+from pydantic import BaseModel
 
 from app.core.db import get_db
 from app.models.models import (
@@ -12,6 +13,12 @@ from app.models.models import (
     User, RoleEnum, user_course_association
 )
 from app.services.piston import execute_code
+from app.schemas.schemas import (
+    AssignmentCreate, AssignmentRead, AssignmentUpdate,
+    TestCaseCreate, TestCaseRead, TestCaseUpdate, TestCaseBatchCreate,
+    StudentSubmissionAttempt, StudentSubmissionRead,
+    DeleteResponse, GradesResponse, GradebookResponse, AssignmentSubmissionResponse
+)
 
 router = APIRouter()
 
@@ -80,12 +87,12 @@ def _parse_dt(v):
 
 # ---- list endpoints --------------------------------------------------------
 
-@router.get("", response_model=list[dict])
+@router.get("", response_model=list[AssignmentRead])
 def list_assignments(db: Session = Depends(get_db)):
     rows = db.execute(select(Assignment)).scalars().all()
     return [_serialize_assignment(db, a) for a in rows]
 
-@router.get("/by-course/{course_key}", response_model=list[dict])
+@router.get("/by-course/{course_key}", response_model=list[AssignmentRead])
 def list_assignments_for_course(course_key: str, db: Session = Depends(get_db)):
     c = _course_by_key(db, course_key)
     if not c:
@@ -95,7 +102,7 @@ def list_assignments_for_course(course_key: str, db: Session = Depends(get_db)):
 
 # ---- get one ---------------------------------------------------------------
 
-@router.get("/{assignment_id}", response_model=dict)
+@router.get("/{assignment_id}", response_model=AssignmentRead)
 def get_one_assignment(assignment_id: int, db: Session = Depends(get_db)):
     a = db.get(Assignment, assignment_id)
     if not a:
@@ -104,19 +111,22 @@ def get_one_assignment(assignment_id: int, db: Session = Depends(get_db)):
 
 # ---- create / delete -------------------------------------------------------
 
-@router.post("", response_model=dict, status_code=201)
-def create_assignment(payload: dict, db: Session = Depends(get_db)):
+@router.post("", response_model=AssignmentRead, status_code=201)
+def create_assignment(payload: AssignmentCreate, db: Session = Depends(get_db)):
     """
     Create an assignment.
-    Expected payload: { course_id, title, description?, language?, sub_limit?, start?, stop? }
+    Expected payload: { course_id, title, description, language?, sub_limit?, start?, stop? }
     """
-    course_id = payload.get("course_id")
-    title = (payload.get("title") or "").strip()
-    description = payload.get("description") or None
-    language = (payload.get("language") or "python").strip().lower()
+    course_id = payload.course_id
+    title = (payload.title or "").strip()
+    description = payload.description or None
+    language_raw = payload.get("language")
+    if not language_raw:
+        raise HTTPException(400, "language is required and must be specified (e.g., 'python', 'java', 'cpp', etc.)")
+    language = language_raw.strip().lower()
 
     # Handle sub_limit: empty string or None means unlimited (None)
-    sub_limit_raw = payload.get("sub_limit", None)
+    sub_limit_raw = payload.sub_limit
     if sub_limit_raw == "" or sub_limit_raw is None:
         sub_limit = None
     elif isinstance(sub_limit_raw, int):
@@ -129,8 +139,8 @@ def create_assignment(payload: dict, db: Session = Depends(get_db)):
     else:
         sub_limit = None
 
-    start = _parse_dt(payload.get("start", None))
-    stop = _parse_dt(payload.get("stop", None))
+    start = _parse_dt(payload.start) if hasattr(payload, "start") else None
+    stop = _parse_dt(payload.stop) if hasattr(payload, "stop") else None
 
     if not isinstance(course_id, int):
         raise HTTPException(400, "course_id must be an integer")
@@ -161,7 +171,7 @@ def create_assignment(payload: dict, db: Session = Depends(get_db)):
     db.refresh(a)
     return _serialize_assignment(db, a)
 
-@router.delete("/{assignment_id}", response_model=dict)
+@router.delete("/{assignment_id}", response_model=DeleteResponse)
 def delete_assignment(assignment_id: int, db: Session = Depends(get_db)):
     a = db.get(Assignment, assignment_id)
     if not a:
@@ -170,8 +180,8 @@ def delete_assignment(assignment_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"ok": True, "id": assignment_id}
 
-@router.put("/{assignment_id}", response_model=dict)
-def update_assignment(assignment_id: int, payload: dict, db: Session = Depends(get_db)):
+@router.put("/{assignment_id}", response_model=AssignmentRead)
+def update_assignment(assignment_id: int, payload: AssignmentUpdate, db: Session = Depends(get_db)):
     """
     Update an assignment with partial fields.
     Only provided fields will be updated; others remain unchanged.
@@ -182,29 +192,29 @@ def update_assignment(assignment_id: int, payload: dict, db: Session = Depends(g
         raise HTTPException(404, "Assignment not found")
     
     # Update title if provided
-    if "title" in payload:
-        title = (payload.get("title") or "").strip()
+    if payload.title is not None:
+        title = (payload.title or "").strip()
         if not title:
             raise HTTPException(400, "title cannot be empty")
         a.title = title
     
     # Update description if provided
-    if "description" in payload:
-        description = payload.get("description") or None
+    if payload.description is not None:
+        description = payload.description or None
         if description is not None and not isinstance(description, str):
             raise HTTPException(400, "description must be a string")
         a.description = description
     
     # Update language if provided
-    if "language" in payload:
+    if hasattr(payload, "language") and payload.language is not None:
         language = (payload.get("language") or "python").strip().lower()
         if not language:
             raise HTTPException(400, "language cannot be empty")
         a.language = language
     
     # Update sub_limit if provided
-    if "sub_limit" in payload:
-        sub_limit_raw = payload.get("sub_limit", None)
+    if payload.sub_limit is not None:
+        sub_limit_raw = payload.sub_limit
         if sub_limit_raw == "" or sub_limit_raw is None:
             a.sub_limit = None
         elif isinstance(sub_limit_raw, int):
@@ -223,14 +233,14 @@ def update_assignment(assignment_id: int, payload: dict, db: Session = Depends(g
             a.sub_limit = None
     
     # Update start date if provided
-    if "start" in payload:
-        start = _parse_dt(payload.get("start", None))
+    if hasattr(payload, "start") and payload.start is not None:
+        start = _parse_dt(payload.start)
         if hasattr(a, "start"):
             a.start = start
     
     # Update stop date if provided
-    if "stop" in payload:
-        stop = _parse_dt(payload.get("stop", None))
+    if hasattr(payload, "stop") and payload.stop is not None:
+        stop = _parse_dt(payload.stop)
         if hasattr(a, "stop"):
             a.stop = stop
     
@@ -242,10 +252,10 @@ def update_assignment(assignment_id: int, payload: dict, db: Session = Depends(g
 # Test Case Management Endpoints
 # ============================================================================
 
-@router.post("/{assignment_id}/test-cases/batch", status_code=201)
+@router.post("/{assignment_id}/test-cases/batch", status_code=201, response_model=dict)
 async def create_test_cases_batch(
     assignment_id: int,
-    payload: dict,
+    payload: TestCaseBatchCreate,
     db: Session = Depends(get_db),
 ):
     """
@@ -261,19 +271,19 @@ async def create_test_cases_batch(
     if not language:
         raise HTTPException(400, "Assignment language must be set before creating test cases")
     
-    test_cases_data = payload.get("test_cases", [])
+    test_cases_data = payload.test_cases
     if not test_cases_data:
         raise HTTPException(400, "test_cases array is required")
     
     # Validate test cases
     for i, test_case in enumerate(test_cases_data):
-        if "point_value" not in test_case:
+        if not hasattr(test_case, "point_value") or test_case.point_value is None:
             raise HTTPException(400, f"Test case {i}: point_value is required")
-        if "test_code" not in test_case:
+        if not hasattr(test_case, "test_code") or not test_case.test_code:
             raise HTTPException(400, f"Test case {i}: test_code is required")
-        if not isinstance(test_case["point_value"], int) or test_case["point_value"] < 0:
+        if not isinstance(test_case.point_value, int) or test_case.point_value < 0:
             raise HTTPException(400, f"Test case {i}: point_value must be a non-negative integer")
-        if not test_case["test_code"].strip():
+        if not test_case.test_code.strip():
             raise HTTPException(400, f"Test case {i}: test_code cannot be empty")
     
     # Delete existing test cases for this assignment (replace all)
@@ -289,10 +299,10 @@ async def create_test_cases_batch(
     for test_case_data in test_cases_data:
         tc = TestCase(
             assignment_id=assignment_id,
-            point_value=test_case_data["point_value"],
-            visibility=test_case_data.get("visibility", True),
-            test_code=test_case_data["test_code"],
-            order=test_case_data.get("order")
+            point_value=test_case_data.point_value,
+            visibility=test_case_data.visibility if hasattr(test_case_data, "visibility") else True,
+            test_code=test_case_data.test_code,
+            order=test_case_data.order if hasattr(test_case_data, "order") else None
         )
         db.add(tc)
         created_test_cases.append(tc)
@@ -323,7 +333,7 @@ async def create_test_cases_batch(
     }
 
 
-@router.get("/{assignment_id}/test-cases", response_model=list[dict])
+@router.get("/{assignment_id}/test-cases", response_model=list[TestCaseRead])
 def list_test_cases(
     assignment_id: int,
     student_id: Optional[int] = None,
@@ -372,7 +382,7 @@ def list_test_cases(
     ]
 
 
-@router.get("/{assignment_id}/test-cases/{test_case_id}", response_model=dict)
+@router.get("/{assignment_id}/test-cases/{test_case_id}", response_model=TestCaseRead)
 def get_test_case(
     assignment_id: int,
     test_case_id: int,
@@ -396,11 +406,11 @@ def get_test_case(
     }
 
 
-@router.put("/{assignment_id}/test-cases/{test_case_id}", response_model=dict)
+@router.put("/{assignment_id}/test-cases/{test_case_id}", response_model=TestCaseRead)
 def update_test_case(
     assignment_id: int,
     test_case_id: int,
-    payload: dict,
+    payload: TestCaseUpdate,
     db: Session = Depends(get_db),
 ):
     """Update a test case."""
@@ -411,21 +421,21 @@ def update_test_case(
         raise HTTPException(404, "Test case not found for this assignment")
     
     # Update fields if provided
-    if "point_value" in payload:
-        if not isinstance(payload["point_value"], int) or payload["point_value"] < 0:
+    if payload.point_value is not None:
+        if not isinstance(payload.point_value, int) or payload.point_value < 0:
             raise HTTPException(400, "point_value must be a non-negative integer")
-        tc.point_value = payload["point_value"]
+        tc.point_value = payload.point_value
     
-    if "visibility" in payload:
-        tc.visibility = bool(payload["visibility"])
+    if payload.visibility is not None:
+        tc.visibility = bool(payload.visibility)
     
-    if "test_code" in payload:
-        if not payload["test_code"].strip():
+    if payload.test_code is not None:
+        if not payload.test_code.strip():
             raise HTTPException(400, "test_code cannot be empty")
-        tc.test_code = payload["test_code"]
+        tc.test_code = payload.test_code
     
-    if "order" in payload:
-        tc.order = payload["order"] if payload["order"] is not None else None
+    if payload.order is not None:
+        tc.order = payload.order
     
     db.commit()
     db.refresh(tc)
@@ -441,7 +451,7 @@ def update_test_case(
     }
 
 
-@router.delete("/{assignment_id}/test-cases/{test_case_id}", response_model=dict)
+@router.delete("/{assignment_id}/test-cases/{test_case_id}", response_model=DeleteResponse)
 def delete_test_case(
     assignment_id: int,
     test_case_id: int,
@@ -463,7 +473,7 @@ def delete_test_case(
     }
 
 
-@router.get("/{assignment_id}/attempts", response_model=list[dict])
+@router.get("/{assignment_id}/attempts", response_model=list[StudentSubmissionAttempt])
 def list_attempts_for_assignment(
     assignment_id: int,
     student_id: int,
@@ -488,7 +498,7 @@ def list_attempts_for_assignment(
 
     return [{"id": s.id, "earned_points": s.earned_points} for s in rows]
 
-@router.post("/{assignment_id}/submit", status_code=201)
+@router.post("/{assignment_id}/submit", status_code=201, response_model=AssignmentSubmissionResponse)
 async def submit_to_assignment(
     assignment_id: int,
     submission: Optional[UploadFile] = File(None, description="Student code submission file"),
@@ -689,10 +699,10 @@ def get_submission_code(
         }
     )
 
-@router.get("/{assignment_id}/grades", response_model=dict)
+@router.get("/{assignment_id}/grades", response_model=GradesResponse)
 def grades_for_assignment(assignment_id: int, db: Session = Depends(get_db)):
     """
-    Faculty view: all students registered in this assignment’s course,
+    Faculty view: all students registered in this assignment's course,
     their attempts for this assignment (id, grade), and their best grade.
     """
     a = db.get(Assignment, assignment_id)
@@ -762,7 +772,7 @@ def grades_for_assignment(assignment_id: int, db: Session = Depends(get_db)):
         "students": out_students,
     }
 
-@router.get("/gradebook/by-course/{course_key}", response_model=dict)
+@router.get("/gradebook/by-course/{course_key}", response_model=GradebookResponse)
 def gradebook_for_course(course_key: str, db: Session = Depends(get_db)):
     """
     Return a full grade matrix for a course:
