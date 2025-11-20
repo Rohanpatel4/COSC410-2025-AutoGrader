@@ -105,9 +105,9 @@ def create_course(
     ident=Depends(get_identity),
     db: Session = Depends(get_db),
 ):
-    course_code = (payload.get("course_code") or "").strip()
-    name = (payload.get("name") or "").strip()
-    description = payload.get("description") or ""
+    course_code = (payload.course_code or "").strip()
+    name = (payload.name or "").strip()
+    description = payload.description or ""
 
     if not course_code or not name:
         raise HTTPException(400, "course_code and name are required")
@@ -280,7 +280,7 @@ def add_co_instructor(
     if not c:
         raise HTTPException(404, "Course not found")
 
-    faculty_id = payload.get("faculty_id")
+    faculty_id = payload.faculty_id
     if not isinstance(faculty_id, int):
         raise HTTPException(400, "faculty_id must be an integer")
 
@@ -434,17 +434,17 @@ def create_assignment_for_course(
     if not c:
         raise HTTPException(404, "Course not found")
 
-    title = (payload.get("title") or "").strip()
+    title = (payload.title or "").strip()
     if not title:
         raise HTTPException(400, "title is required")
 
-    description = (payload.get("description") or "") or None
-    language = (payload.get("language") or "python").strip().lower()
+    description = payload.description or None
+    language = (payload.language or "").strip().lower()
     if not language:
         raise HTTPException(400, "language is required")
 
     # Handle sub_limit: empty string or None means unlimited (None)
-    sub_limit_raw = payload.get("sub_limit", None)
+    sub_limit_raw = payload.sub_limit
     if sub_limit_raw == "" or sub_limit_raw is None:
         sub_limit = None
     elif isinstance(sub_limit_raw, int):
@@ -457,8 +457,8 @@ def create_assignment_for_course(
     else:
         sub_limit = None
 
-    start = _parse_dt(payload.get("start"))
-    stop = _parse_dt(payload.get("stop"))
+    start = _parse_dt(payload.start) if payload.start else None
+    stop = _parse_dt(payload.stop) if payload.stop else None
 
     a = Assignment(
         course_id=c.id,

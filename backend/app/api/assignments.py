@@ -120,7 +120,7 @@ def create_assignment(payload: AssignmentCreate, db: Session = Depends(get_db)):
     course_id = payload.course_id
     title = (payload.title or "").strip()
     description = payload.description or None
-    language_raw = payload.get("language")
+    language_raw = payload.language
     if not language_raw:
         raise HTTPException(400, "language is required and must be specified (e.g., 'python', 'java', 'cpp', etc.)")
     language = language_raw.strip().lower()
@@ -207,7 +207,7 @@ def update_assignment(assignment_id: int, payload: AssignmentUpdate, db: Session
     
     # Update language if provided
     if hasattr(payload, "language") and payload.language is not None:
-        language = (payload.get("language") or "python").strip().lower()
+        language = (payload.language or "python").strip().lower()
         if not language:
             raise HTTPException(400, "language cannot be empty")
         a.language = language

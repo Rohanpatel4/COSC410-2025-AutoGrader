@@ -21,9 +21,9 @@ from app.schemas.schemas import RegistrationCreate, RegistrationRead
 
 @router.post("/registrations", response_model=RegistrationRead, status_code=201)
 def register(payload: RegistrationCreate, db: Session = Depends(get_db)):
-    student_id = payload.get("student_id")
-    course_id = payload.get("course_id")
-    enrollment_key = payload.get("enrollment_key")
+    student_id = payload.student_id
+    course_id = payload.course_id if hasattr(payload, "course_id") else None
+    enrollment_key = payload.enrollment_key if hasattr(payload, "enrollment_key") else None
 
     if not isinstance(student_id, int):
         raise HTTPException(400, "student_id must be an integer")
