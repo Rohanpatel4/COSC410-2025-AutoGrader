@@ -264,7 +264,7 @@ def course_faculty(course_key: str, db: Session = Depends(get_db)):
     ]
 
 
-from app.schemas.schemas import FacultyAddRequest  # You'll need to create this simple schema
+#from app.schemas.schemas import FacultyAddRequest  # You'll need to create this simple schema
 # Or use a simple Pydantic model inline:
 from pydantic import BaseModel
 class FacultyAddRequest(BaseModel):
