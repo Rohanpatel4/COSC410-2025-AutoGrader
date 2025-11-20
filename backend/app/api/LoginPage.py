@@ -9,12 +9,14 @@ from app.models.models import User, RoleEnum
 router = APIRouter()
 
 
-@router.post("/login")
-def login(payload: dict, db: Session = Depends(get_db)):
-    # Frontend sends username (email), password, role
-    username = (payload.get("username") or payload.get("email") or "").strip()
-    password = payload.get("password") or ""
-    role_in  = (payload.get("role") or "").strip()
+from app.schemas.schemas import LoginRequest, LoginResponse
+
+@router.post("/login", response_model=LoginResponse)
+def login(payload: LoginRequest, db: Session = Depends(get_db)):
+    # Access payload.username, payload.password, payload.role directly
+    username = payload.username.strip()
+    password = payload.password
+    role_in = payload.role.value  # Already validated as RoleEnum
 
     if not username or not password or not role_in:
         raise HTTPException(400, "username, password, and role are required")
