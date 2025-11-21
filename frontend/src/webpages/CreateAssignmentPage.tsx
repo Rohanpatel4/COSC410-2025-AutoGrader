@@ -2,8 +2,21 @@ import React from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { fetchJson, BASE } from "../api/client";
+
+// Safe join function for URLs
+function join(base: string, path: string) {
+  if (!base) return path;
+  return base.replace(/\/+$/, "") + path;
+}
 import { Button, Input, Label, Card, Alert } from "../components/ui";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, GripVertical } from "lucide-react";
+
+type TestCase = {
+  id: number;
+  code: string;
+  visible: boolean;
+  points: number;
+};
 
 export default function CreateAssignmentPage() {
   const { course_id = "" } = useParams<{ course_id: string }>();
@@ -12,10 +25,14 @@ export default function CreateAssignmentPage() {
 
   const [title, setTitle] = React.useState("");
   const [description, setDescription] = React.useState("");
+  const [language, setLanguage] = React.useState("python");
   const [subLimit, setSubLimit] = React.useState<string>("");
   const [start, setStart] = React.useState<string>("");
   const [stop, setStop] = React.useState<string>("");
   const [testFile, setTestFile] = React.useState<File | null>(null);
+  const [testCases, setTestCases] = React.useState<TestCase[]>([
+    { id: 1, code: "", visible: true, points: 10 }
+  ]);
   const [msg, setMsg] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
 
@@ -33,6 +50,7 @@ export default function CreateAssignmentPage() {
       const payload: any = {
         title: title.trim(),
         description: description.trim() || null,
+        language: language,
       };
       const limitNum = subLimit.trim() ? Number(subLimit.trim()) : null;
       if (limitNum != null && Number.isFinite(limitNum)) payload.sub_limit = limitNum;
@@ -50,10 +68,37 @@ export default function CreateAssignmentPage() {
       if (testFile) {
         const fd = new FormData();
         fd.append("file", testFile);
-        await fetch(`${BASE}/api/v1/assignments/${created.id}/test-file`, {
+        const res = await fetch(join(BASE, `/api/v1/assignments/${created.id}/test-file`), {
           method: "POST",
           body: fd,
         });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(text || res.statusText);
+        }
+      }
+
+      // Create test cases from the UI
+      if (testCases.length > 0 && testCases.some(tc => tc.code.trim())) {
+        const testCasesPayload = {
+          test_cases: testCases
+            .filter(tc => tc.code.trim()) // Only include non-empty test cases
+            .map((tc, index) => ({
+              test_code: tc.code.trim(),
+              point_value: tc.points,
+              visibility: tc.visible,
+              order: index + 1
+            }))
+        };
+
+        await fetchJson(
+          `/api/v1/assignments/${created.id}/test-cases/batch`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(testCasesPayload),
+          }
+        );
       }
 
       setMsg("Assignment created successfully!");
@@ -65,6 +110,30 @@ export default function CreateAssignmentPage() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function addTestCase() {
+    const newId = Math.max(...testCases.map(tc => tc.id)) + 1;
+    setTestCases([...testCases, { id: newId, code: "", visible: true, points: 10 }]);
+  }
+
+  function updateTestCase(id: number, field: keyof TestCase, value: string | boolean | number) {
+    setTestCases(testCases.map(tc =>
+      tc.id === id ? { ...tc, [field]: value } : tc
+    ));
+  }
+
+  function deleteTestCase(id: number) {
+    if (testCases.length > 1) {
+      setTestCases(testCases.filter(tc => tc.id !== id));
+    }
+  }
+
+  function moveTestCase(fromIndex: number, toIndex: number) {
+    const newTestCases = [...testCases];
+    const [movedItem] = newTestCases.splice(fromIndex, 1);
+    newTestCases.splice(toIndex, 0, movedItem);
+    setTestCases(newTestCases);
   }
 
   return (
@@ -139,6 +208,47 @@ export default function CreateAssignmentPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
+              <Label htmlFor="language">
+                Language <span className="text-red-500">*</span>
+              </Label>
+              <select
+                id="language"
+                value={language}
+                onChange={(e) => setLanguage(e.target.value)}
+                disabled={submitting}
+                className="flex h-10 w-full rounded-xl border border-border bg-background px-4 py-2.5 text-foreground shadow-sm transition-all duration-200 focus:border-primary focus:ring-4 focus:ring-ring/25 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <option value="python">Python</option>
+                <option value="java">Java</option>
+                <option value="cpp">C++</option>
+                <option value="javascript">JavaScript</option>
+              </select>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Programming language for this assignment
+              </p>
+            </div>
+
+            <div>
+              <Label htmlFor="subLimit">
+                Submission Limit <span className="text-muted-foreground">(optional)</span>
+              </Label>
+              <Input
+                id="subLimit"
+                type="number"
+                min="1"
+                placeholder="e.g., 3"
+                value={subLimit}
+                onChange={(e) => setSubLimit(e.target.value)}
+                disabled={submitting}
+              />
+              <p className="mt-2 text-xs text-muted-foreground">
+                Maximum submissions per student (blank = unlimited)
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
               <Label htmlFor="start">
                 Start Date <span className="text-muted-foreground">(optional)</span>
               </Label>
@@ -164,31 +274,7 @@ export default function CreateAssignmentPage() {
             </div>
           </div>
 
-          <div>
-            <Label htmlFor="testFile">
-              Test File <span className="text-muted-foreground">(optional, can be added later)</span>
-            </Label>
-            <input
-              id="testFile"
-              type="file"
-              accept=".py,application/x-python,text/x-python"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file && !file.name.endsWith('.py')) {
-                  alert('Only Python (.py) files are allowed');
-                  e.target.value = '';
-                  setTestFile(null);
-                } else {
-                  setTestFile(file ?? null);
-                }
-              }}
-              className="block mt-1.5 text-sm text-foreground file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary file:text-primary-foreground hover:file:opacity-90 cursor-pointer"
-              disabled={submitting}
-            />
-            <p className="mt-2 text-xs text-muted-foreground">
-              Only Python (.py) files are accepted. Must include @points decorators (see format guide below)
-            </p>
-          </div>
+
 
           <div className="flex gap-3">
             <Button
@@ -210,32 +296,94 @@ export default function CreateAssignmentPage() {
         </form>
       </Card>
 
-      {/* Sample Test File Instructions */}
-      <Card className="bg-card border-border">
+      {/* Add Test Cases Section */}
+      <Card className="bg-card border-border mt-6">
         <div className="space-y-4">
           <div>
-            <h2 className="text-xl font-semibold text-foreground mb-2">Test File Format Guide</h2>
+            <h2 className="text-xl font-semibold text-foreground mb-2">Add Test Cases</h2>
             <p className="text-muted-foreground text-sm">
-              Test files must be Python (.py) files. Use the <code className="px-1.5 py-0.5 bg-muted rounded text-sm">@points(value)</code> decorator to assign point values to each test function.
+              Add individual test cases that will be used to grade student submissions.
             </p>
           </div>
 
-          <div className="space-y-2">
-            <h3 className="text-sm font-semibold text-foreground">Example Test File:</h3>
-            <div className="bg-background border border-border rounded-lg p-4 overflow-x-auto">
-              <pre className="text-sm text-foreground font-mono">
-{`@points(7)
-def test_add_positive():
-    assert add(5, 3) == 8`}
-              </pre>
-            </div>
+          <div className="space-y-6">
+            {testCases.map((testCase, index) => (
+              <div
+                key={testCase.id}
+                className="space-y-2"
+                draggable
+                onDragStart={(e) => e.dataTransfer.setData('text/plain', index.toString())}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const fromIndex = parseInt(e.dataTransfer.getData('text/plain'));
+                  moveTestCase(fromIndex, index);
+                }}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="cursor-move text-muted-foreground hover:text-foreground">
+                    <GripVertical className="w-4 h-4" />
+                  </div>
+                  <Label className="text-sm font-medium text-foreground">
+                    Test Case {index + 1}:
+                  </Label>
+                  <div className="flex items-center gap-4 ml-auto">
+                    <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={testCase.visible}
+                        onChange={(e) => updateTestCase(testCase.id, 'visible', e.target.checked)}
+                        className="w-4 h-4 text-primary border-border rounded focus:ring-primary/25"
+                      />
+                      visible
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <Label className="text-sm text-muted-foreground">points:</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={testCase.points}
+                        onChange={(e) => updateTestCase(testCase.id, 'points', parseInt(e.target.value) || 0)}
+                        className="w-2 h-8 text-xs px-1"
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => deleteTestCase(testCase.id)}
+                      disabled={testCases.length <= 1}
+                      className="text-muted-foreground hover:text-destructive p-1"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+                <textarea
+                  placeholder="Enter your test case code here..."
+                  value={testCase.code}
+                  onChange={(e) => updateTestCase(testCase.id, 'code', e.target.value)}
+                  className="w-full h-32 font-mono text-sm resize-vertical rounded-xl border border-border bg-background px-4 py-2.5 text-foreground shadow-sm placeholder:text-muted-foreground transition-all duration-200 focus:border-primary focus:ring-4 focus:ring-ring/25 focus:outline-none"
+                  style={{
+                    fontFamily: "'JetBrains Mono', 'Monaco', 'Menlo', 'Ubuntu Mono', monospace",
+                    lineHeight: '1.5',
+                    tabSize: '4'
+                  }}
+                />
+              </div>
+            ))}
           </div>
 
-          <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
-            <h3 className="text-sm font-semibold text-foreground mb-2">Requirements:</h3>
-            <p className="text-sm text-muted-foreground">
-              Each test function must have the <code className="px-1.5 py-0.5 bg-muted rounded text-xs">@points(value)</code> decorator with a point value.
-            </p>
+          <div className="flex justify-center pt-4">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={addTestCase}
+              className="flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Add Test Case
+            </Button>
           </div>
         </div>
       </Card>

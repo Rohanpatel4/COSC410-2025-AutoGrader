@@ -7,7 +7,7 @@ import { formatGradeDisplay } from "../utils/formatGrade";
 
 type GBPayload = {
   course: { id: number; name: string; course_code: string };
-  assignments: { id: number; title: string }[];
+  assignments: { id: number; title: string; total_points: number }[];
   students: { student_id: number; username: string; grades: Record<string, number | null> }[];
 };
 
@@ -84,10 +84,17 @@ export default function GradebookPage() {
                           </td>
                           {aIds.map((aid) => {
                             const gradeValue = s.grades[String(aid)];
-                            const displayGrade = formatGradeDisplay(gradeValue);
+                            const assignment = data.assignments.find(a => a.id === aid);
+                            const totalPoints = assignment?.total_points || 0;
+
+                            let displayGrade = "—";
+                            if (gradeValue !== null && gradeValue !== undefined) {
+                              const percentage = totalPoints > 0 ? Math.round((gradeValue / totalPoints) * 100) : 0;
+                              displayGrade = `${percentage} (${gradeValue}/${totalPoints})`;
+                            }
 
                             return (
-                              <td key={aid} className="p-2 border-b border-border">
+                              <td key={aid} className="p-2 border-b border-border text-center">
                                 {displayGrade}
                               </td>
                             );

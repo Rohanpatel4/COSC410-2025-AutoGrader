@@ -467,13 +467,6 @@ async def ensure_languages_installed() -> Dict[str, Any]:
                     # Track installed languages
                     if pkg.get("installed", False):
                         installed_languages.add(lang)
-        
-        # Normalize C++ variants in installed_languages too
-        # If any C++ variant (gcc, cpp, c++) is installed, mark all as installed
-        cpp_variants_installed = {"c++", "cpp", "gcc"}
-        installed_cpp = any(variant in installed_languages for variant in cpp_variants_installed)
-        if installed_cpp:
-            installed_languages.update(cpp_variants_installed)
     else:
         # If packages endpoint fails, log warning but continue
         print(f"[piston] Warning: Could not fetch packages: {packages_result.get('error', 'Unknown error')}. Will attempt installation anyway.", flush=True)
@@ -622,16 +615,23 @@ def _generate_python_test_execution(test_cases: list[dict]) -> str:
         test_id = test_case["id"]
         points = test_case["point_value"]
         test_code = test_case["test_code"]
-        
-        # Dedent the test_code to remove common leading whitespace
-        # Then re-indent it properly within the try block
-        # Ensure test_code is a string and has proper newlines
-        test_code_str = str(test_code) if test_code else ""
-        # Dedent to remove common leading whitespace, then strip
-        dedented_code = textwrap.dedent(test_code_str).strip()
-        # Indent the entire test_code block by 4 spaces (inside try block)
-        indented_code = textwrap.indent(dedented_code, "    ")
-        
+
+        # Clean up the test code - remove comments and extract just the assert statement
+        lines = test_code.split('\n')
+        assert_lines = []
+        for line in lines:
+            line = line.strip()
+            if line.startswith('assert'):
+                assert_lines.append(line)
+
+        if assert_lines:
+            # Execute all assert statements in this test case
+            indented_code = textwrap.indent('\n'.join(assert_lines), "    ")
+        else:
+            # If no assert found, execute the whole code
+            dedented_code = textwrap.dedent(test_code).strip()
+            indented_code = textwrap.indent(dedented_code, "    ")
+
         code_parts.append(f"""try:
 {indented_code}
     test_results.append({{"id": {test_id}, "passed": True, "points": {points}}})
@@ -650,22 +650,43 @@ def _generate_java_test_execution(test_cases: list[dict]) -> str:
         test_id = test_case["id"]
         points = test_case["point_value"]
         test_code = test_case["test_code"]
-        
-        # Convert Java assert statements to if-throw statements
-        # Java assert: "assert condition;" or "assert condition : message;"
-        # Convert to: "if (!(condition)) throw new AssertionError();"
-        # Pattern to match: assert <condition>; or assert <condition> : <message>;
-        java_test_code = test_code
-        # Replace assert statements
-        java_test_code = re.sub(
-            r'assert\s+([^;]+);',
-            r'if (!(\1)) throw new AssertionError();',
-            java_test_code
-        )
-        
+
+        # Clean up the test code - remove comments and extract just the assert statement
+        lines = test_code.split('\n')
+        assert_lines = []
+        for line in lines:
+            line = line.strip()
+            if line.startswith('assert'):
+                assert_lines.append(line)
+
+        if assert_lines:
+            # Convert assert statements to if-throw statements
+            java_asserts = []
+            for line in assert_lines:
+                # Replace assert statements
+                java_line = re.sub(
+                    r'assert\s+([^;]+);',
+                    r'if (!(\1)) throw new AssertionError();',
+                    line
+                )
+                java_asserts.append(java_line)
+
+            java_test_code = '\n'.join(java_asserts)
+        else:
+            # If no assert found, use the whole code
+            java_test_code = test_code
+            java_test_code = re.sub(
+                r'assert\s+([^;]+);',
+                r'if (!(\1)) throw new AssertionError();',
+                java_test_code
+            )
+
+        # Indent the java test code for inside the try block
+        indented_java_test_code = textwrap.indent(java_test_code, "            ")
+
         code_parts.append(f"""        try {{
             Solution s = new Solution();
-            {java_test_code}
+            {indented_java_test_code}
             Map<String, Object> r{test_id} = new HashMap<>();
             r{test_id}.put("id", {test_id});
             r{test_id}.put("passed", true);
@@ -691,21 +712,52 @@ def _generate_cpp_test_execution(test_cases: list[dict]) -> str:
         test_id = test_case["id"]
         points = test_case["point_value"]
         test_code = test_case["test_code"]
-        
-        # C++: Replace assert with test_assert (throws instead of aborting)
-        # This allows try-catch to work
-        # Also wrap the test code to catch exceptions
-        # Replace assert( with test_assert( in the test code
-        # Only replace if test_code doesn't already use test_assert
-        if "test_assert" not in test_code:
-            cpp_test_code = test_code.replace("assert(", "test_assert(").replace("assert ", "test_assert ")
+
+        # Clean up the test code - remove comments and extract just the assert statement
+        lines = test_code.split('\n')
+        assert_lines = []
+        for line in lines:
+            line = line.strip()
+            if line.startswith('assert'):
+                assert_lines.append(line)
+
+        if assert_lines:
+            # Replace assert with test_assert for all assert statements
+            cpp_asserts = []
+            for line in assert_lines:
+                if "test_assert" not in line:
+                    cpp_line = line.replace("assert(", "test_assert(").replace("assert ", "test_assert ")
+                else:
+                    cpp_line = line
+                # Ensure semicolon is present
+                if not cpp_line.rstrip().endswith(';'):
+                    cpp_line += ';'
+                cpp_asserts.append(cpp_line)
+
+            cpp_test_code = '\n'.join(cpp_asserts)
         else:
-            cpp_test_code = test_code
-        
+            # If no assert found, use the whole code with replacements
+            if "test_assert" not in test_code:
+                cpp_test_code = test_code.replace("assert(", "test_assert(").replace("assert ", "test_assert ")
+            else:
+                cpp_test_code = test_code
+            # Ensure semicolons are present for any assert statements
+            lines = cpp_test_code.split('\n')
+            processed_lines = []
+            for line in lines:
+                line = line.strip()
+                if line.startswith('test_assert') and not line.endswith(';'):
+                    line += ';'
+                processed_lines.append(line)
+            cpp_test_code = '\n'.join(processed_lines)
+
+        # Indent the C++ test code for inside the try block
+        indented_cpp_test_code = textwrap.indent(cpp_test_code, "            ")
+
         code_parts.append(f"""    {{
         bool test_passed = true;
         try {{
-            {cpp_test_code}
+{indented_cpp_test_code}
         }} catch (...) {{
             test_passed = false;
         }}

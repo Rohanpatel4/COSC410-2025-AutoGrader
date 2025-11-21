@@ -7,8 +7,9 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/api": {
-        target: 'http://backend:8000', // FastAPI backend
+        target: 'http://backend:8000', // FastAPI backend service in Docker network
         changeOrigin: true,
+        secure: false,
         rewrite: (p) => p,  // <= keep "/api" intact
       },
     },

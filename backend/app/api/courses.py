@@ -37,7 +37,9 @@ def _course_by_key(db: Session, key: str) -> Course | None:
         c = db.get(Course, int(key))
         if c:
             return c
-    return db.execute(select(Course).where(Course.course_code == key)).scalar_one_or_none()
+    # For course_code lookups, if there are duplicates, return the first one by ID
+    courses = db.execute(select(Course).where(Course.course_code == key).order_by(Course.id)).scalars().all()
+    return courses[0] if courses else None
 
 
 def _parse_dt(v):
@@ -213,6 +215,37 @@ def faculty_courses(faculty_id: int, db: Session = Depends(get_db)):
             "id": c.id,
             "course_code": c.course_code,
             "enrollment_key": c.enrollment_key,  # faculty can copy this
+            "name": c.name,
+            "description": c.description,
+        }
+        for c in rows
+    ]
+
+
+# NEW: path-based student listing (returns courses student is enrolled in)
+@router.get("/students/{student_id}", response_model=list[dict])
+def student_courses(student_id: int, db: Session = Depends(get_db)):
+    # Verify student exists
+    student = db.get(User, student_id)
+    if not student or student.role != RoleEnum.student:
+        raise HTTPException(404, "Student not found")
+
+    rows = (
+        db.execute(
+            select(Course)
+            .join(
+                user_course_association,
+                user_course_association.c.course_id == Course.id,
+            )
+            .where(user_course_association.c.user_id == student_id)
+        )
+        .scalars()
+        .all()
+    )
+    return [
+        {
+            "id": c.id,
+            "course_code": c.course_code,
             "name": c.name,
             "description": c.description,
         }

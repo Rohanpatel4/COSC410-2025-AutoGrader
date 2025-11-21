@@ -1,5 +1,5 @@
-// dev: no BASE (use Vite proxy); prod: use VITE_API_URL if set
-const BASE = import.meta.env.DEV ? "" : (import.meta.env.VITE_API_URL ?? "");
+// Use VITE_API_URL if set (for Docker), otherwise use Vite proxy in dev mode
+const BASE = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? "" : "");
 
 // Safe join in case someone sets a trailing slash in BASE
 function join(base: string, path: string) {

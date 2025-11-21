@@ -171,7 +171,7 @@ def _create_submission(
     submission = StudentSubmission(
         student_id=student.id,
         assignment_id=assignment.id,
-        grade=grade,
+        earned_points=grade,
     )
     session.add(submission)
     session.flush()

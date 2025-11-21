@@ -23,7 +23,9 @@ def _course_by_key(db: Session, key: str) -> Optional[Course]:
         c = db.get(Course, int(key))
         if c:
             return c
-    return db.execute(select(Course).where(Course.course_code == key)).scalar_one_or_none()
+    # For course_code lookups, if there are duplicates, return the first one by ID
+    courses = db.execute(select(Course).where(Course.course_code == key).order_by(Course.id)).scalars().all()
+    return courses[0] if courses else None
 
 def _to_iso_or_raw(v):
     if hasattr(v, "isoformat"):
@@ -170,6 +172,7 @@ def delete_assignment(assignment_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"ok": True, "id": assignment_id}
 
+
 @router.put("/{assignment_id}", response_model=dict)
 def update_assignment(assignment_id: int, payload: dict, db: Session = Depends(get_db)):
     """
@@ -265,16 +268,22 @@ async def create_test_cases_batch(
     if not test_cases_data:
         raise HTTPException(400, "test_cases array is required")
     
-    # Validate test cases
+    # Validate and set defaults for test cases
     for i, test_case in enumerate(test_cases_data):
-        if "point_value" not in test_case:
-            raise HTTPException(400, f"Test case {i}: point_value is required")
         if "test_code" not in test_case:
             raise HTTPException(400, f"Test case {i}: test_code is required")
-        if not isinstance(test_case["point_value"], int) or test_case["point_value"] < 0:
-            raise HTTPException(400, f"Test case {i}: point_value must be a non-negative integer")
         if not test_case["test_code"].strip():
             raise HTTPException(400, f"Test case {i}: test_code cannot be empty")
+
+        # Set default point_value if not provided
+        if "point_value" not in test_case:
+            test_case["point_value"] = 10
+        elif not isinstance(test_case["point_value"], int) or test_case["point_value"] < 0:
+            raise HTTPException(400, f"Test case {i}: point_value must be a non-negative integer")
+
+        # Set default visibility if not provided
+        if "visibility" not in test_case:
+            test_case["visibility"] = True
     
     # Delete existing test cases for this assignment (replace all)
     existing_test_cases = db.execute(
@@ -486,7 +495,7 @@ def list_attempts_for_assignment(
         .order_by(StudentSubmission.id.asc())
     ).scalars().all()
 
-    return [{"id": s.id, "earned_points": s.earned_points} for s in rows]
+    return [{"id": s.id, "grade": s.earned_points} for s in rows]
 
 @router.post("/{assignment_id}/submit", status_code=201)
 async def submit_to_assignment(
@@ -773,13 +782,26 @@ def gradebook_for_course(course_key: str, db: Session = Depends(get_db)):
     if not c:
         raise HTTPException(404, "Course not found")
 
-    # columns
+    # columns - include total points for each assignment
     assigns = db.execute(
         select(Assignment.id, Assignment.title)
         .where(Assignment.course_id == c.id)
         .order_by(Assignment.id.asc())
     ).all()
-    assignments = [{"id": aid, "title": title} for (aid, title) in assigns]
+
+    assignments = []
+    for aid, title in assigns:
+        # Calculate total points for this assignment (sum of all test case point values)
+        total_points = db.execute(
+            select(func.sum(TestCase.point_value))
+            .where(TestCase.assignment_id == aid)
+        ).scalar() or 0
+
+        assignments.append({
+            "id": aid,
+            "title": title,
+            "total_points": total_points
+        })
     a_ids = [a["id"] for a in assignments]
 
     # rows - query from user_course_association
