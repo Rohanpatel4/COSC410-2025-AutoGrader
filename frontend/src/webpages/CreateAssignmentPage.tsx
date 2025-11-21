@@ -148,10 +148,21 @@ export default function CreateAssignmentPage() {
       </Link>
 
       <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">Create New Assignment</h1>
-        <p className="mt-2 text-muted-foreground">
-          Create a new assignment with test cases for automatic grading.
-        </p>
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">Create New Assignment</h1>
+            <p className="mt-2 text-muted-foreground">
+              Create a new assignment with test cases for automatic grading.
+            </p>
+          </div>
+          <a
+            href="/TEST_CASE_GUIDE.pdf"
+            download="Test_Case_Guide.pdf"
+            className="text-primary hover:underline text-sm font-medium flex items-center gap-1 whitespace-nowrap"
+          >
+            📄 Download Test Case Guide
+          </a>
+        </div>
       </div>
 
       {msg && (
@@ -176,7 +187,7 @@ export default function CreateAssignmentPage() {
 
           <div>
             <Label htmlFor="description">
-              Description <span className="text-muted-foreground">(optional)</span>
+              Description <span className="text-muted-foreground">*</span>
             </Label>
             <textarea
               id="description"

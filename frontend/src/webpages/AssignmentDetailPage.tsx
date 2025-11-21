@@ -1,6 +1,6 @@
 // src/webpages/AssignmentDetailPage.tsx
 import React from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { fetchJson, BASE } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import type { Assignment } from "../types/assignments";
@@ -27,6 +27,7 @@ type EditTestCase = {
 export default function AssignmentDetailPage() {
   // ✅ match your route: /assignments/:assignment_id
   const { assignment_id } = useParams<{ assignment_id: string }>();
+  const navigate = useNavigate();
   const { role, userId } = useAuth();
   const isStudent = role === "student";
 
@@ -176,6 +177,35 @@ export default function AssignmentDetailPage() {
     });
   };
 
+  const deleteAssignment = async () => {
+    if (!a || !assignment_id) return;
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete the assignment "${a.title}"? This action cannot be undone and will delete all associated submissions and test cases.`
+    );
+
+    if (!confirmed) return;
+
+    setEditLoading(true);
+    try {
+      await fetchJson(
+        `/api/v1/assignments/${encodeURIComponent(assignment_id)}`,
+        { method: "DELETE" }
+      );
+
+      // Navigate back to the course page
+      if (a.course_id) {
+        navigate(`/courses/${a.course_id}`);
+      } else {
+        navigate("/courses");
+      }
+    } catch (e: any) {
+      alert(`Failed to delete assignment: ${e?.message ?? "Unknown error"}`);
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
   const saveEdit = async () => {
     if (!a || !assignment_id) return;
 
@@ -274,7 +304,7 @@ export default function AssignmentDetailPage() {
 
       // Load test cases to calculate total points
       try {
-        const testCasesData: any[] = await fetchJson(
+        const testCasesData: any[] = await fetchJson<any[]>(
           `/api/v1/assignments/${encodeURIComponent(assignment_id)}/test-cases?include_hidden=true&user_id=${userId}`
         ).catch(() => []);
         setTestCases(testCasesData || []);
@@ -751,7 +781,17 @@ export default function AssignmentDetailPage() {
         {editModalOpen && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-card rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-              <h2 className="text-2xl font-bold mb-4">Edit Assignment</h2>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-2xl font-bold">Edit Assignment</h2>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={deleteAssignment}
+                  disabled={editLoading}
+                >
+                  Delete
+                </Button>
+              </div>
 
               <div className="space-y-4">
                 <div>
@@ -787,7 +827,7 @@ export default function AssignmentDetailPage() {
                     <option value="python">Python</option>
                     <option value="java">Java</option>
                     <option value="cpp">C++</option>
-                    <option value="javascript">JavaScript</option>
+
                   </select>
                 </div>
 
@@ -909,17 +949,19 @@ export default function AssignmentDetailPage() {
                 )}
               </div>
 
-              <div className="flex justify-end space-x-2 mt-6">
+              <div className="flex gap-3 mt-6">
                 <Button
                   variant="secondary"
                   onClick={() => setEditModalOpen(false)}
                   disabled={editLoading}
+                  className="flex-1"
                 >
                   Cancel
                 </Button>
                 <Button
                   onClick={saveEdit}
                   disabled={editLoading || !editTitle.trim()}
+                  className="flex-1"
                 >
                   {editLoading ? "Saving..." : "Save Changes"}
                 </Button>
