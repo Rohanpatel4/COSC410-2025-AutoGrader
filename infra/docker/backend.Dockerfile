@@ -15,6 +15,15 @@ WORKDIR /app/backend
 # Expose port 8000
 EXPOSE 8000
 
-# Run uvicorn with host 0.0.0.0 to listen on all interfaces
-CMD ["uvicorn", "app.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Create startup script that initializes DB and starts server
+RUN echo '#!/bin/bash\n\
+set -e\n\
+echo "[startup] Initializing database..."\n\
+python /app/backend/scripts/init_db.py || echo "[startup] Warning: Database initialization had issues, continuing..."\n\
+echo "[startup] Starting server..."\n\
+exec uvicorn app.api.main:app --host 0.0.0.0 --port 8000\n\
+' > /app/start.sh && chmod +x /app/start.sh
+
+# Run startup script
+CMD ["/app/start.sh"]
 

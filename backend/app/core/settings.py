@@ -1,7 +1,8 @@
 from pydantic_settings import BaseSettings
 from pydantic import field_validator
-from typing import List
+from typing import List, Optional
 from pathlib import Path
+import os
 
 
 # Calculate default database path relative to backend directory
@@ -15,10 +16,25 @@ def _get_default_database_url() -> str:
 
 class Settings(BaseSettings):
     # --- Database ---
-    # Use absolute path to ensure app.db is always in backend/ directory
-    # regardless of where the app is run from
-    # Can be overridden via environment variable
-    DATABASE_URL: str = _get_default_database_url()
+    # Environment variable DATABASE_URL takes precedence (Pydantic Settings handles this)
+    # If not set, use default path relative to backend directory
+    # In Docker: DATABASE_URL=sqlite:///../db/app.db (resolves to /app/db/app.db)
+    # Locally: defaults to backend/app.db
+    # Note: BaseSettings automatically reads from environment variables and overrides defaults
+    DATABASE_URL: Optional[str] = None
+    
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def _set_database_url(cls, v):
+        """Set DATABASE_URL from env var or use default."""
+        if v is not None:
+            return v
+        # Check environment variable first
+        env_value = os.getenv("DATABASE_URL")
+        if env_value:
+            return env_value
+        # Use default if neither env var nor explicit value provided
+        return _get_default_database_url()
 
     # --- CORS ---
     CORS_ORIGINS: List[str] = [

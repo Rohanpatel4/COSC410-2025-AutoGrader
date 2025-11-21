@@ -17,6 +17,21 @@ from app.services.piston import get_runtimes, ensure_languages_installed
 # App
 app = FastAPI(title="AutoGrader API", version="1.0.0")
 
+# ---- Verify database connection on startup ----
+@app.on_event("startup")
+async def _verify_database():
+    """Verify database connection on startup."""
+    try:
+        from sqlalchemy import inspect
+        inspector = inspect(engine)
+        tables = inspector.get_table_names()
+        print(f"[startup] Database connected: {settings.DATABASE_URL}", flush=True)
+        print(f"[startup] Found {len(tables)} tables", flush=True)
+    except Exception as e:
+        print(f"[startup] WARNING: Database connection issue: {e}", flush=True)
+        print(f"[startup] Database URL: {settings.DATABASE_URL}", flush=True)
+        # Don't raise - let the server start, errors will be caught on first request
+
 # ---- CORS (dev, explicit) ----
 ALLOW_ORIGINS = settings.CORS_ORIGINS 
 print(">>> CORS allow_origins =", ALLOW_ORIGINS, flush=True)
@@ -59,8 +74,11 @@ async def _piston_bootstrap():
                         return
                 else:
                     # Successfully connected
-                    languages = set(rt.get("language") for rt in runtimes if isinstance(runtimes, list) and isinstance(rt, dict))
-                    print(f"[piston] Connected to Piston. Available languages in runtimes: {', '.join(sorted(languages))}", flush=True)
+                    if isinstance(runtimes, list):
+                        languages = set(rt.get("language") for rt in runtimes if isinstance(rt, dict))
+                        print(f"[piston] Connected to Piston. Available languages in runtimes: {', '.join(sorted(languages))}", flush=True)
+                    else:
+                        print(f"[piston] Connected to Piston. Runtimes format: {type(runtimes)}", flush=True)
                     
                     # Ensure template-supported languages are installed
                     print(f"[piston] Ensuring required languages are installed...", flush=True)

@@ -21,11 +21,12 @@ BACKEND_DIR = os.path.join(HERE, "backend")
 if os.path.isdir(BACKEND_DIR) and BACKEND_DIR not in sys.path:
     sys.path.insert(0, BACKEND_DIR)
 
-# ── Fix database path: always target backend/app.db regardless of working directory ──
-# The settings use a relative path "sqlite:///./app.db" which resolves to the current
-# working directory. We need to override it to point to backend/app.db.
-BACKEND_DB_PATH = os.path.join(BACKEND_DIR, "app.db")
-os.environ["DATABASE_URL"] = f"sqlite:///{BACKEND_DB_PATH}"
+# ── Fix database path: respect DATABASE_URL env var if set, otherwise use backend/app.db ──
+# In Docker: DATABASE_URL is set to sqlite:///../db/app.db
+# Locally: default to backend/app.db
+if "DATABASE_URL" not in os.environ:
+    BACKEND_DB_PATH = os.path.join(BACKEND_DIR, "app.db")
+    os.environ["DATABASE_URL"] = f"sqlite:///{BACKEND_DB_PATH}"
 
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import inspect
