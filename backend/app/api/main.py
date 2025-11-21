@@ -32,56 +32,66 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def _piston_bootstrap():
-    """Bootstrap Piston: check status and ensure required languages are installed."""
+    """
+    Bootstrap Piston: check status and ensure required languages are installed.
+    This runs asynchronously and won't block the server if Piston is unavailable.
+    """
     import asyncio
     
-    # Retry connecting to Piston with exponential backoff
-    max_retries = 10
-    retry_delay = 1.0  # Start with 1 second
-    
-    for attempt in range(max_retries):
-        try:
-            # First, check Piston is accessible
-            runtimes = await get_runtimes()
-            if "error" in runtimes:
-                if attempt < max_retries - 1:
-                    print(f"[piston] Waiting for Piston to be ready... (attempt {attempt + 1}/{max_retries})", flush=True)
-                    await asyncio.sleep(retry_delay)
-                    retry_delay = min(retry_delay * 1.5, 5.0)  # Exponential backoff, max 5 seconds
-                    continue
+    try:
+        # Retry connecting to Piston with exponential backoff
+        max_retries = 10
+        retry_delay = 1.0  # Start with 1 second
+        
+        for attempt in range(max_retries):
+            try:
+                # First, check Piston is accessible
+                runtimes = await get_runtimes()
+                if "error" in runtimes:
+                    if attempt < max_retries - 1:
+                        print(f"[piston] Waiting for Piston to be ready... (attempt {attempt + 1}/{max_retries})", flush=True)
+                        await asyncio.sleep(retry_delay)
+                        retry_delay = min(retry_delay * 1.5, 5.0)  # Exponential backoff, max 5 seconds
+                        continue
+                    else:
+                        print(f"[piston] Warning: Could not fetch runtimes after {max_retries} attempts: {runtimes['error']}", flush=True)
+                        print(f"[piston] Skipping language installation check. Server will continue without Piston.", flush=True)
+                        return
                 else:
-                    print(f"[piston] Warning: Could not fetch runtimes after {max_retries} attempts: {runtimes['error']}", flush=True)
-                    print(f"[piston] Skipping language installation check.", flush=True)
+                    # Successfully connected
+                    languages = set(rt.get("language") for rt in runtimes if isinstance(runtimes, list) and isinstance(rt, dict))
+                    print(f"[piston] Connected to Piston. Available languages in runtimes: {', '.join(sorted(languages))}", flush=True)
+                    
+                    # Ensure template-supported languages are installed
+                    print(f"[piston] Ensuring required languages are installed...", flush=True)
+                    install_results = await ensure_languages_installed()
+                    if "error" in install_results:
+                        print(f"[piston] Warning: Could not ensure languages installed: {install_results['error']}", flush=True)
+                    else:
+                        # Print summary of installation results
+                        success_count = sum(1 for r in install_results.values() if isinstance(r, dict) and r.get("success", False))
+                        total_count = len(install_results)
+                        print(f"[piston] Language installation check complete: {success_count}/{total_count} languages ready", flush=True)
+                        # Print any failures
+                        for lang, result in install_results.items():
+                            if isinstance(result, dict) and not result.get("success", False):
+                                error = result.get("error", "Unknown error")
+                                print(f"[piston]   - {lang}: {error}", flush=True)
                     return
-            else:
-                # Successfully connected
-                languages = set(rt.get("language") for rt in runtimes if isinstance(rt, dict))
-                print(f"[piston] Connected to Piston. Available languages in runtimes: {', '.join(sorted(languages))}", flush=True)
-                
-                # Ensure template-supported languages are installed
-                print(f"[piston] Ensuring required languages are installed...", flush=True)
-                install_results = await ensure_languages_installed()
-                if "error" in install_results:
-                    print(f"[piston] Warning: Could not ensure languages installed: {install_results['error']}", flush=True)
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    print(f"[piston] Error connecting to Piston (attempt {attempt + 1}/{max_retries}): {e}", flush=True)
+                    await asyncio.sleep(retry_delay)
+                    retry_delay = min(retry_delay * 1.5, 5.0)
                 else:
-                    # Print summary of installation results
-                    success_count = sum(1 for r in install_results.values() if isinstance(r, dict) and r.get("success", False))
-                    total_count = len(install_results)
-                    print(f"[piston] Language installation check complete: {success_count}/{total_count} languages ready", flush=True)
-                    # Print any failures
-                    for lang, result in install_results.items():
-                        if isinstance(result, dict) and not result.get("success", False):
-                            error = result.get("error", "Unknown error")
-                            print(f"[piston]   - {lang}: {error}", flush=True)
-                return
-        except Exception as e:
-            if attempt < max_retries - 1:
-                print(f"[piston] Error connecting to Piston (attempt {attempt + 1}/{max_retries}): {e}", flush=True)
-                await asyncio.sleep(retry_delay)
-                retry_delay = min(retry_delay * 1.5, 5.0)
-            else:
-                print(f"[piston] Warning: Could not check Piston status after {max_retries} attempts: {e}", flush=True)
-                return
+                    print(f"[piston] Warning: Could not check Piston status after {max_retries} attempts: {e}", flush=True)
+                    print(f"[piston] Server will continue without Piston. Code execution features may not work.", flush=True)
+                    return
+    except Exception as e:
+        # Catch any unexpected errors in the startup event
+        print(f"[piston] Fatal error in Piston bootstrap: {e}", flush=True)
+        print(f"[piston] Server will continue without Piston.", flush=True)
+        # Don't raise - allow server to start even if Piston fails
 
 # Routers
 app.include_router(login_router,       prefix="/api/v1",             tags=["login"])
