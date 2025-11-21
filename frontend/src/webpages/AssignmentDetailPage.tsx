@@ -8,7 +8,7 @@ import { Button, Card, Alert, Input, Label } from "../components/ui";
 import { formatGradeDisplay } from "../utils/formatGrade";
 import { GripVertical } from "lucide-react";
 
-type Attempt = { id: number; grade: number | null };
+type Attempt = { id: number; grade: number | null; earned_points?: number | null };
 
 type FacAttempt = { id: number; earned_points: number | null };
 type FacRow = { student_id: number; username: string; attempts: FacAttempt[]; best: number | null };
@@ -57,13 +57,37 @@ export default function AssignmentDetailPage() {
   // Edit test cases state
   const [editTestCases, setEditTestCases] = React.useState<EditTestCase[]>([]);
   const [editTestCasesLoading, setEditTestCasesLoading] = React.useState(false);
+  const [testCases, setTestCases] = React.useState<any[]>([]);
+
+  // Get file extensions based on language
+  const getFileExtensions = (language: string | undefined): string => {
+    switch (language?.toLowerCase()) {
+      case "python":
+        return ".py";
+      case "java":
+        return ".java";
+      case "cpp":
+      case "c++":
+        return ".cpp,.c,.cc,.cxx";
+      case "javascript":
+      case "js":
+        return ".js,.jsx";
+      default:
+        return ".py"; // Default to Python
+    }
+  };
+
+  // Calculate total points from test cases
+  const totalPoints = React.useMemo(() => {
+    return testCases.reduce((sum, tc) => sum + (tc.point_value || 0), 0);
+  }, [testCases]);
 
   const downloadSubmissionCode = async (submissionId: number) => {
     if (!assignment_id) return;
 
     try {
       const response = await fetch(
-        `/api/v1/assignments/${encodeURIComponent(assignment_id)}/submissions/${submissionId}/code?user_id=${encodeURIComponent(String(userId))}`
+        `${BASE}/api/v1/assignments/${encodeURIComponent(assignment_id)}/submissions/${submissionId}/code?user_id=${encodeURIComponent(String(userId))}`
       );
 
       if (!response.ok) {
@@ -248,6 +272,16 @@ export default function AssignmentDetailPage() {
       );
       setA(details);
 
+      // Load test cases to calculate total points
+      try {
+        const testCasesData: any[] = await fetchJson(
+          `/api/v1/assignments/${encodeURIComponent(assignment_id)}/test-cases?include_hidden=true&user_id=${userId}`
+        ).catch(() => []);
+        setTestCases(testCasesData || []);
+      } catch (e) {
+        setTestCases([]);
+      }
+
       if (isStudent && userId) {
         const list = await fetchJson<Attempt[]>(
           `/api/v1/assignments/${encodeURIComponent(
@@ -317,7 +351,9 @@ export default function AssignmentDetailPage() {
 
     // Check if either file or code is provided
     if (!file && !code.trim()) {
-      setSubmitMsg("Either choose a .py file or paste your code");
+      const lang = a?.language || "python";
+      const extensions = getFileExtensions(lang);
+      setSubmitMsg(`Either choose a ${extensions.split(',')[0]} file or paste your code`);
       return;
     }
 
@@ -436,12 +472,15 @@ export default function AssignmentDetailPage() {
                     <h3 className="text-lg font-medium mb-2">Option 1: Upload a file</h3>
                     <input
                       type="file"
-                      accept=".py"
+                      accept={getFileExtensions(a?.language)}
                       aria-label="Upload your code file"
                       onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                       disabled={nowBlocked || limitReached}
                       className="block text-sm text-foreground file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary file:text-primary-foreground hover:file:opacity-90 disabled:opacity-50"
                     />
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Accepted: {getFileExtensions(a?.language).split(',').join(', ')}
+                    </p>
                   </div>
 
                   <div className="text-center text-muted-foreground">
@@ -451,7 +490,7 @@ export default function AssignmentDetailPage() {
                   <div>
                     <h3 className="text-lg font-medium mb-2">Option 2: Paste your code</h3>
                     <textarea
-                      placeholder="Paste your Python code here..."
+                      placeholder={`Paste your ${a?.language ? a.language.charAt(0).toUpperCase() + a.language.slice(1) : 'code'} code here...`}
                       className="w-full h-64 font-mono text-sm resize-vertical"
                       style={{
                         fontFamily: "'JetBrains Mono', 'Monaco', 'Menlo', 'Ubuntu Mono', monospace",
@@ -585,24 +624,27 @@ export default function AssignmentDetailPage() {
                 <p className="text-muted-foreground">No attempts yet.</p>
               ) : (
                 <ul className="space-y-2">
-                  {attempts.map((t, idx) => (
-                    <li key={t.id} className="text-foreground">
-                      Attempt {idx + 1}:{" "}
-                      <button
-                        onClick={() => downloadSubmissionCode(t.id)}
-                        className="text-primary hover:underline font-medium"
-                        title="Click to download submitted code"
-                      >
-                        Grade {formatGradeDisplay(t.grade)}
-                      </button>
-                    </li>
-                  ))}
+                  {attempts.map((t, idx) => {
+                    const earnedPoints = t.earned_points ?? t.grade ?? 0;
+                    const displayPoints = totalPoints > 0 
+                      ? `${earnedPoints} / ${totalPoints}` 
+                      : formatGradeDisplay(t.grade);
+                    return (
+                      <li key={t.id} className="text-foreground">
+                        Attempt {idx + 1}: <span className="font-medium">{displayPoints}</span>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
               <p className="mt-4 text-foreground">
                 Best grade:{" "}
                 <strong className="text-primary">
-                  {bestGrade == null || bestGrade < 0 ? "—" : formatGradeDisplay(bestGrade)}
+                  {bestGrade == null || bestGrade < 0 
+                    ? "—" 
+                    : totalPoints > 0 
+                      ? `${bestGrade} / ${totalPoints}` 
+                      : formatGradeDisplay(bestGrade)}
                 </strong>
               </p>
             </Card>
@@ -667,6 +709,11 @@ export default function AssignmentDetailPage() {
                             </td>
                             {[...Array(maxAttempts)].map((_, i) => {
                               const att = row.attempts[i];
+                              const earnedPoints = att?.earned_points ?? null;
+                              const displayPoints = earnedPoints !== null && totalPoints > 0
+                                ? `${earnedPoints} / ${totalPoints}`
+                                : formatGradeDisplay(earnedPoints);
+                              
                               return (
                                 <td key={i} className="p-2 border-b border-border">
                                   {att ? (
@@ -675,7 +722,7 @@ export default function AssignmentDetailPage() {
                                       className="text-primary hover:underline font-medium"
                                       title="Click to download submitted code"
                                     >
-                                      {formatGradeDisplay(att.earned_points)}
+                                      {displayPoints}
                                     </button>
                                   ) : (
                                     "—"
@@ -684,7 +731,11 @@ export default function AssignmentDetailPage() {
                               );
                             })}
                             <td className="p-2 border-b border-border font-semibold">
-                              {row.best == null ? "—" : formatGradeDisplay(row.best)}
+                              {row.best == null 
+                                ? "—" 
+                                : totalPoints > 0 
+                                  ? `${row.best} / ${totalPoints}` 
+                                  : formatGradeDisplay(row.best)}
                             </td>
                           </tr>
                         );

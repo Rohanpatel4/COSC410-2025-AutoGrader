@@ -52,8 +52,8 @@ export default function CoursePage() {
   const [gradebookLoading, setGradebookLoading] = React.useState(false);
 
   // Student attempts data (for student view)
-  type StudentAttempt = { id: number; grade: number | null };
-  type AssignmentAttempts = { assignmentId: number; attempts: StudentAttempt[] };
+  type StudentAttempt = { id: number; grade: number | null; earned_points?: number | null };
+  type AssignmentAttempts = { assignmentId: number; attempts: StudentAttempt[]; totalPoints?: number };
   const [studentAttempts, setStudentAttempts] = React.useState<AssignmentAttempts[]>([]);
   const [studentAttemptsLoading, setStudentAttemptsLoading] = React.useState(false);
 
@@ -123,12 +123,21 @@ export default function CoursePage() {
     try {
       const attemptsPromises = assignments.map(async (assignment) => {
         try {
-          const attempts = await fetchJson<StudentAttempt[]>(
-            `/api/v1/assignments/${assignment.id}/attempts?student_id=${encodeURIComponent(String(userId))}`
-          );
-          return { assignmentId: assignment.id, attempts };
+          const [attempts, testCases] = await Promise.all([
+            fetchJson<StudentAttempt[]>(
+              `/api/v1/assignments/${assignment.id}/attempts?student_id=${encodeURIComponent(String(userId))}`
+            ).catch(() => []),
+            fetchJson<any[]>(
+              `/api/v1/assignments/${assignment.id}/test-cases?include_hidden=true&user_id=${encodeURIComponent(String(userId))}`
+            ).catch(() => [])
+          ]);
+          
+          // Calculate total points from test cases
+          const totalPoints = testCases.reduce((sum, tc) => sum + (tc.point_value || 0), 0);
+          
+          return { assignmentId: assignment.id, attempts, totalPoints };
         } catch {
-          return { assignmentId: assignment.id, attempts: [] };
+          return { assignmentId: assignment.id, attempts: [], totalPoints: 0 };
         }
       });
       const results = await Promise.all(attemptsPromises);
@@ -816,12 +825,25 @@ export default function CoursePage() {
                                 </thead>
                                 <tbody>
                                   {assignments.map((assignment) => {
-                                    const assignmentAttempts = studentAttempts.find(
+                                    const assignmentData = studentAttempts.find(
                                       (sa) => sa.assignmentId === assignment.id
-                                    )?.attempts || [];
+                                    );
+                                    const assignmentAttempts = assignmentData?.attempts || [];
+                                    const totalPoints = assignmentData?.totalPoints ?? 0;
+                                    
                                     const bestScore = assignmentAttempts.length > 0
-                                      ? Math.max(...assignmentAttempts.map(a => a.grade ?? -Infinity).filter(g => g !== -Infinity))
+                                      ? Math.max(...assignmentAttempts.map(a => (a.earned_points ?? a.grade) ?? -Infinity).filter(g => g !== -Infinity))
                                       : null;
+                                    
+                                    let bestScoreDisplay: string;
+                                    if (bestScore == null || bestScore === -Infinity) {
+                                      bestScoreDisplay = "—";
+                                    } else if (totalPoints > 0) {
+                                      bestScoreDisplay = `${bestScore} / ${totalPoints}`;
+                                    } else {
+                                      bestScoreDisplay = formatGradeDisplay(bestScore);
+                                    }
+                                    
                                     return (
                                       <tr key={assignment.id} className="border-b border-border hover:bg-muted/50">
                                         <td className="sticky left-0 bg-card z-10 p-3 font-medium border-r border-border">
@@ -832,10 +854,20 @@ export default function CoursePage() {
                                             ...studentAttempts.map((sa) => sa.attempts.length),
                                             1
                                           );
+                                          
                                           return Array.from({ length: maxAttempts }, (_, i) => {
                                             const attempt = assignmentAttempts[i];
-                                            const displayGrade = formatGradeDisplay(attempt?.grade ?? null);
-                                            const isMissing = displayGrade === "—";
+                                            const earnedPoints = attempt?.earned_points ?? attempt?.grade ?? null;
+                                            const isMissing = earnedPoints === null;
+
+                                            let displayGrade: string;
+                                            if (isMissing) {
+                                              displayGrade = "—";
+                                            } else if (totalPoints > 0) {
+                                              displayGrade = `${earnedPoints} / ${totalPoints}`;
+                                            } else {
+                                              displayGrade = formatGradeDisplay(earnedPoints);
+                                            }
 
                                             return (
                                               <td key={i} className="p-3 text-center">
@@ -849,10 +881,10 @@ export default function CoursePage() {
                                           });
                                         })()}
                                         <td className="p-3 text-center font-semibold bg-muted/30">
-                                          {bestScore == null || bestScore === -Infinity ? (
+                                          {bestScoreDisplay === "—" ? (
                                             <span className="text-muted-foreground">—</span>
                                           ) : (
-                                            <span>{formatGradeDisplay(bestScore)}</span>
+                                            <span>{bestScoreDisplay}</span>
                                           )}
                                         </td>
                                       </tr>

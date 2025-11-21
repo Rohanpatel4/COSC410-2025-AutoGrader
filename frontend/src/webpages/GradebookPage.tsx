@@ -80,13 +80,13 @@ export default function GradebookPage() {
                   <table className="w-full border-collapse min-w-[800px]">
                     <thead>
                       <tr>
-                        <th className="text-left p-2 border-b border-border">
+                        <th className="text-left p-2 border-b border-border w-[200px]">
                           Student
                         </th>
                         {data.assignments.map((a) => (
                           <th
                             key={a.id}
-                            className="text-left p-2 border-b border-border"
+                            className="text-center p-2 border-b border-border"
                             title={`Assignment ${a.id}`}
                           >
                             {a.title}

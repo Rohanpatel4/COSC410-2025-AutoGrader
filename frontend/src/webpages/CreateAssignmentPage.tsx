@@ -188,24 +188,6 @@ export default function CreateAssignmentPage() {
             />
           </div>
 
-          <div>
-            <Label htmlFor="subLimit">
-              Submission Limit <span className="text-muted-foreground">(optional, leave blank for unlimited)</span>
-            </Label>
-            <Input
-              id="subLimit"
-              type="number"
-              min="1"
-              placeholder="e.g., 3"
-              value={subLimit}
-              onChange={(e) => setSubLimit(e.target.value)}
-              disabled={submitting}
-            />
-            <p className="mt-2 text-xs text-muted-foreground">
-              Maximum number of submissions allowed per student
-            </p>
-          </div>
-
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="language">
@@ -221,7 +203,6 @@ export default function CreateAssignmentPage() {
                 <option value="python">Python</option>
                 <option value="java">Java</option>
                 <option value="cpp">C++</option>
-                <option value="javascript">JavaScript</option>
               </select>
               <p className="mt-2 text-xs text-muted-foreground">
                 Programming language for this assignment
