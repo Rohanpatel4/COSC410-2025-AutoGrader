@@ -333,9 +333,23 @@ export default function CreateAssignmentPage() {
                       <Label className="text-sm text-muted-foreground">points:</Label>
                       <Input
                         type="number"
-                        min="0"
-                        value={testCase.points}
-                        onChange={(e) => updateTestCase(testCase.id, 'points', parseInt(e.target.value) || 0)}
+                        min="1"
+                        value={testCase.points || ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === '') {
+                            updateTestCase(testCase.id, 'points', 0);
+                          } else {
+                            const numVal = parseInt(val);
+                            updateTestCase(testCase.id, 'points', isNaN(numVal) ? 1 : numVal);
+                          }
+                        }}
+                        onBlur={(e) => {
+                          const val = parseInt(e.target.value);
+                          if (!val || val < 1) {
+                            updateTestCase(testCase.id, 'points', 1);
+                          }
+                        }}
                         className="w-2 h-8 text-xs px-1"
                       />
                     </div>
