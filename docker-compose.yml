@@ -26,7 +26,7 @@ services:
       dockerfile: infra/docker/backend.Dockerfile
     environment:
       - DATABASE_URL=sqlite:///../db/app.db
-      - CORS_ORIGINS=["http://localhost:5173"]
+      - CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
       - PISTON_URL=http://piston:2000
       - PYTHONUNBUFFERED=1
     ports:
