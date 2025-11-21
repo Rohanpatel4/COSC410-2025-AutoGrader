@@ -10,7 +10,7 @@ import { GripVertical } from "lucide-react";
 
 type Attempt = { id: number; grade: number | null };
 
-type FacAttempt = { id: number; grade: number | null };
+type FacAttempt = { id: number; earned_points: number | null };
 type FacRow = { student_id: number; username: string; attempts: FacAttempt[]; best: number | null };
 type FacPayload = { assignment: { id: number; title: string }; students: FacRow[] };
 
@@ -57,6 +57,35 @@ export default function AssignmentDetailPage() {
   // Edit test cases state
   const [editTestCases, setEditTestCases] = React.useState<EditTestCase[]>([]);
   const [editTestCasesLoading, setEditTestCasesLoading] = React.useState(false);
+
+  const downloadSubmissionCode = async (submissionId: number) => {
+    if (!assignment_id) return;
+
+    try {
+      const response = await fetch(
+        `/api/v1/assignments/${encodeURIComponent(assignment_id)}/submissions/${submissionId}/code?user_id=${encodeURIComponent(String(userId))}`
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to download code: ${response.status}`);
+      }
+
+      const code = await response.text();
+      const blob = new Blob([code], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `submission_${submissionId}.txt`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      alert(`Failed to download submission code: ${error}`);
+    }
+  };
 
   const openEditModal = async () => {
     if (!a) return;
@@ -558,7 +587,14 @@ export default function AssignmentDetailPage() {
                 <ul className="space-y-2">
                   {attempts.map((t, idx) => (
                     <li key={t.id} className="text-foreground">
-                      Attempt {idx + 1}: Grade {formatGradeDisplay(t.grade)}
+                      Attempt {idx + 1}:{" "}
+                      <button
+                        onClick={() => downloadSubmissionCode(t.id)}
+                        className="text-primary hover:underline font-medium"
+                        title="Click to download submitted code"
+                      >
+                        Grade {formatGradeDisplay(t.grade)}
+                      </button>
                     </li>
                   ))}
                 </ul>
@@ -633,7 +669,17 @@ export default function AssignmentDetailPage() {
                               const att = row.attempts[i];
                               return (
                                 <td key={i} className="p-2 border-b border-border">
-                              {formatGradeDisplay(att?.grade)}
+                                  {att ? (
+                                    <button
+                                      onClick={() => downloadSubmissionCode(att.id)}
+                                      className="text-primary hover:underline font-medium"
+                                      title="Click to download submitted code"
+                                    >
+                                      {formatGradeDisplay(att.earned_points)}
+                                    </button>
+                                  ) : (
+                                    "—"
+                                  )}
                                 </td>
                               );
                             })}

@@ -16,6 +16,7 @@ export default function GradebookPage() {
   const [data, setData] = React.useState<GBPayload | null>(null);
   const [err, setErr] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [showPoints, setShowPoints] = React.useState(false); // Toggle between percentage and points
 
   React.useEffect(() => {
     (async () => {
@@ -39,10 +40,27 @@ export default function GradebookPage() {
   return (
     <div className="container py-12">
         <Card>
-          <h1 className="text-3xl font-bold mb-6">
-            Gradebook{" "}
-            {data ? `– ${data.course.course_code || data.course.name || data.course.id}` : ""}
-          </h1>
+          <div className="flex justify-between items-center mb-6">
+            <h1 className="text-3xl font-bold">
+              Gradebook{" "}
+              {data ? `– ${data.course.course_code || data.course.name || data.course.id}` : ""}
+            </h1>
+
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-muted-foreground">
+                {showPoints ? "Points" : "Percentage"}
+              </span>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="sr-only peer"
+                  checked={showPoints}
+                  onChange={(e) => setShowPoints(e.target.checked)}
+                />
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+              </label>
+            </div>
+          </div>
 
           {loading && <p className="text-center text-muted-foreground">Loading…</p>}
           {err && (
@@ -89,8 +107,14 @@ export default function GradebookPage() {
 
                             let displayGrade = "—";
                             if (gradeValue !== null && gradeValue !== undefined) {
-                              const percentage = totalPoints > 0 ? Math.round((gradeValue / totalPoints) * 100) : 0;
-                              displayGrade = `${percentage} (${gradeValue}/${totalPoints})`;
+                              if (showPoints) {
+                                // Show points format: "35/50"
+                                displayGrade = `${gradeValue}/${totalPoints}`;
+                              } else {
+                                // Show percentage format: "70%"
+                                const percentage = totalPoints > 0 ? Math.round((gradeValue / totalPoints) * 100) : 0;
+                                displayGrade = `${percentage}%`;
+                              }
                             }
 
                             return (
