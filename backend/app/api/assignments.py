@@ -337,30 +337,42 @@ def list_test_cases(
     assignment_id: int,
     student_id: Optional[int] = None,
     include_hidden: bool = False,
+    user_id: Optional[int] = Query(None, description="User ID for authentication"),
     db: Session = Depends(get_db),
 ):
     """
     List all test cases for an assignment.
     - If student_id is provided and user is a student, only visible test cases are returned
-    - If include_hidden is True or user is faculty, all test cases are returned
+    - If include_hidden is True and user is faculty, all test cases are returned
     """
     a = db.get(Assignment, assignment_id)
     if not a:
         raise HTTPException(404, "Assignment not found")
-    
+
+    # Determine user role for authentication
+    user_role = None
+    if user_id:
+        user = db.get(User, user_id)
+        if user:
+            user_role = user.role
+
     # Determine if user is a student
     is_student = False
     if student_id:
         user = db.get(User, student_id)
         if user and user.role == RoleEnum.student:
             is_student = True
-    
+
     # Fetch test cases
     query = select(TestCase).where(TestCase.assignment_id == assignment_id)
-    
+
     # If student and not including hidden, filter by visibility
+    # If include_hidden is True, only allow if user is faculty
     if is_student and not include_hidden:
         query = query.where(TestCase.visibility == True)
+    elif include_hidden and user_role != RoleEnum.faculty:
+        # Only faculty can see hidden test cases
+        raise HTTPException(403, "Only faculty members can view hidden test cases")
     
     test_cases = db.execute(
         query.order_by(TestCase.order.asc().nulls_last(), TestCase.id.asc())

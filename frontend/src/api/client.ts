@@ -20,13 +20,17 @@ export async function fetchJson<T = unknown>(
   path: string,
   init?: RequestInit
 ): Promise<T> {
-  if (!path.startsWith("/")) {
-    throw new Error(`fetchJson path must start with '/': received "${path}"`);
+  // If path is already a full URL (starts with http), use it directly
+  // Otherwise, it must start with '/' for joining with BASE
+  if (!path.startsWith("http") && !path.startsWith("/")) {
+    throw new Error(`fetchJson path must start with '/' or be a full URL: received "${path}"`);
   }
 
   const { token, userId, role } = getAuthFromStorage();
 
-  const res = await fetch(join(BASE, path), {
+  // If path is already a full URL, use it directly; otherwise join with BASE
+  const url = path.startsWith("http") ? path : join(BASE, path);
+  const res = await fetch(url, {
     headers: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),

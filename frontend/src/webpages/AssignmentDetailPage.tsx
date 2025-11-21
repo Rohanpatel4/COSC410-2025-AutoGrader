@@ -101,7 +101,7 @@ export default function AssignmentDetailPage() {
     // Fetch existing test cases
     setEditTestCasesLoading(true);
     try {
-      const testCases: any[] = await fetchJson(`${BASE}/assignments/${a.id}/test-cases`);
+      const testCases: any[] = await fetchJson(`/api/v1/assignments/${a.id}/test-cases?include_hidden=true&user_id=${userId}`);
       setEditTestCases(testCases.map((tc: any, index: number) => ({
         id: tc.id,
         code: tc.test_code,
@@ -181,7 +181,7 @@ export default function AssignmentDetailPage() {
       const assignmentId = parseInt(assignment_id);
 
       // Get original test cases to compare
-      const originalTestCases: any[] = await fetchJson(`${BASE}/assignments/${assignmentId}/test-cases`);
+      const originalTestCases: any[] = await fetchJson(`/api/v1/assignments/${assignmentId}/test-cases`);
       const originalIds = new Set(originalTestCases.map((tc: any) => tc.id));
       const currentIds = new Set(editTestCases.map(tc => tc.id));
 
