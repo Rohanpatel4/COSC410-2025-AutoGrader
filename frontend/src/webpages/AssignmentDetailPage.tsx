@@ -7,6 +7,7 @@ import type { Assignment } from "../types/assignments";
 import { Button, Card, Alert, Input, Label } from "../components/ui";
 import { formatGradeDisplay } from "../utils/formatGrade";
 import { GripVertical } from "lucide-react";
+import StudentAssignmentView from "./StudentAssignmentView";
 
 type Attempt = { id: number; grade: number | null; earned_points?: number | null };
 
@@ -304,11 +305,15 @@ export default function AssignmentDetailPage() {
 
       // Load test cases to calculate total points
       try {
-        const testCasesData: any[] = await fetchJson<any[]>(
-          `/api/v1/assignments/${encodeURIComponent(assignment_id)}/test-cases?include_hidden=true&user_id=${userId}`
-        ).catch(() => []);
+        // For students, don't use include_hidden (they can't see hidden test cases via API)
+        // For faculty, use include_hidden to get all test cases
+        const url = isStudent
+          ? `/api/v1/assignments/${encodeURIComponent(assignment_id)}/test-cases?user_id=${userId}`
+          : `/api/v1/assignments/${encodeURIComponent(assignment_id)}/test-cases?include_hidden=true&user_id=${userId}`;
+        const testCasesData: any[] = await fetchJson<any[]>(url).catch(() => []);
         setTestCases(testCasesData || []);
       } catch (e) {
+        console.error("Failed to load test cases:", e);
         setTestCases([]);
       }
 
@@ -467,528 +472,356 @@ export default function AssignmentDetailPage() {
 
         {!a ? null : (
           <>
-            <Card>
-              <div className="flex justify-between items-start mb-4">
-                <h1 className="text-3xl font-bold">{a.title}</h1>
-                {!isStudent && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={openEditModal}
-                  >
-                    Edit Assignment
-                  </Button>
-                )}
-              </div>
-              {a.description && <p className="text-foreground mb-4">{a.description}</p>}
+            {isStudent ? (
+              <StudentAssignmentView
+                assignment={a}
+                attempts={attempts}
+                bestGrade={bestGrade}
+                totalPoints={totalPoints}
+                testCases={testCases}
+                onCodeChange={setCode}
+                onFileChange={setFile}
+                onSubmit={onSubmit}
+                loading={submitMsg === "Submitting…"}
+                submitMsg={submitMsg}
+                lastResult={lastResult}
+                nowBlocked={nowBlocked}
+                limitReached={limitReached}
+                initialCode={code}
+              />
+            ) : (
+              <>
+                <Card>
+                  <div className="flex justify-between items-start mb-4">
+                    <h1 className="text-3xl font-bold">{a.title}</h1>
+                    {!isStudent && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={openEditModal}
+                      >
+                        Edit Assignment
+                      </Button>
+                    )}
+                  </div>
+                  {a.description && <p className="text-foreground mb-4">{a.description}</p>}
 
-              <div className="space-y-2 text-sm text-muted-foreground">
-                <p>
-                  Window: {a.start ? new Date(a.start).toLocaleString() : "—"} →{" "}
-                  {a.stop ? new Date(a.stop).toLocaleString() : "—"}
-                </p>
-                <p>
-                  Submission limit: {a.sub_limit == null ? "∞" : a.sub_limit}
-                </p>
-              </div>
-            </Card>
-
-          {isStudent && (
-            <Card>
-              <h2 className="text-2xl font-semibold mb-4">Submit Code</h2>
-              <form onSubmit={onSubmit} className="space-y-4">
-                <div className="space-y-4">
-                  <div>
-                    <h3 className="text-lg font-medium mb-2">Option 1: Upload a file</h3>
-                    <input
-                      type="file"
-                      accept={getFileExtensions(a?.language)}
-                      aria-label="Upload your code file"
-                      onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                      disabled={nowBlocked || limitReached}
-                      className="block text-sm text-foreground file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary file:text-primary-foreground hover:file:opacity-90 disabled:opacity-50"
-                    />
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Accepted: {getFileExtensions(a?.language).split(',').join(', ')}
+                  <div className="space-y-2 text-sm text-muted-foreground">
+                    <p>
+                      Window: {a.start ? new Date(a.start).toLocaleString() : "—"} →{" "}
+                      {a.stop ? new Date(a.stop).toLocaleString() : "—"}
+                    </p>
+                    <p>
+                      Submission limit: {a.sub_limit == null ? "∞" : a.sub_limit}
                     </p>
                   </div>
-
-                  <div className="text-center text-muted-foreground">
-                    <span className="px-3 py-1 bg-muted rounded-full text-xs font-medium">OR</span>
-                  </div>
-
-                  <div>
-                    <h3 className="text-lg font-medium mb-2">Option 2: Paste your code</h3>
-                    <textarea
-                      placeholder={`Paste your ${a?.language ? a.language.charAt(0).toUpperCase() + a.language.slice(1) : 'code'} code here...`}
-                      className="w-full h-64 font-mono text-sm resize-vertical"
-                      style={{
-                        fontFamily: "'JetBrains Mono', 'Monaco', 'Menlo', 'Ubuntu Mono', monospace",
-                        lineHeight: '1.5',
-                        tabSize: '4'
-                      }}
-                      onChange={(e) => setCode(e.target.value)}
-                      value={code}
-                      disabled={nowBlocked || limitReached}
-                    />
-                  </div>
-                </div>
-
-                <Button type="submit" disabled={(!file && !code.trim()) || nowBlocked || limitReached}>
-                  Submit
-                </Button>
-                
-                {nowBlocked && (
-                  <Alert variant="error">
-                    <p className="font-medium">Submission window is closed.</p>
-                  </Alert>
-                )}
-                {limitReached && (
-                  <Alert variant="error">
-                    <p className="font-medium">You've reached the submission limit.</p>
-                  </Alert>
-                )}
-                {submitMsg && <p className="text-foreground">{submitMsg}</p>}
-              </form>
-
-              {/* Show grading results prominently */}
-              {lastResult?.grading && (
-                <Card 
-                  className="mt-3 text-center"
-                  style={{
-                    backgroundColor: lastResult.result?.grading?.all_passed ? "rgb(240, 253, 244)" : "rgb(254, 242, 242)",
-                    borderColor: lastResult.result?.grading?.all_passed ? "rgb(22, 163, 74)" : "rgb(220, 38, 38)",
-                    borderWidth: "2px"
-                  }}
-                >
-                  <div
-                    className="text-2xl font-bold mb-2"
-                    style={{
-                      color: lastResult.result?.grading?.all_passed ? "rgb(22, 163, 74)" : "rgb(220, 38, 38)"
-                    }}
-                  >
-                    {lastResult.result?.grading?.all_passed ? "PASS" : "FAIL"}
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    {lastResult.result?.grading?.passed_tests || 0} of {lastResult.result?.grading?.total_tests || 0} tests passed
-                  </div>
                 </Card>
-              )}
 
-              {lastResult && lastResult.test_cases && (
-                <div className="mt-6">
-                  <h3 className="text-lg font-semibold mb-4">Test Results</h3>
-                  <div className="space-y-3">
-                    {lastResult.test_cases.map((testCase: any) => (
-                      <Card key={testCase.id} variant="muted" className="p-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-3">
-                            {/* Pass/Fail indicator */}
-                            <div
-                              className={`w-4 h-4 rounded-full ${
-                                testCase.passed ? 'bg-green-500' : 'bg-red-500'
-                              }`}
-                              title={testCase.passed ? 'Passed' : 'Failed'}
-                            />
-                            <span className="font-medium">
-                              Test Case {testCase.order || testCase.id}
-                            </span>
-                            <span className="text-sm text-muted-foreground">
-                              ({testCase.point_value} point{testCase.point_value !== 1 ? 's' : ''})
-                            </span>
-                          </div>
-                          <div className="text-right">
-                            <div className={`font-semibold ${
-                              testCase.passed ? 'text-green-600' : 'text-red-600'
-                            }`}>
-                              {testCase.points_earned || 0} / {testCase.point_value}
-                            </div>
-                          </div>
-                        </div>
+                <Card>
+                  <h2 className="text-2xl font-semibold mb-4">Grades (this assignment)</h2>
+                  {facLoading && <p className="text-muted-foreground">Loading grades…</p>}
+                  {facErr && (
+                    <Alert variant="error">
+                      <p className="font-medium">{facErr}</p>
+                    </Alert>
+                  )}
 
-                        {/* Show details only for visible test cases */}
-                        {testCase.visibility ? (
-                          <div className="mt-3">
-                            <div className="bg-card border border-border rounded p-3">
-                              <pre className="text-sm font-mono whitespace-pre-wrap text-slate-100">
-                                {testCase.test_code}
-                              </pre>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="mt-3">
-                            <div className="text-sm text-muted-foreground italic bg-slate-700 border border-slate-600 rounded p-3">
-                              Test case details not visible to students
-                            </div>
-                          </div>
-                        )}
-                      </Card>
-                    ))}
-                  </div>
+                  {!facLoading && !facErr && (facRows?.length ?? 0) === 0 && (
+                    <p className="text-muted-foreground">No enrolled students or no data yet.</p>
+                  )}
 
-                  {/* Summary */}
-                  <div className="mt-4 p-4 bg-card border border-border rounded-lg">
-                    <div className="flex justify-between items-center">
-                      <span className="font-medium text-slate-100">Overall Result:</span>
-                      <span className={`font-bold text-lg ${
-                        lastResult.result?.grading?.all_passed ? 'text-green-400' : 'text-red-400'
-                      }`}>
-                        {lastResult.result?.grading?.all_passed ? 'PASS' : 'FAIL'}
-                      </span>
-                    </div>
-                    <div className="text-sm text-slate-300 mt-1">
-                      {lastResult.result?.grading?.passed_tests || 0} of {lastResult.result?.grading?.total_tests || 0} tests passed
-                    </div>
-                  </div>
-                </div>
-              )}
-            </Card>
-          )}
-
-
-
-          {isStudent && (
-            <Card>
-              <h2 className="text-2xl font-semibold mb-4">Your attempts</h2>
-              {!attempts.length ? (
-                <p className="text-muted-foreground">No attempts yet.</p>
-              ) : (
-                <ul className="space-y-2">
-                  {attempts.map((t, idx) => {
-                    const earnedPoints = t.earned_points ?? t.grade ?? 0;
-                    const displayPoints = totalPoints > 0 
-                      ? `${earnedPoints} / ${totalPoints}` 
-                      : formatGradeDisplay(t.grade);
-                    return (
-                      <li key={t.id} className="text-foreground">
-                        Attempt {idx + 1}: <span className="font-medium">{displayPoints}</span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-              <p className="mt-4 text-foreground">
-                Best grade:{" "}
-                <strong className="text-primary">
-                  {bestGrade == null || bestGrade < 0 
-                    ? "—" 
-                    : totalPoints > 0 
-                      ? `${bestGrade} / ${totalPoints}` 
-                      : formatGradeDisplay(bestGrade)}
-                </strong>
-              </p>
-            </Card>
-          )}
-
-          {!isStudent && (
-            <Card>
-              <h2 className="text-2xl font-semibold mb-4">Grades (this assignment)</h2>
-              {facLoading && <p className="text-muted-foreground">Loading grades…</p>}
-              {facErr && (
-                <Alert variant="error">
-                  <p className="font-medium">{facErr}</p>
-                </Alert>
-              )}
-
-              {!facLoading && !facErr && (facRows?.length ?? 0) === 0 && (
-                <p className="text-muted-foreground">No enrolled students or no data yet.</p>
-              )}
-
-              {!facLoading && !facErr && (facRows?.length ?? 0) > 0 && (
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse min-w-[600px]">
-                    <thead>
-                      <tr>
-                        <th className="text-left p-2 border-b border-border">
-                          Student
-                        </th>
-                        {(() => {
-                          const maxAttempts =
-                            facRows?.reduce((m, r) => Math.max(m, r.attempts.length), 0) ?? 0;
-                          const headers = [];
-                          for (let i = 0; i < maxAttempts; i++) {
-                            headers.push(
-                              <th
-                                key={`h-${i}`}
-                                className="text-left p-2 border-b border-border"
-                              >
-                                Attempt {i + 1}
-                              </th>
-                            );
-                          }
-                          headers.push(
-                            <th
-                              key="best"
-                              className="text-left p-2 border-b border-border"
-                            >
-                              Best
+                  {!facLoading && !facErr && (facRows?.length ?? 0) > 0 && (
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse min-w-[600px]">
+                        <thead>
+                          <tr>
+                            <th className="text-left p-2 border-b border-border">
+                              Student
                             </th>
-                          );
-                          return headers;
-                        })()}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {facRows!.map((row) => {
-                        const maxAttempts =
-                          facRows?.reduce((m, r) => Math.max(m, r.attempts.length), 0) ?? 0;
-                        return (
-                          <tr key={row.student_id}>
-                            <td className="p-2 border-b border-border">
-                              {row.username}
-                            </td>
-                            {[...Array(maxAttempts)].map((_, i) => {
-                              const att = row.attempts[i];
-                              const earnedPoints = att?.earned_points ?? null;
-                              const displayPoints = earnedPoints !== null && totalPoints > 0
-                                ? `${earnedPoints} / ${totalPoints}`
-                                : formatGradeDisplay(earnedPoints);
-                              
-                              return (
-                                <td key={i} className="p-2 border-b border-border">
-                                  {att ? (
-                                    <button
-                                      onClick={() => downloadSubmissionCode(att.id)}
-                                      className="text-primary hover:underline font-medium"
-                                      title="Click to download submitted code"
-                                    >
-                                      {displayPoints}
-                                    </button>
-                                  ) : (
-                                    "—"
-                                  )}
-                                </td>
+                            {(() => {
+                              const maxAttempts =
+                                facRows?.reduce((m, r) => Math.max(m, r.attempts.length), 0) ?? 0;
+                              const headers = [];
+                              for (let i = 0; i < maxAttempts; i++) {
+                                headers.push(
+                                  <th
+                                    key={`h-${i}`}
+                                    className="text-left p-2 border-b border-border"
+                                  >
+                                    Attempt {i + 1}
+                                  </th>
+                                );
+                              }
+                              headers.push(
+                                <th
+                                  key="best"
+                                  className="text-left p-2 border-b border-border"
+                                >
+                                  Best
+                                </th>
                               );
-                            })}
-                            <td className="p-2 border-b border-border font-semibold">
-                              {row.best == null 
-                                ? "—" 
-                                : totalPoints > 0 
-                                  ? `${row.best} / ${totalPoints}` 
-                                  : formatGradeDisplay(row.best)}
-                            </td>
+                              return headers;
+                            })()}
                           </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </Card>
-          )}
+                        </thead>
+                        <tbody>
+                          {facRows!.map((row) => {
+                            const maxAttempts =
+                              facRows?.reduce((m, r) => Math.max(m, r.attempts.length), 0) ?? 0;
+                            return (
+                              <tr key={row.student_id}>
+                                <td className="p-2 border-b border-border">
+                                  {row.username}
+                                </td>
+                                {[...Array(maxAttempts)].map((_, i) => {
+                                  const att = row.attempts[i];
+                                  const earnedPoints = att?.earned_points ?? null;
+                                  const displayPoints = earnedPoints !== null && totalPoints > 0
+                                    ? `${earnedPoints} / ${totalPoints}`
+                                    : formatGradeDisplay(earnedPoints);
+                                  
+                                  return (
+                                    <td key={i} className="p-2 border-b border-border">
+                                      {att ? (
+                                        <button
+                                          onClick={() => downloadSubmissionCode(att.id)}
+                                          className="text-primary hover:underline font-medium"
+                                          title="Click to download submitted code"
+                                        >
+                                          {displayPoints}
+                                        </button>
+                                      ) : (
+                                        "—"
+                                      )}
+                                    </td>
+                                  );
+                                })}
+                                <td className="p-2 border-b border-border font-semibold">
+                                  {row.best == null 
+                                    ? "—" 
+                                    : totalPoints > 0 
+                                      ? `${row.best} / ${totalPoints}` 
+                                      : formatGradeDisplay(row.best)}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Card>
+              </>
+            )}
 
-        {/* Edit Assignment Modal */}
-        {editModalOpen && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-card rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-bold">Edit Assignment</h2>
-                <Button
-                  variant="danger"
-                  size="sm"
-                  onClick={deleteAssignment}
-                  disabled={editLoading}
-                >
-                  Delete
-                </Button>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="edit-title">Title *</Label>
-                  <Input
-                    id="edit-title"
-                    value={editTitle}
-                    onChange={(e) => setEditTitle(e.target.value)}
-                    placeholder="Assignment title"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="edit-description">Description</Label>
-                  <textarea
-                    id="edit-description"
-                    value={editDescription}
-                    onChange={(e) => setEditDescription(e.target.value)}
-                    placeholder="Assignment description"
-                    rows={3}
-                    className="w-full p-2 border border-gray-300 rounded resize-vertical"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="edit-language">Language</Label>
-                  <select
-                    id="edit-language"
-                    value={editLanguage}
-                    onChange={(e) => setEditLanguage(e.target.value)}
-                    className="w-full p-2 border border-gray-300 rounded"
-                  >
-                    <option value="python">Python</option>
-                    <option value="java">Java</option>
-                    <option value="cpp">C++</option>
-
-                  </select>
-                </div>
-
-                <div>
-                  <Label htmlFor="edit-sub-limit">Submission Limit</Label>
-                  <Input
-                    id="edit-sub-limit"
-                    type="number"
-                    value={editSubLimit}
-                    onChange={(e) => setEditSubLimit(e.target.value)}
-                    placeholder="Unlimited if empty"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="edit-start">Start Date/Time</Label>
-                  <Input
-                    id="edit-start"
-                    type="datetime-local"
-                    value={editStart}
-                    onChange={(e) => setEditStart(e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="edit-stop">End Date/Time</Label>
-                  <Input
-                    id="edit-stop"
-                    type="datetime-local"
-                    value={editStop}
-                    onChange={(e) => setEditStop(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              {/* Test Cases Section */}
-              <div className="mt-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-semibold">Test Cases</h3>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={addEditTestCase}
-                    disabled={editTestCasesLoading}
-                  >
-                    Add Test Case
-                  </Button>
-                </div>
-
-                {editTestCasesLoading ? (
-                  <p className="text-muted-foreground">Loading test cases...</p>
-                ) : editTestCases.length === 0 ? (
-                  <p className="text-muted-foreground">No test cases yet. Click "Add Test Case" to create one.</p>
-                ) : (
-                  <div className="space-y-4 max-h-96 overflow-y-auto">
-                    {editTestCases.map((testCase, index) => (
-                      <div
-                        key={testCase.id}
-                        className="space-y-2 border border-border rounded p-4 bg-muted/20"
-                        draggable
-                        onDragStart={(e) => e.dataTransfer.setData('text/plain', index.toString())}
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          const fromIndex = parseInt(e.dataTransfer.getData('text/plain'));
-                          moveEditTestCase(fromIndex, index);
-                        }}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="cursor-move text-muted-foreground hover:text-foreground">
-                            <GripVertical className="w-4 h-4" />
-                          </div>
-                          <Label className="text-sm font-medium">
-                            Test Case {index + 1}:
-                          </Label>
-                          <div className="flex items-center gap-4 ml-auto">
-                            <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={testCase.visible}
-                                onChange={(e) => updateEditTestCase(testCase.id, 'visible', e.target.checked)}
-                                className="w-4 h-4"
-                              />
-                              visible
-                            </label>
-                            <div className="flex items-center gap-2">
-                              <Label className="text-sm text-muted-foreground">points:</Label>
-                              <Input
-                                type="number"
-                                min="1"
-                                value={testCase.points || ''}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  if (val === '') {
-                                    updateEditTestCase(testCase.id, 'points', 0);
-                                  } else {
-                                    const numVal = parseInt(val);
-                                    updateEditTestCase(testCase.id, 'points', isNaN(numVal) ? 1 : numVal);
-                                  }
-                                }}
-                                onBlur={(e) => {
-                                  const val = parseInt(e.target.value);
-                                  if (!val || val < 1) {
-                                    updateEditTestCase(testCase.id, 'points', 1);
-                                  }
-                                }}
-                                className="w-16 h-8 text-center"
-                              />
-                            </div>
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="sm"
-                              onClick={() => deleteEditTestCase(testCase.id)}
-                              disabled={editTestCases.length <= 1}
-                            >
-                              ✕
-                            </Button>
-                          </div>
-                        </div>
-                        <textarea
-                          placeholder="Enter test case code (e.g., assert add(2, 3) == 5)"
-                          value={testCase.code}
-                          onChange={(e) => updateEditTestCase(testCase.id, 'code', e.target.value)}
-                          rows={3}
-                          className="w-full p-2 border border-border rounded text-sm font-mono resize-vertical"
-                          style={{ fontFamily: 'monospace' }}
-                        />
-                      </div>
-                    ))}
+            {/* Edit Assignment Modal */}
+            {editModalOpen && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div className="bg-card rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+                  <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-2xl font-bold">Edit Assignment</h2>
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      onClick={deleteAssignment}
+                      disabled={editLoading}
+                    >
+                      Delete
+                    </Button>
                   </div>
-                )}
-              </div>
 
-              <div className="flex gap-3 mt-6">
-                <Button
-                  variant="secondary"
-                  onClick={() => setEditModalOpen(false)}
-                  disabled={editLoading}
-                  className="flex-1"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={saveEdit}
-                  disabled={editLoading || !editTitle.trim()}
-                  className="flex-1"
-                >
-                  {editLoading ? "Saving..." : "Save Changes"}
-                </Button>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="edit-title">Title *</Label>
+                      <Input
+                        id="edit-title"
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        placeholder="Assignment title"
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="edit-description">Description</Label>
+                      <textarea
+                        id="edit-description"
+                        value={editDescription}
+                        onChange={(e) => setEditDescription(e.target.value)}
+                        placeholder="Assignment description"
+                        rows={3}
+                        className="w-full p-2 border border-gray-300 rounded resize-vertical"
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="edit-language">Language</Label>
+                      <select
+                        id="edit-language"
+                        value={editLanguage}
+                        onChange={(e) => setEditLanguage(e.target.value)}
+                        className="w-full p-2 border border-gray-300 rounded"
+                      >
+                        <option value="python">Python</option>
+                        <option value="java">Java</option>
+                        <option value="cpp">C++</option>
+
+                      </select>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="edit-sub-limit">Submission Limit</Label>
+                      <Input
+                        id="edit-sub-limit"
+                        type="number"
+                        value={editSubLimit}
+                        onChange={(e) => setEditSubLimit(e.target.value)}
+                        placeholder="Unlimited if empty"
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="edit-start">Start Date/Time</Label>
+                      <Input
+                        id="edit-start"
+                        type="datetime-local"
+                        value={editStart}
+                        onChange={(e) => setEditStart(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="edit-stop">End Date/Time</Label>
+                      <Input
+                        id="edit-stop"
+                        type="datetime-local"
+                        value={editStop}
+                        onChange={(e) => setEditStop(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Test Cases Section */}
+                  <div className="mt-6">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-lg font-semibold">Test Cases</h3>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={addEditTestCase}
+                        disabled={editTestCasesLoading}
+                      >
+                        Add Test Case
+                      </Button>
+                    </div>
+
+                    {editTestCasesLoading ? (
+                      <p className="text-muted-foreground">Loading test cases...</p>
+                    ) : editTestCases.length === 0 ? (
+                      <p className="text-muted-foreground">No test cases yet. Click "Add Test Case" to create one.</p>
+                    ) : (
+                      <div className="space-y-4 max-h-96 overflow-y-auto">
+                        {editTestCases.map((testCase, index) => (
+                          <div
+                            key={testCase.id}
+                            className="space-y-2 border border-border rounded p-4 bg-muted/20"
+                            draggable
+                            onDragStart={(e) => e.dataTransfer.setData('text/plain', index.toString())}
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              const fromIndex = parseInt(e.dataTransfer.getData('text/plain'));
+                              moveEditTestCase(fromIndex, index);
+                            }}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="cursor-move text-muted-foreground hover:text-foreground">
+                                <GripVertical className="w-4 h-4" />
+                              </div>
+                              <Label className="text-sm font-medium">
+                                Test Case {index + 1}:
+                              </Label>
+                              <div className="flex items-center gap-4 ml-auto">
+                                <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={testCase.visible}
+                                    onChange={(e) => updateEditTestCase(testCase.id, 'visible', e.target.checked)}
+                                    className="w-4 h-4"
+                                  />
+                                  visible
+                                </label>
+                                <div className="flex items-center gap-2">
+                                  <Label className="text-sm text-muted-foreground">points:</Label>
+                                  <Input
+                                    type="number"
+                                    min="1"
+                                    value={testCase.points || ''}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      if (val === '') {
+                                        updateEditTestCase(testCase.id, 'points', 0);
+                                      } else {
+                                        const numVal = parseInt(val);
+                                        updateEditTestCase(testCase.id, 'points', isNaN(numVal) ? 1 : numVal);
+                                      }
+                                    }}
+                                    onBlur={(e) => {
+                                      const val = parseInt(e.target.value);
+                                      if (!val || val < 1) {
+                                        updateEditTestCase(testCase.id, 'points', 1);
+                                      }
+                                    }}
+                                    className="w-16 h-8 text-center"
+                                  />
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={() => deleteEditTestCase(testCase.id)}
+                                  disabled={editTestCases.length <= 1}
+                                >
+                                  ✕
+                                </Button>
+                              </div>
+                            </div>
+                            <textarea
+                              placeholder="Enter test case code (e.g., assert add(2, 3) == 5)"
+                              value={testCase.code}
+                              onChange={(e) => updateEditTestCase(testCase.id, 'code', e.target.value)}
+                              rows={3}
+                              className="w-full p-2 border border-border rounded text-sm font-mono resize-vertical"
+                              style={{ fontFamily: 'monospace' }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex gap-3 mt-6">
+                    <Button
+                      variant="secondary"
+                      onClick={() => setEditModalOpen(false)}
+                      disabled={editLoading}
+                      className="flex-1"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={saveEdit}
+                      disabled={editLoading || !editTitle.trim()}
+                      className="flex-1"
+                    >
+                      {editLoading ? "Saving..." : "Save Changes"}
+                    </Button>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            )}
+          </>
         )}
-
-        </>
-      )}
     </div>
   );
 }
-
-
-

@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     # --- Database ---
     # Environment variable DATABASE_URL takes precedence (Pydantic Settings handles this)
     # If not set, use default path relative to backend directory
-    # In Docker: DATABASE_URL=sqlite:///../db/app.db (resolves to /app/db/app.db)
+    # In Docker: defaults to backend/app.db (bind mounted to /app/backend/app.db)
     # Locally: defaults to backend/app.db
     # Note: BaseSettings automatically reads from environment variables and overrides defaults
     DATABASE_URL: Optional[str] = None
