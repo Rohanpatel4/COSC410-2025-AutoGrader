@@ -45,6 +45,7 @@ def _serialize_assignment(db: Session, a: Assignment) -> dict:
     start = getattr(a, "start", None)
     stop = getattr(a, "stop", None)
     language = getattr(a, "language", "python")  # Default to python for backward compatibility
+    instructions = getattr(a, "instructions", None)
 
     return {
         "id": a.id,
@@ -56,6 +57,7 @@ def _serialize_assignment(db: Session, a: Assignment) -> dict:
         "start": _to_iso_or_raw(start),
         "stop": _to_iso_or_raw(stop),
         "num_attempts": int(attempts),
+        "instructions": instructions,
     }
 
 def _parse_dt(v):
@@ -116,6 +118,12 @@ def create_assignment(payload: dict, db: Session = Depends(get_db)):
     title = (payload.get("title") or "").strip()
     description = payload.get("description") or None
     language = (payload.get("language") or "python").strip().lower()
+    
+    instructions = payload.get("instructions", [])
+    # instructions is now Tiptap JSON (dict) or legacy list
+    # We can do minimal validation if needed, or just trust it's valid JSON
+    if instructions is not None and not isinstance(instructions, (dict, list)):
+        raise HTTPException(400, "instructions must be a JSON object or list")
 
     # Handle sub_limit: empty string or None means unlimited (None)
     sub_limit_raw = payload.get("sub_limit", None)
@@ -151,6 +159,7 @@ def create_assignment(payload: dict, db: Session = Depends(get_db)):
         description=description,
         language=language,
         sub_limit=sub_limit,
+        instructions=instructions,
     )
     # Only set if the columns exist (they do in your migration)
     if hasattr(a, "start"):
@@ -204,6 +213,16 @@ def update_assignment(assignment_id: int, payload: dict, db: Session = Depends(g
         if not language:
             raise HTTPException(400, "language cannot be empty")
         a.language = language
+    
+    # Update instructions if provided
+    if "instructions" in payload:
+        instructions = payload.get("instructions")
+        if instructions is not None:
+            if not isinstance(instructions, (dict, list)):
+                raise HTTPException(400, "instructions must be a JSON object or list")
+            a.instructions = instructions
+        else:
+            a.instructions = None
     
     # Update sub_limit if provided
     if "sub_limit" in payload:
@@ -644,17 +663,27 @@ async def submit_to_assignment(
     # Filter visible test cases for student response and include pass/fail status
     visible_test_cases = []
     for tc in test_cases:
+        # Include all test cases in the result, but handle visibility
+        # Note: test_case_results keys are integers (from piston.py parse_test_output)
+        test_result = test_case_results.get(tc.id, {})
+        
+        tc_data = {
+            "id": tc.id,
+            "point_value": tc.point_value,
+            "visibility": tc.visibility,
+            "order": tc.order,
+            "passed": test_result.get("passed", False),
+            "points_earned": test_result.get("points", 0) if test_result.get("passed", False) else 0
+        }
+        
         if tc.visibility:
-            test_result = test_case_results.get(tc.id, {})
-            visible_test_cases.append({
-                "id": tc.id,
-                "point_value": tc.point_value,
-                "test_code": tc.test_code,
-                "visibility": tc.visibility,
-                "order": tc.order,
-                "passed": test_result.get("passed", False),
-                "points_earned": test_result.get("points", 0) if test_result.get("passed", False) else 0
-            })
+            # Visible test cases include code
+            tc_data["test_code"] = tc.test_code
+        else:
+            # Hidden test cases do not include code
+            tc_data["test_code"] = None
+            
+        visible_test_cases.append(tc_data)
     
     # Return complete result with filtered test cases for students
     return {
@@ -662,7 +691,7 @@ async def submit_to_assignment(
         "submission_id": submission_record.id,
         "grade": grade,
         "result": result,
-        "test_cases": visible_test_cases  # Only visible test cases for students with pass/fail status
+        "test_cases": visible_test_cases  # Includes all test cases with pass/fail status (code hidden for invisible ones)
     }
 
 @router.get("/{assignment_id}/submissions/{submission_id}/code")

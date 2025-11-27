@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Enum, Integer, Boolean, Text, ForeignKey, DateTime, Table, UniqueConstraint
+from sqlalchemy import Column, String, Enum, Integer, Boolean, Text, ForeignKey, DateTime, Table, UniqueConstraint, JSON
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from datetime import datetime, UTC
 import enum
@@ -59,6 +59,7 @@ class Assignment(Base):
     sub_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
     start: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
     stop:  Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    instructions: Mapped[dict | list[dict] | None] = mapped_column(JSON, nullable=True, default=dict)
 
     course: Mapped["Course"] = relationship(back_populates="assignments")
     test_cases: Mapped[list["TestCase"]] = relationship(

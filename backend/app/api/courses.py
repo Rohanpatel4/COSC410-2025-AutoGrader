@@ -71,6 +71,7 @@ def _assignment_to_dict(
     if attempts_by_aid is not None:
         num_attempts = int(attempts_by_aid.get(a.id, 0))
     language = getattr(a, "language", "python")  # Default to python for backward compatibility
+    instructions = getattr(a, "instructions", None)
     return {
         "id": a.id,
         "course_id": a.course_id,
@@ -81,6 +82,7 @@ def _assignment_to_dict(
         "start": getattr(a, "start", None),
         "stop": getattr(a, "stop", None),
         "num_attempts": num_attempts,
+        "instructions": instructions,
     }
 
 
@@ -465,6 +467,12 @@ def create_assignment_for_course(
         raise HTTPException(400, "language is required")
 
     # Handle sub_limit: empty string or None means unlimited (None)
+    
+    instructions = payload.get("instructions", None)
+    # instructions must be a Tiptap JSON object (dict) or None
+    if instructions is not None and not isinstance(instructions, dict):
+        raise HTTPException(400, "instructions must be a JSON object (Tiptap format)")
+
     sub_limit_raw = payload.get("sub_limit", None)
     if sub_limit_raw == "" or sub_limit_raw is None:
         sub_limit = None
@@ -487,6 +495,7 @@ def create_assignment_for_course(
         description=description,
         language=language,
         sub_limit=sub_limit,
+        instructions=instructions,
     )
     if hasattr(a, "start"):
         a.start = start

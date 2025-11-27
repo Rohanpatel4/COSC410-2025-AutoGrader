@@ -50,7 +50,7 @@ export function AuthProvider({
     setUserEmail(email);
     setRole(role);
     setToken(token);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ userId, role, token }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ userId, role, token, userEmail: email }));
   };
 
   const logout = () => {

@@ -9,5 +9,6 @@ export type Assignment = {
   num_attempts?: number;
   start?: string | null;
   stop?: string | null;
+  instructions?: any | null;
 };
 

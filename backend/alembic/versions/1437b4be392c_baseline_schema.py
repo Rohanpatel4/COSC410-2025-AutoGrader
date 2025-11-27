@@ -1,8 +1,8 @@
 """baseline_schema
 
-Revision ID: 92ed72f1d7fa
+Revision ID: 1437b4be392c
 Revises: 
-Create Date: 2025-11-23 01:58:09.846811
+Create Date: 2025-11-26 12:37:32.180091
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '92ed72f1d7fa'
+revision = '1437b4be392c'
 down_revision = None
 branch_labels = None
 depends_on = None

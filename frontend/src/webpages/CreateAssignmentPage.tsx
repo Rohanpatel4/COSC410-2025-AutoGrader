@@ -10,6 +10,7 @@ function join(base: string, path: string) {
 }
 import { Button, Input, Label, Card, Alert } from "../components/ui";
 import { ArrowLeft, Plus, Trash2, GripVertical } from "lucide-react";
+import InstructionsManager from "../components/ui/InstructionsManager";
 
 type TestCase = {
   id: number;
@@ -26,6 +27,7 @@ export default function CreateAssignmentPage() {
   const [title, setTitle] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [language, setLanguage] = React.useState("python");
+  const [instructions, setInstructions] = React.useState<any>(null);
   const [subLimit, setSubLimit] = React.useState<string>("");
   const [start, setStart] = React.useState<string>("");
   const [stop, setStop] = React.useState<string>("");
@@ -51,6 +53,7 @@ export default function CreateAssignmentPage() {
         title: title.trim(),
         description: description.trim() || null,
         language: language,
+        instructions: instructions,
       };
       const limitNum = subLimit.trim() ? Number(subLimit.trim()) : null;
       if (limitNum != null && Number.isFinite(limitNum)) payload.sub_limit = limitNum;
@@ -198,6 +201,12 @@ export default function CreateAssignmentPage() {
               disabled={submitting}
             />
           </div>
+
+          <InstructionsManager
+            instructions={instructions}
+            onChange={setInstructions}
+            disabled={submitting}
+          />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>

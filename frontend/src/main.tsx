@@ -23,9 +23,30 @@ import UploadStudentFile from "./webpages/UploadStudentFile";
 
 import "./styles/index.css";
 import { AuthProvider, Protected, useAuth } from "./auth/AuthContext";
-import { Button } from "./components/ui/button";
+import { Button } from "./components/ui/Button";
 import { useNavigate } from "react-router-dom";
 import { Plus, BookOpen } from "lucide-react";
+
+function AssignmentDetailPageWrapper() {
+  const { role } = useAuth();
+  const isStudent = role === "student";
+
+  // Students get a full-screen view without the title card
+  if (isStudent) {
+    return (
+      <Layout fullScreen>
+        <AssignmentDetailPage />
+      </Layout>
+    );
+  }
+
+  // Faculty get the standard view with title
+  return (
+    <Layout title="Assignment Details">
+      <AssignmentDetailPage />
+    </Layout>
+  );
+}
 
 function CoursesLayoutWrapper() {
   const navigate = useNavigate();
@@ -215,9 +236,7 @@ function AppRouter() {
           path="/assignments/:assignment_id"
           element={
             <Protected>
-              <Layout title="Assignment Details">
-                <AssignmentDetailPage />
-              </Layout>
+              <AssignmentDetailPageWrapper />
             </Protected>
           }
         />

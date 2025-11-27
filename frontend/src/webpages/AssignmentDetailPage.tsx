@@ -8,6 +8,7 @@ import { Button, Card, Alert, Input, Label } from "../components/ui";
 import { formatGradeDisplay } from "../utils/formatGrade";
 import { GripVertical } from "lucide-react";
 import StudentAssignmentView from "./StudentAssignmentView";
+import InstructionsManager from "../components/ui/InstructionsManager";
 
 type Attempt = { id: number; grade: number | null; earned_points?: number | null };
 
@@ -54,6 +55,7 @@ export default function AssignmentDetailPage() {
   const [editSubLimit, setEditSubLimit] = React.useState("");
   const [editStart, setEditStart] = React.useState("");
   const [editStop, setEditStop] = React.useState("");
+  const [editInstructions, setEditInstructions] = React.useState<any>(null);
   const [editLoading, setEditLoading] = React.useState(false);
 
   // Edit test cases state
@@ -123,6 +125,8 @@ export default function AssignmentDetailPage() {
     setEditSubLimit(a.sub_limit?.toString() || "");
     setEditStart(a.start ? new Date(a.start).toISOString().slice(0, 16) : "");
     setEditStop(a.stop ? new Date(a.stop).toISOString().slice(0, 16) : "");
+    // Set instructions directly
+    setEditInstructions(a.instructions || null);
 
     // Fetch existing test cases
     setEditTestCasesLoading(true);
@@ -222,6 +226,7 @@ export default function AssignmentDetailPage() {
       if (editSubLimit) payload.sub_limit = editSubLimit;
       if (editStart) payload.start = editStart;
       if (editStop) payload.stop = editStop;
+      payload.instructions = editInstructions;
 
       await fetchJson(
         `/api/v1/assignments/${encodeURIComponent(assignment_id)}`,
@@ -430,7 +435,7 @@ export default function AssignmentDetailPage() {
         return;
       }
 
-      setSubmitMsg(`Submitted. Grade: ${formatGradeDisplay(data?.grade)}`);
+      setSubmitMsg(`Submitted. Grade: ${formatGradeDisplay(data?.grade)}%`);
       setLastResult(data ?? null);
 
       // refresh attempts
@@ -443,6 +448,40 @@ export default function AssignmentDetailPage() {
     } catch (err: any) {
       setSubmitMsg(err?.message || "Network error");
     }
+  }
+
+  if (isStudent && a) {
+    return (
+      <>
+        {/* For students, we render the full-screen assignment view without the container/padding wrappers */}
+        {loading && <div className="p-8 text-center text-muted-foreground">Loading…</div>}
+        {err && (
+          <div className="p-4">
+             <Alert variant="error">
+                <p className="font-medium">{err}</p>
+             </Alert>
+          </div>
+        )}
+        
+        <StudentAssignmentView
+          assignment={a}
+          attempts={attempts}
+          bestGrade={bestGrade}
+          totalPoints={totalPoints}
+          testCases={testCases}
+          onCodeChange={setCode}
+          onFileChange={setFile}
+          onSubmit={onSubmit}
+          loading={submitMsg === "Submitting…"}
+          submitMsg={submitMsg}
+          lastResult={lastResult}
+          nowBlocked={nowBlocked}
+          limitReached={limitReached}
+          initialCode={code}
+          instructions={a.instructions}
+        />
+      </>
+    );
   }
 
   return (
@@ -472,59 +511,38 @@ export default function AssignmentDetailPage() {
 
         {!a ? null : (
           <>
-            {isStudent ? (
-              <StudentAssignmentView
-                assignment={a}
-                attempts={attempts}
-                bestGrade={bestGrade}
-                totalPoints={totalPoints}
-                testCases={testCases}
-                onCodeChange={setCode}
-                onFileChange={setFile}
-                onSubmit={onSubmit}
-                loading={submitMsg === "Submitting…"}
-                submitMsg={submitMsg}
-                lastResult={lastResult}
-                nowBlocked={nowBlocked}
-                limitReached={limitReached}
-                initialCode={code}
-              />
-            ) : (
-              <>
-                <Card>
-                  <div className="flex justify-between items-start mb-4">
-                    <h1 className="text-3xl font-bold">{a.title}</h1>
-                    {!isStudent && (
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={openEditModal}
-                      >
-                        Edit Assignment
-                      </Button>
-                    )}
-                  </div>
-                  {a.description && <p className="text-foreground mb-4">{a.description}</p>}
+            <Card>
+              <div className="flex justify-between items-start mb-4">
+                <h1 className="text-3xl font-bold">{a.title}</h1>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={openEditModal}
+                >
+                  Edit Assignment
+                </Button>
+              </div>
+              {a.description && <p className="text-foreground mb-4">{a.description}</p>}
 
-                  <div className="space-y-2 text-sm text-muted-foreground">
-                    <p>
-                      Window: {a.start ? new Date(a.start).toLocaleString() : "—"} →{" "}
-                      {a.stop ? new Date(a.stop).toLocaleString() : "—"}
-                    </p>
-                    <p>
-                      Submission limit: {a.sub_limit == null ? "∞" : a.sub_limit}
-                    </p>
-                  </div>
-                </Card>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  Window: {a.start ? new Date(a.start).toLocaleString() : "—"} →{" "}
+                  {a.stop ? new Date(a.stop).toLocaleString() : "—"}
+                </p>
+                <p>
+                  Submission limit: {a.sub_limit == null ? "∞" : a.sub_limit}
+                </p>
+              </div>
+            </Card>
 
-                <Card>
-                  <h2 className="text-2xl font-semibold mb-4">Grades (this assignment)</h2>
-                  {facLoading && <p className="text-muted-foreground">Loading grades…</p>}
-                  {facErr && (
-                    <Alert variant="error">
-                      <p className="font-medium">{facErr}</p>
-                    </Alert>
-                  )}
+            <Card>
+              <h2 className="text-2xl font-semibold mb-4">Grades (this assignment)</h2>
+              {facLoading && <p className="text-muted-foreground">Loading grades…</p>}
+              {facErr && (
+                <Alert variant="error">
+                  <p className="font-medium">{facErr}</p>
+                </Alert>
+              )}
 
                   {!facLoading && !facErr && (facRows?.length ?? 0) === 0 && (
                     <p className="text-muted-foreground">No enrolled students or no data yet.</p>
@@ -611,8 +629,6 @@ export default function AssignmentDetailPage() {
                     </div>
                   )}
                 </Card>
-              </>
-            )}
 
             {/* Edit Assignment Modal */}
             {editModalOpen && (
@@ -652,6 +668,12 @@ export default function AssignmentDetailPage() {
                         className="w-full p-2 border border-gray-300 rounded resize-vertical"
                       />
                     </div>
+
+                    <InstructionsManager
+                      instructions={editInstructions}
+                      onChange={setEditInstructions}
+                      disabled={editLoading}
+                    />
 
                     <div>
                       <Label htmlFor="edit-language">Language</Label>
