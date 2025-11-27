@@ -15,26 +15,10 @@ export function Layout({ children, title, actions, fullScreen }: LayoutProps) {
 
       <main className="lg:pl-64 pt-24">
         {fullScreen ? (
-          // Full-screen mode: no padding, no title card
           children
         ) : (
           <div className="py-6">
-            {(title || actions) && (
-              <div className="mb-6 flex items-center justify-between">
-                {title && (
-                  <div className="ml-8">
-                    <div className="bg-card border border-border rounded-lg p-6 shadow-sm inline-block">
-                      <h1 className="text-3xl font-bold text-foreground">{title}</h1>
-                    </div>
-                  </div>
-                )}
-                {actions && (
-                  <div className="flex justify-end">
-                    {actions}
-                  </div>
-                )}
-              </div>
-            )}
+            {/* Header removed as per design requirement */}
             {children}
           </div>
         )}

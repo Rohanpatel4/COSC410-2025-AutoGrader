@@ -1,13 +1,41 @@
 import React from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { fetchJson } from "../api/client";
 import type { Course } from "../types/courses";
-import { Button, Input, Label, Card, Badge, Alert } from "../components/ui";
-import { HeroHeader, ContentRow, ContentCard } from "../components/ui";
+import { Button } from "../components/ui/Button";
+import { 
+  GraduationCap, 
+  Plus,
+  ClipboardList,
+  BarChart3,
+  BookOpen,
+  ArrowRight
+} from "lucide-react";
+
+// Generate a consistent gradient based on course code
+function getCourseGradient(code: string): string {
+  const gradients = [
+    "from-rose-500 to-pink-600",
+    "from-violet-500 to-purple-600",
+    "from-sky-500 to-blue-600",
+    "from-emerald-500 to-teal-600",
+    "from-amber-500 to-orange-600",
+    "from-indigo-500 to-blue-600",
+    "from-cyan-500 to-teal-600",
+    "from-fuchsia-500 to-pink-600",
+  ];
+  
+  // Simple hash to pick a gradient
+  let hash = 0;
+  for (let i = 0; i < code.length; i++) {
+    hash = code.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return gradients[Math.abs(hash) % gradients.length];
+}
 
 export default function FacultyDashboard() {
-  const { userId, logout } = useAuth();
+  const { userId } = useAuth();
   const navigate = useNavigate();
   const professorId = Number(userId ?? 0);
 
@@ -15,17 +43,11 @@ export default function FacultyDashboard() {
   const [loading, setLoading] = React.useState(true);
   const [msg, setMsg] = React.useState<string | null>(null);
 
-  function onLogout() {
-    logout();
-    navigate("/login", { replace: true });
-  }
-
   async function loadMine() {
     if (!professorId || Number.isNaN(professorId)) return;
     setLoading(true);
     setMsg(null);
     try {
-      // NEW: path-based filter like students: /api/v1/courses/faculty/{id}
       const items = await fetchJson<Course[]>(
         `/api/v1/courses/faculty/${encodeURIComponent(professorId)}`
       );
@@ -41,110 +63,158 @@ export default function FacultyDashboard() {
   React.useEffect(() => { loadMine(); }, [professorId]);
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-8">
-      <>
-        {/* Alert Messages */}
-        {msg && (
-          <div className={`p-4 rounded-xl mb-6 ${msg.includes("failed") || msg.includes("fail") ? "bg-red-900/50 border border-red-700 text-red-200" : "bg-green-900/50 border border-green-700 text-green-200"}`}>
-            <p className="font-medium">{msg}</p>
+    <div className="w-full px-10 lg:px-16 py-6 space-y-6">
+      {/* Header */}
+      <div>
+        {/* <h1 className="text-4xl font-bold text-foreground tracking-tight">Faculty Dashboard</h1>
+        <p className="text-lg text-muted-foreground mt-2">Manage your courses and student progress</p> */}
+        <h1 className="text-5xl font-bold text-foreground tracking-tight">Faculty Dashboard</h1>
+        <p className="text-xl text-muted-foreground mt-3">Manage your courses and student progress</p>
+      </div>
+
+      {/* Top Action Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        {/* Active Courses Stat Card */}
+        <div 
+          className="bg-card border border-border rounded-xl shadow-sm flex items-center gap-5 p-5 hover:shadow-md transition-shadow"
+        >
+          <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center shrink-0">
+            <GraduationCap className="w-6 h-6 text-blue-500" />
           </div>
-        )}
-
-        {/* Main Content - Two Boxes */}
-        <div className="grid gap-6 md:grid-cols-2 max-w-5xl">
-          {/* Create Course Box */}
-          <div className="card bg-card text-card-foreground border border-border">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent/10 text-accent">
-                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v12m6-6H6" />
-                </svg>
-              </div>
-              <h2 className="text-xl font-semibold tracking-tight text-foreground">
-                Create a Course
-              </h2>
-            </div>
-
-            <p className="text-muted-foreground mb-6">
-              Set up a new course for your students to enroll in.
-            </p>
-
-            <Button
-              className="w-full"
-              onClick={() => navigate("/courses/new")}
-            >
-              <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v12m6-6H6" />
-              </svg>
-              Create Course
-            </Button>
-          </div>
-
-          {/* My Courses Box */}
-          <div className="card bg-card text-card-foreground border border-border">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent/10 text-accent">
-                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                </svg>
-              </div>
-              <div className="flex-1">
-                <h2 className="text-xl font-semibold tracking-tight text-foreground">
-                  My Courses
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  {!loading && `${mine.length} course${mine.length !== 1 ? 's' : ''}`}
-                </p>
-              </div>
-            </div>
-
-            {loading ? (
-              <div className="flex items-center justify-center py-8">
-                <svg className="h-8 w-8 animate-spin text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-              </div>
-            ) : mine.length > 0 ? (
-              <div className="space-y-3">
-                {mine.slice(0, 3).map((c) => (
-                  <div
-                    key={c.id}
-                    onClick={() => navigate(`/courses/${encodeURIComponent(c.course_code)}`)}
-                    className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/50 hover:border-primary hover:bg-muted cursor-pointer transition-colors"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-medium text-foreground truncate">{c.name}</h3>
-                      <p className="text-sm text-muted-foreground">{c.course_code}</p>
-                    </div>
-                    <svg className="h-4 w-4 text-muted-foreground flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </div>
-                ))}
-                {mine.length > 3 && (
-                  <Button
-                    variant="ghost"
-                    className="w-full text-primary hover:text-primary"
-                    onClick={() => navigate("/courses")}
-                  >
-                    View all courses ({mine.length})
-                  </Button>
-                )}
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <svg className="h-12 w-12 text-muted-foreground mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                </svg>
-                <p className="text-sm text-muted-foreground">
-                  No courses created yet
-                </p>
-              </div>
-            )}
+          <div>
+            <div className="text-3xl font-bold text-foreground">{mine.length}</div>
+            <div className="text-sm text-muted-foreground font-medium">Active Courses</div>
           </div>
         </div>
-      </>
+
+        {/* Gradebook Action Card */}
+        <div 
+          onClick={() => navigate("/gradebook")}
+          className="bg-card border border-border rounded-xl shadow-sm flex items-center gap-5 p-5 cursor-pointer hover:shadow-md hover:border-primary/50 transition-all group"
+        >
+          <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+            <BarChart3 className="w-6 h-6 text-emerald-500" />
+          </div>
+          <div>
+            <div className="text-lg font-semibold text-foreground group-hover:text-primary transition-colors">Gradebook</div>
+            <div className="text-sm text-muted-foreground">View & manage grades</div>
+          </div>
+        </div>
+
+        {/* Create Course Action Card */}
+        <div 
+          onClick={() => navigate("/courses/new")}
+          className="bg-card border border-border rounded-xl shadow-sm flex items-center gap-5 p-5 cursor-pointer hover:shadow-md hover:border-primary/50 transition-all group"
+        >
+          <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+            <Plus className="w-6 h-6 text-primary" />
+          </div>
+          <div>
+            <div className="text-lg font-semibold text-foreground group-hover:text-primary transition-colors">Create Course</div>
+            <div className="text-sm text-muted-foreground">Add a new course</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Course Overview Section */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-semibold text-foreground">Course Overview</h2>
+          <button 
+            onClick={() => navigate("/courses")}
+            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
+          >
+            View All Courses
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-16">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto mb-4"></div>
+              <p className="text-muted-foreground">Loading courses...</p>
+            </div>
+          </div>
+        ) : mine.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+            {mine.map((course) => (
+              <div 
+                key={course.id}
+                className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden hover:shadow-lg transition-all"
+              >
+                {/* Clickable Course Area */}
+                <div 
+                  className="cursor-pointer group"
+                  onClick={() => navigate(`/courses/${course.course_code}`)}
+                >
+                  {/* Course Banner */}
+                  <div 
+                    className={`h-36 bg-gradient-to-br ${getCourseGradient(course.course_code)} relative overflow-hidden`}
+                  >
+                    {/* Decorative pattern */}
+                    <div className="absolute inset-0 opacity-20">
+                      <div className="absolute top-4 left-4 w-20 h-20 border-4 border-white/30 rounded-full"></div>
+                      <div className="absolute bottom-4 right-4 w-16 h-16 border-4 border-white/30 rounded-lg rotate-12"></div>
+                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 border-4 border-white/20 rounded-full"></div>
+                    </div>
+                    
+                    {/* Course Code Badge */}
+                    <div className="absolute bottom-3 left-3">
+                      <span className="bg-black/30 backdrop-blur-sm text-white text-sm font-mono px-3 py-1.5 rounded-lg">
+                        {course.course_code}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Course Title */}
+                  <div className="p-4 pb-2">
+                    <h3 
+                      className="font-semibold text-foreground text-lg leading-tight group-hover:text-primary transition-colors line-clamp-2 min-h-[3.5rem]"
+                    >
+                      {course.name}
+                    </h3>
+                  </div>
+                </div>
+                  
+                {/* Gradebook Button - separate area */}
+                <div className="px-4 pb-4">
+                  <Button 
+                    variant="secondary" 
+                    size="sm"
+                    onClick={() => navigate(`/courses/${course.course_code}/gradebook`)}
+                    className="w-full gap-2 justify-center"
+                  >
+                    <ClipboardList className="w-4 h-4" />
+                    Gradebook
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="bg-card border border-border border-dashed rounded-2xl p-16 text-center">
+            <div className="w-20 h-20 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <BookOpen className="w-10 h-10 text-muted-foreground" />
+            </div>
+            <h3 className="text-xl font-semibold text-foreground mb-2">No courses yet</h3>
+            <p className="text-muted-foreground mb-8 max-w-md mx-auto">
+              Get started by creating your first course. You'll be able to manage assignments, students, and grades all in one place.
+            </p>
+            <Button onClick={() => navigate("/courses/new")} className="gap-2">
+              <Plus className="w-4 h-4" />
+              Create Your First Course
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* Error Message */}
+      {msg && (
+        <div className="bg-danger/10 border border-danger/30 text-danger rounded-xl p-4 text-center">
+          {msg}
+        </div>
+      )}
     </div>
   );
 }
