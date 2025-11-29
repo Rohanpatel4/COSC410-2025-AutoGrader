@@ -147,9 +147,12 @@ export default function AssignmentsPage() {
   }, [isStudent, userId]);
 
   return (
-    <div className="container py-12">
-        <Card>
-          <h1 className="text-3xl font-bold mb-6">All Assignments</h1>
+    <div className="page-container">
+      <div>
+        <h1 className="page-title">All Assignments</h1>
+        <p className="page-subtitle">View and manage all your assignments</p>
+      </div>
+      <Card>
           {error ? (
             <p className="text-red-600">Error: {error}</p>
           ) : loading ? (

@@ -13,6 +13,7 @@ from app.models.models import (
     Course,
     RoleEnum,
     StudentSubmission,
+    TestCase,
     User,
     user_course_association,
 )
@@ -63,13 +64,18 @@ def _parse_dt(v):
     return None
 
 
+# RELOAD_MARKER_1234567890
 def _assignment_to_dict(
     a: Assignment,
     attempts_by_aid: dict[int, int] | None = None,
+    total_points_by_aid: dict[int, int] | None = None,
 ) -> dict:
     num_attempts = 0
     if attempts_by_aid is not None:
         num_attempts = int(attempts_by_aid.get(a.id, 0))
+    total_points = 0
+    if total_points_by_aid is not None:
+        total_points = int(total_points_by_aid.get(a.id, 0))
     language = getattr(a, "language", "python")  # Default to python for backward compatibility
     instructions = getattr(a, "instructions", None)
     return {
@@ -82,6 +88,7 @@ def _assignment_to_dict(
         "start": getattr(a, "start", None),
         "stop": getattr(a, "stop", None),
         "num_attempts": num_attempts,
+        "total_points": total_points,
         "instructions": instructions,
     }
 
@@ -440,7 +447,15 @@ def list_assignments_for_course(
             ).all()
         )
 
-    return [_assignment_to_dict(a, attempts) for a in rows]
+    # Calculate total points for each assignment from test cases
+    total_points = dict(
+        db.execute(
+            select(TestCase.assignment_id, func.sum(TestCase.point_value))
+            .group_by(TestCase.assignment_id)
+        ).all()
+    )
+
+    return [_assignment_to_dict(a, attempts, total_points) for a in rows]
 
 
 @router.post("/{course_key}/assignments", response_model=dict, status_code=status.HTTP_201_CREATED)

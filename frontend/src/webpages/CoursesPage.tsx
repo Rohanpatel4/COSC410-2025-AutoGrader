@@ -105,12 +105,12 @@ export default function CoursesPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+    <div className="page-container">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-        <div className="space-y-1">
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">{title}</h1>
-          <p className="text-muted-foreground text-lg">{subtitle}</p>
+        <div>
+          <h1 className="page-title">{title}</h1>
+          <p className="page-subtitle">{subtitle}</p>
         </div>
         
         <div className="flex items-center gap-4">

@@ -21,7 +21,7 @@ type CoursePayload = {
 
 type GradebookPayload = {
   course: { id: number; name: string; course_code: string };
-  assignments: { id: number; title: string }[];
+  assignments: { id: number; title: string; total_points?: number }[];
   students: { student_id: number; username: string; grades: Record<string, number | null> }[];
 };
 
@@ -67,6 +67,9 @@ export default function CoursePage() {
   // Delete student state
   const [studentToDelete, setStudentToDelete] = React.useState<{ id: number; name: string } | null>(null);
   const [isDeleting, setIsDeleting] = React.useState(false);
+
+  // Grades display toggle
+  const [showPoints, setShowPoints] = React.useState(false);
 
   // Load course, students, faculty, assignments
   async function loadAll() {
@@ -123,17 +126,12 @@ export default function CoursePage() {
     try {
       const attemptsPromises = assignments.map(async (assignment) => {
         try {
-          const [attempts, testCases] = await Promise.all([
-            fetchJson<StudentAttempt[]>(
-              `/api/v1/assignments/${assignment.id}/attempts?student_id=${encodeURIComponent(String(userId))}`
-            ).catch(() => []),
-            fetchJson<any[]>(
-              `/api/v1/assignments/${assignment.id}/test-cases?include_hidden=true&user_id=${encodeURIComponent(String(userId))}`
-            ).catch(() => [])
-          ]);
+          const attempts = await fetchJson<StudentAttempt[]>(
+            `/api/v1/assignments/${assignment.id}/attempts?student_id=${encodeURIComponent(String(userId))}`
+          ).catch(() => []);
           
-          // Calculate total points from test cases
-          const totalPoints = testCases.reduce((sum, tc) => sum + (tc.point_value || 0), 0);
+          // Use total_points from assignment (fetched from backend)
+          const totalPoints = assignment.total_points || 0;
           
           return { assignmentId: assignment.id, attempts, totalPoints };
         } catch {
@@ -316,7 +314,7 @@ export default function CoursePage() {
   }
 
   return (
-    <div className="container py-12 space-y-8">
+    <div className="page-container">
         {err && (
           <Alert variant="error">
             <p className="font-medium">{err}</p>
@@ -326,7 +324,7 @@ export default function CoursePage() {
       {course && (
         <Card>
           <div className="mb-6">
-            <h1 className="mb-1 text-3xl font-bold tracking-tight">
+            <h1 className="page-title">
               {course.course_code} – {course.name}
             </h1>
 
@@ -715,11 +713,28 @@ export default function CoursePage() {
                 <Card>
                   <div className="flex items-center justify-between gap-3 mb-6">
                     <h2 className="text-2xl font-semibold m-0">Grades</h2>
-                    {isFaculty && (
-                      <Button size="sm" variant="secondary" disabled title="Coming soon">
-                        Download CSV
-                      </Button>
-                    )}
+                    <div className="flex items-center gap-1 text-sm">
+                      <button
+                        onClick={() => setShowPoints(false)}
+                        className={`px-3 py-1.5 rounded-l-lg font-medium transition-colors ${
+                          !showPoints
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        Percentage
+                      </button>
+                      <button
+                        onClick={() => setShowPoints(true)}
+                        className={`px-3 py-1.5 rounded-r-lg font-medium transition-colors ${
+                          showPoints
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        Points
+                      </button>
+                    </div>
                   </div>
 
                   {/* Faculty View */}
@@ -747,7 +762,12 @@ export default function CoursePage() {
                                         className="text-center p-3 font-semibold whitespace-nowrap min-w-[120px]"
                                         title={a.title}
                                       >
-                                        {a.title}
+                                        <button
+                                          onClick={() => navigate(`/assignments/${a.id}`)}
+                                          className="hover:text-primary transition-colors underline-offset-2 hover:underline"
+                                        >
+                                          {a.title}
+                                        </button>
                                       </th>
                                     ))}
                                   </tr>
@@ -761,8 +781,18 @@ export default function CoursePage() {
                                         </td>
                                         {gradebook.assignments.map((a) => {
                                           const gradeValue = s.grades[String(a.id)];
-                                          const displayGrade = formatGradeDisplay(gradeValue);
-                                          const isMissing = displayGrade === "—";
+                                          const totalPoints = a.total_points || 0;
+                                          const isMissing = gradeValue === null || gradeValue === undefined;
+
+                                          let displayGrade = "—";
+                                          if (!isMissing) {
+                                            if (showPoints) {
+                                              displayGrade = `${gradeValue}/${totalPoints}`;
+                                            } else {
+                                              const percentage = totalPoints > 0 ? Math.round((gradeValue / totalPoints) * 100) : 0;
+                                              displayGrade = `${percentage}%`;
+                                            }
+                                          }
 
                                           return (
                                             <td key={a.id} className="p-3 text-center">
@@ -838,10 +868,11 @@ export default function CoursePage() {
                                     let bestScoreDisplay: string;
                                     if (bestScore == null || bestScore === -Infinity) {
                                       bestScoreDisplay = "—";
-                                    } else if (totalPoints > 0) {
-                                      bestScoreDisplay = `${bestScore} / ${totalPoints}`;
+                                    } else if (showPoints) {
+                                      bestScoreDisplay = `${bestScore}/${totalPoints}`;
                                     } else {
-                                      bestScoreDisplay = formatGradeDisplay(bestScore);
+                                      const percentage = totalPoints > 0 ? Math.round((bestScore / totalPoints) * 100) : 0;
+                                      bestScoreDisplay = `${percentage}%`;
                                     }
                                     
                                     return (
@@ -863,10 +894,11 @@ export default function CoursePage() {
                                             let displayGrade: string;
                                             if (isMissing) {
                                               displayGrade = "—";
-                                            } else if (totalPoints > 0) {
-                                              displayGrade = `${earnedPoints} / ${totalPoints}`;
+                                            } else if (showPoints) {
+                                              displayGrade = `${earnedPoints}/${totalPoints}`;
                                             } else {
-                                              displayGrade = formatGradeDisplay(earnedPoints);
+                                              const percentage = totalPoints > 0 ? Math.round((earnedPoints / totalPoints) * 100) : 0;
+                                              displayGrade = `${percentage}%`;
                                             }
 
                                             return (

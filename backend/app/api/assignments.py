@@ -739,6 +739,167 @@ def get_submission_code(
         }
     )
 
+@router.get("/{assignment_id}/submission-detail/{submission_id}", response_model=dict)
+def get_submission_detail(
+    assignment_id: int,
+    submission_id: int,
+    user_id: int = Query(..., description="User ID for authentication"),
+    db: Session = Depends(get_db),
+):
+    """
+    Get detailed information about a specific submission.
+    Returns the submission code, student info, assignment info, and attempt number.
+    Only faculty members can access this endpoint.
+    """
+    # Verify user is faculty
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(404, "User not found")
+    if user.role != RoleEnum.faculty:
+        raise HTTPException(403, "Only faculty members can access submission details")
+    
+    # Verify assignment exists
+    a = db.get(Assignment, assignment_id)
+    if not a:
+        raise HTTPException(404, "Assignment not found")
+    
+    # Get submission
+    submission = db.get(StudentSubmission, submission_id)
+    if not submission:
+        raise HTTPException(404, "Submission not found")
+    
+    # Verify submission belongs to the assignment
+    if submission.assignment_id != assignment_id:
+        raise HTTPException(404, "Submission not found for this assignment")
+    
+    # Get student info
+    student = db.get(User, submission.student_id)
+    if not student:
+        raise HTTPException(404, "Student not found")
+    
+    # Get course info
+    course = db.get(Course, a.course_id)
+    
+    # Calculate attempt number for this submission
+    all_attempts = db.execute(
+        select(StudentSubmission)
+        .where(
+            StudentSubmission.assignment_id == assignment_id,
+            StudentSubmission.student_id == submission.student_id,
+        )
+        .order_by(StudentSubmission.id.asc())
+    ).scalars().all()
+    
+    attempt_number = 1
+    for i, att in enumerate(all_attempts):
+        if att.id == submission_id:
+            attempt_number = i + 1
+            break
+    
+    # Get all students with attempts for this assignment (for navigation)
+    students_with_attempts = db.execute(
+        select(User.id, User.username)
+        .join(StudentSubmission, StudentSubmission.student_id == User.id)
+        .where(StudentSubmission.assignment_id == assignment_id)
+        .distinct()
+        .order_by(User.username.asc())
+    ).all()
+    
+    # Get total points for this assignment
+    total_points = db.execute(
+        select(func.sum(TestCase.point_value))
+        .where(TestCase.assignment_id == assignment_id)
+    ).scalar() or 0
+    
+    # Get all assignments for this course (for navigation dropdown)
+    course_assignments = db.execute(
+        select(Assignment.id, Assignment.title)
+        .where(Assignment.course_id == a.course_id)
+        .order_by(Assignment.id.asc())
+    ).all()
+    
+    return {
+        "submission": {
+            "id": submission.id,
+            "earned_points": submission.earned_points,
+            "code": submission.code or "",
+            "created_at": submission.created_at.isoformat() if submission.created_at else None,
+        },
+        "student": {
+            "id": student.id,
+            "username": student.username,
+        },
+        "assignment": {
+            "id": a.id,
+            "title": a.title,
+            "language": getattr(a, "language", "python"),
+            "total_points": total_points,
+        },
+        "course": {
+            "id": course.id if course else None,
+            "name": course.name if course else None,
+            "course_code": course.course_code if course else None,
+        },
+        "course_assignments": [
+            {"id": aid, "title": atitle}
+            for (aid, atitle) in course_assignments
+        ],
+        "attempt_number": attempt_number,
+        "total_attempts": len(all_attempts),
+        "all_attempts": [
+            {"id": att.id, "earned_points": att.earned_points}
+            for att in all_attempts
+        ],
+        "students_with_attempts": [
+            {"id": sid, "username": uname}
+            for (sid, uname) in students_with_attempts
+        ],
+    }
+
+
+@router.get("/{assignment_id}/students/{student_id}/attempts", response_model=list[dict])
+def get_student_attempts(
+    assignment_id: int,
+    student_id: int,
+    user_id: int = Query(..., description="User ID for authentication"),
+    db: Session = Depends(get_db),
+):
+    """
+    Get all attempts by a specific student for an assignment.
+    Returns list of attempt IDs and grades for navigation.
+    """
+    # Verify user is faculty
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(404, "User not found")
+    if user.role != RoleEnum.faculty:
+        raise HTTPException(403, "Only faculty members can access student attempts")
+    
+    # Verify assignment exists
+    a = db.get(Assignment, assignment_id)
+    if not a:
+        raise HTTPException(404, "Assignment not found")
+    
+    # Get all attempts for this student
+    attempts = db.execute(
+        select(StudentSubmission)
+        .where(
+            StudentSubmission.assignment_id == assignment_id,
+            StudentSubmission.student_id == student_id,
+        )
+        .order_by(StudentSubmission.id.asc())
+    ).scalars().all()
+    
+    return [
+        {
+            "id": att.id,
+            "earned_points": att.earned_points,
+            "created_at": att.created_at.isoformat() if att.created_at else None,
+        }
+        for att in attempts
+    ]
+
+
 @router.get("/{assignment_id}/grades", response_model=dict)
 def grades_for_assignment(assignment_id: int, db: Session = Depends(get_db)):
     """

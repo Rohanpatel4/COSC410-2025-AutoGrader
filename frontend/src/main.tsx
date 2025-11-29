@@ -13,6 +13,7 @@ import AssignmentsPage from "./webpages/AssignmentsPage";
 import AssignmentDetailPage from "./webpages/AssignmentDetailPage";
 import GradebookPage from "./webpages/GradebookPage";
 import GradebookIndexPage from "./webpages/GradebookIndexPage";
+import StudentAttemptViewPage from "./webpages/StudentAttemptViewPage";
 import CreateCoursePage from "./webpages/CreateCoursePage";
 import CreateAssignmentPage from "./webpages/CreateAssignmentPage";
 import JoinCoursePage from "./webpages/JoinCoursePage";
@@ -226,6 +227,18 @@ function AppRouter() {
             <Protected>
               <Layout title="Gradebook">
                 <GradebookIndexPage />
+              </Layout>
+            </Protected>
+          }
+        />
+
+        {/* Student submission view (faculty) - must be before /assignments/:assignment_id */}
+        <Route
+          path="/assignments/:assignment_id/submissions/:submission_id"
+          element={
+            <Protected>
+              <Layout title="Submission View">
+                <StudentAttemptViewPage />
               </Layout>
             </Protected>
           }

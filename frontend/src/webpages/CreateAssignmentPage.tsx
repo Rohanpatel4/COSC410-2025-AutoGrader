@@ -140,33 +140,30 @@ export default function CreateAssignmentPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-6">
-      {/* Back Link */}
-      <Link
-        to={`/courses/${course_id}`}
-        className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        Back to Course
-      </Link>
+    <div className="page-container">
+      <div className="max-w-3xl mx-auto space-y-6">
+        {/* Back Link */}
+        <Link
+          to={`/courses/${course_id}`}
+          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to Course
+        </Link>
 
-      <div className="mb-8">
-        <div className="flex justify-between items-start">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">Create New Assignment</h1>
-            <p className="mt-2 text-muted-foreground">
-              Create a new assignment with test cases for automatic grading.
-            </p>
-          </div>
+        <div className="text-center">
+          <h1 className="page-title">Create New Assignment</h1>
+          <p className="page-subtitle">
+            Create a new assignment with test cases for automatic grading.
+          </p>
           <a
             href="/TEST_CASE_GUIDE.pdf"
             download="Test_Case_Guide.pdf"
-            className="text-primary hover:underline text-sm font-medium flex items-center gap-1 whitespace-nowrap"
+            className="text-primary hover:underline text-sm font-medium inline-flex items-center gap-1 mt-3"
           >
             📄 Download Test Case Guide
           </a>
         </div>
-      </div>
 
       {msg && (
         <Alert variant={msg.includes("failed") || msg.includes("fail") ? "error" : "success"} className="mb-6">
@@ -402,6 +399,7 @@ export default function CreateAssignmentPage() {
           </div>
         </div>
       </Card>
+      </div>
     </div>
   );
 }

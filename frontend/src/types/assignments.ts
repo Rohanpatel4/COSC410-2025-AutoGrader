@@ -7,6 +7,7 @@ export type Assignment = {
   test_file_id?: string | number | null;
   sub_limit?: number | null;
   num_attempts?: number;
+  total_points?: number;
   start?: string | null;
   stop?: string | null;
   instructions?: any | null;

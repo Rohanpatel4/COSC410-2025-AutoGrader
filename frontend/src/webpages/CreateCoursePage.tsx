@@ -47,30 +47,31 @@ export default function CreateCoursePage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-6">
-      {/* Back Link */}
-      <Link
-        to="/courses"
-        className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        Back to Courses
-      </Link>
+    <div className="page-container">
+      <div className="max-w-2xl mx-auto space-y-6">
+        {/* Back Link */}
+        <Link
+          to="/courses"
+          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to Courses
+        </Link>
 
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">Create New Course</h1>
-        <p className="mt-2 text-muted-foreground">
-          Create a new course and get an enrollment key to share with your students.
-        </p>
-      </div>
+        <div className="text-center">
+          <h1 className="page-title">Create New Course</h1>
+          <p className="page-subtitle">
+            Create a new course and get an enrollment key to share with your students.
+          </p>
+        </div>
 
       {msg && (
-        <Alert variant={msg.includes("failed") || msg.includes("fail") ? "error" : "success"} className="mb-6">
+        <Alert variant={msg.includes("failed") || msg.includes("fail") ? "error" : "success"}>
           <p className="font-medium">{msg}</p>
         </Alert>
       )}
 
-      <Card className="mb-8">
+      <Card>
         <form onSubmit={onCreate} className="space-y-6">
               <div>
                 <Label htmlFor="c-code">Course code *</Label>
@@ -139,6 +140,7 @@ export default function CreateCoursePage() {
               </p>
             </form>
           </Card>
+      </div>
     </div>
   );
 }

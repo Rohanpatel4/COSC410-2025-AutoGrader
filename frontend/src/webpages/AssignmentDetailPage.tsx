@@ -4,9 +4,20 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { fetchJson, BASE } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import type { Assignment } from "../types/assignments";
-import { Button, Card, Alert, Input, Label } from "../components/ui";
+import { Button, Card, Alert, Input, Label, Badge } from "../components/ui";
 import { formatGradeDisplay } from "../utils/formatGrade";
-import { GripVertical } from "lucide-react";
+import { 
+  GripVertical, 
+  ExternalLink, 
+  Eye, 
+  Clock, 
+  FileCode, 
+  Calendar, 
+  ArrowLeft,
+  Settings,
+  Users,
+  Trophy
+} from "lucide-react";
 import StudentAssignmentView from "./StudentAssignmentView";
 import InstructionsManager from "../components/ui/InstructionsManager";
 
@@ -485,14 +496,22 @@ export default function AssignmentDetailPage() {
   }
 
   return (
-    <div className="container py-12 space-y-6">
-        <div className="mb-3">
+    <div className="page-container">
+        {/* Back Navigation */}
+        <div className="mb-4">
           {a?.course_id ? (
-            <Link to={`/courses/${encodeURIComponent(a.course_id)}`} className="text-primary hover:opacity-80">
-              ← Back to course
+            <Link 
+              to={`/courses/${encodeURIComponent(a.course_id)}`} 
+              className="text-primary hover:opacity-80 inline-flex items-center gap-2"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back to course
             </Link>
           ) : (
-            <Link to="/my" className="text-primary hover:opacity-80">← Back</Link>
+            <Link to="/my" className="text-primary hover:opacity-80 inline-flex items-center gap-2">
+              <ArrowLeft className="w-4 h-4" />
+              Back
+            </Link>
           )}
         </div>
 
@@ -502,7 +521,14 @@ export default function AssignmentDetailPage() {
           </Alert>
         )}
 
-        {loading && <p className="text-center text-muted-foreground">Loading…</p>}
+        {loading && (
+          <div className="flex items-center justify-center py-16">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto mb-4"></div>
+              <p className="text-muted-foreground">Loading assignment...</p>
+            </div>
+          </div>
+        )}
         {err && (
           <Alert variant="error">
             <p className="font-medium">{err}</p>
@@ -511,32 +537,114 @@ export default function AssignmentDetailPage() {
 
         {!a ? null : (
           <>
-            <Card>
-              <div className="flex justify-between items-start mb-4">
-                <h1 className="text-3xl font-bold">{a.title}</h1>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={openEditModal}
-                >
-                  Edit Assignment
-                </Button>
+            {/* Assignment Header Card */}
+            <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm mb-6">
+              {/* Assignment Info */}
+              <div className="p-6">
+                <div className="flex justify-between items-start mb-4">
+                  <h1 className="text-3xl font-bold text-foreground">{a.title}</h1>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={openEditModal}
+                  >
+                    <Settings className="w-4 h-4 mr-2" />
+                    Edit
+                  </Button>
+                </div>
+                {a.description && (
+                  <p className="text-muted-foreground mb-6 leading-relaxed">{a.description}</p>
+                )}
+                
+                {/* Stats Grid - 5 items */}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  {/* Language */}
+                  <div className="bg-muted/30 rounded-xl p-4 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
+                      <FileCode className="w-5 h-5 text-violet-500" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide">Language</p>
+                      <p className="text-lg font-bold text-foreground capitalize">{a.language || 'Python'}</p>
+                    </div>
+                  </div>
+                  
+                  {/* Total Points */}
+                  <div className="bg-muted/30 rounded-xl p-4 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                      <Trophy className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide">Points</p>
+                      <p className="text-lg font-bold text-foreground">{totalPoints}</p>
+                    </div>
+                  </div>
+                  
+                  {/* Submissions Limit */}
+                  <div className="bg-muted/30 rounded-xl p-4 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+                      <FileCode className="w-5 h-5 text-emerald-500" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide">Limit</p>
+                      <p className="text-lg font-bold text-foreground">{a.sub_limit == null ? "∞" : a.sub_limit}</p>
+                    </div>
+                  </div>
+                  
+                  {/* Start Date */}
+                  <div className="bg-muted/30 rounded-xl p-4 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
+                      <Calendar className="w-5 h-5 text-blue-500" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide">Opens</p>
+                      <p className="text-sm font-semibold text-foreground">
+                        {a.start ? new Date(a.start).toLocaleDateString() : <span className="text-muted-foreground">Not set</span>}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {/* End Date */}
+                  <div className="bg-muted/30 rounded-xl p-4 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-rose-500/10 flex items-center justify-center shrink-0">
+                      <Clock className="w-5 h-5 text-rose-500" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide">Closes</p>
+                      <p className="text-sm font-semibold text-foreground">
+                        {a.stop ? new Date(a.stop).toLocaleDateString() : <span className="text-muted-foreground">Not set</span>}
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
-              {a.description && <p className="text-foreground mb-4">{a.description}</p>}
+            </div>
 
-              <div className="space-y-2 text-sm text-muted-foreground">
-                <p>
-                  Window: {a.start ? new Date(a.start).toLocaleString() : "—"} →{" "}
-                  {a.stop ? new Date(a.stop).toLocaleString() : "—"}
-                </p>
-                <p>
-                  Submission limit: {a.sub_limit == null ? "∞" : a.sub_limit}
-                </p>
+            {/* Grades Section */}
+            <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
+              <div className="p-6 border-b border-border">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Users className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-semibold text-foreground">Student Grades</h2>
+                    <p className="text-sm text-muted-foreground">View and track student progress</p>
+                  </div>
+                </div>
               </div>
-            </Card>
-
-            <Card>
-              <h2 className="text-2xl font-semibold mb-4">Grades (this assignment)</h2>
+              
+              <div className="p-6">
+              {/* Hint */}
+              {!facLoading && !facErr && (facRows?.length ?? 0) > 0 && (
+                <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 mb-4 flex items-center gap-3">
+                  <Eye className="w-5 h-5 text-primary shrink-0" />
+                  <p className="text-sm text-foreground">
+                    <span className="font-medium">Tip:</span> Click on any grade or the best score to view submitted code. Click a student name to view their first submission.
+                  </p>
+                </div>
+              )}
+              
               {facLoading && <p className="text-muted-foreground">Loading grades…</p>}
               {facErr && (
                 <Alert variant="error">
@@ -550,10 +658,10 @@ export default function AssignmentDetailPage() {
 
                   {!facLoading && !facErr && (facRows?.length ?? 0) > 0 && (
                     <div className="overflow-x-auto">
-                      <table className="w-full border-collapse min-w-[600px]">
+                      <table className="w-full border-collapse">
                         <thead>
                           <tr>
-                            <th className="text-left p-2 border-b border-border">
+                            <th className="text-left p-2 border-b border-border whitespace-nowrap sticky left-0 bg-card z-10 min-w-[150px]">
                               Student
                             </th>
                             {(() => {
@@ -564,7 +672,7 @@ export default function AssignmentDetailPage() {
                                 headers.push(
                                   <th
                                     key={`h-${i}`}
-                                    className="text-left p-2 border-b border-border"
+                                    className="text-center p-2 border-b border-border whitespace-nowrap min-w-[80px]"
                                   >
                                     Attempt {i + 1}
                                   </th>
@@ -573,7 +681,7 @@ export default function AssignmentDetailPage() {
                               headers.push(
                                 <th
                                   key="best"
-                                  className="text-left p-2 border-b border-border"
+                                  className="text-center p-2 border-b border-border whitespace-nowrap min-w-[80px] bg-muted/30"
                                 >
                                   Best
                                 </th>
@@ -586,40 +694,105 @@ export default function AssignmentDetailPage() {
                           {facRows!.map((row) => {
                             const maxAttempts =
                               facRows?.reduce((m, r) => Math.max(m, r.attempts.length), 0) ?? 0;
+                            
+                            // Get first attempt for student name click
+                            const firstAttempt = row.attempts[0];
+                            
                             return (
-                              <tr key={row.student_id}>
-                                <td className="p-2 border-b border-border">
-                                  {row.username}
+                              <tr key={row.student_id} className="group hover:bg-muted/30 transition-colors">
+                                <td className="p-2 border-b border-border whitespace-nowrap sticky left-0 bg-card z-10 font-medium">
+                                  {firstAttempt ? (
+                                    <span
+                                      onClick={() => navigate(`/assignments/${assignment_id}/submissions/${firstAttempt.id}`)}
+                                      className="hover:text-primary transition-colors cursor-pointer inline-flex items-center group/btn"
+                                      title="Click to view student's first submission"
+                                      role="button"
+                                      tabIndex={0}
+                                      onKeyDown={(e) => e.key === 'Enter' && navigate(`/assignments/${assignment_id}/submissions/${firstAttempt.id}`)}
+                                    >
+                                      {row.username}
+                                      <ExternalLink className="w-3 h-3 ml-2 opacity-0 group-hover/btn:opacity-50 transition-opacity" />
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted-foreground">
+                                      {row.username}
+                                    </span>
+                                  )}
                                 </td>
                                 {[...Array(maxAttempts)].map((_, i) => {
                                   const att = row.attempts[i];
                                   const earnedPoints = att?.earned_points ?? null;
                                   const displayPoints = earnedPoints !== null && totalPoints > 0
-                                    ? `${earnedPoints} / ${totalPoints}`
+                                    ? `${earnedPoints}/${totalPoints}`
                                     : formatGradeDisplay(earnedPoints);
                                   
+                                  const percentage = earnedPoints !== null && totalPoints > 0
+                                    ? Math.round((earnedPoints / totalPoints) * 100)
+                                    : null;
+                                  
                                   return (
-                                    <td key={i} className="p-2 border-b border-border">
+                                    <td key={i} className="p-2 border-b border-border text-center whitespace-nowrap">
                                       {att ? (
                                         <button
-                                          onClick={() => downloadSubmissionCode(att.id)}
-                                          className="text-primary hover:underline font-medium"
-                                          title="Click to download submitted code"
+                                          onClick={() => navigate(`/assignments/${assignment_id}/submissions/${att.id}`)}
+                                          className={`
+                                            px-3 py-1 rounded-lg font-medium transition-all duration-200
+                                            hover:scale-105 cursor-pointer
+                                            ${percentage !== null
+                                              ? percentage >= 70
+                                                ? "bg-accent/10 text-accent hover:bg-accent/20 border border-accent/20"
+                                                : percentage >= 50
+                                                  ? "bg-warning/10 text-warning hover:bg-warning/20 border border-warning/20"
+                                                  : "bg-danger/10 text-danger hover:bg-danger/20 border border-danger/20"
+                                              : "bg-muted text-muted-foreground hover:bg-muted/80"
+                                            }
+                                          `}
+                                          title="Click to view submitted code"
                                         >
                                           {displayPoints}
                                         </button>
                                       ) : (
-                                        "—"
+                                        <span className="text-muted-foreground">—</span>
                                       )}
                                     </td>
                                   );
                                 })}
-                                <td className="p-2 border-b border-border font-semibold">
-                                  {row.best == null 
-                                    ? "—" 
-                                    : totalPoints > 0 
-                                      ? `${row.best} / ${totalPoints}` 
-                                      : formatGradeDisplay(row.best)}
+                                <td className="p-2 border-b border-border font-semibold text-center whitespace-nowrap bg-muted/30">
+                                  {(() => {
+                                    if (row.best == null) return "—";
+                                    
+                                    // Find the best attempt (the one with earned_points matching row.best)
+                                    const bestAttempt = row.attempts.find(att => att.earned_points === row.best);
+                                    const displayBest = totalPoints > 0 
+                                      ? `${row.best}/${totalPoints}` 
+                                      : formatGradeDisplay(row.best);
+                                    const percentage = totalPoints > 0
+                                      ? Math.round((row.best / totalPoints) * 100)
+                                      : null;
+                                    
+                                    if (!bestAttempt) return displayBest;
+                                    
+                                    return (
+                                      <button
+                                        onClick={() => navigate(`/assignments/${assignment_id}/submissions/${bestAttempt.id}`)}
+                                        className={`
+                                          px-3 py-1 rounded-lg font-semibold transition-all duration-200
+                                          hover:scale-105 cursor-pointer
+                                          ${percentage !== null
+                                            ? percentage >= 70
+                                              ? "bg-accent/10 text-accent hover:bg-accent/20 border border-accent/20"
+                                              : percentage >= 50
+                                                ? "bg-warning/10 text-warning hover:bg-warning/20 border border-warning/20"
+                                                : "bg-danger/10 text-danger hover:bg-danger/20 border border-danger/20"
+                                            : "bg-muted text-muted-foreground hover:bg-muted/80"
+                                          }
+                                        `}
+                                        title="Click to view best submission"
+                                      >
+                                        {displayBest}
+                                      </button>
+                                    );
+                                  })()}
                                 </td>
                               </tr>
                             );
@@ -628,7 +801,8 @@ export default function AssignmentDetailPage() {
                       </table>
                     </div>
                   )}
-                </Card>
+                </div>
+              </div>
 
             {/* Edit Assignment Modal */}
             {editModalOpen && (
