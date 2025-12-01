@@ -16,15 +16,17 @@ import {
   Flame,
   BookOpen,
   Filter,
-  XCircle
+  XCircle,
+  ToggleLeft,
+  ToggleRight
 } from "lucide-react";
 
 // ============================================================================
-// STYLE TOGGLE: Change this to switch between assignment list styles
+// STYLE TOGGLE: Default style for assignment list
 // true  = New style with filters, sorting, and fancy cards
 // false = Old simple list style
 // ============================================================================
-const USE_NEW_STUDENT_ASSIGNMENT_STYLE = true;
+const DEFAULT_NEW_STYLE = true;
 
 // datetime-local helpers
 function toLocalInputValue(d: Date | null) {
@@ -69,6 +71,9 @@ export default function AssignmentsPage() {
   // Filter and sort state for students
   const [filter, setFilter] = React.useState<FilterType>("all");
   const [sort, setSort] = React.useState<SortType>("due-date");
+  
+  // Style toggle state (for demo purposes)
+  const [useNewStyle, setUseNewStyle] = React.useState(DEFAULT_NEW_STYLE);
 
   React.useEffect(() => {
     let alive = true;
@@ -266,9 +271,20 @@ export default function AssignmentsPage() {
     return (
       <div className="page-container">
         {/* Header - matching CoursesPage and GradebookPage style */}
-        <div>
-          <h1 className="page-title">My Assignments</h1>
-          <p className="page-subtitle">Track your progress across all courses</p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="page-title">My Assignments</h1>
+            <p className="page-subtitle">Track your progress across all courses</p>
+          </div>
+          {/* Style Toggle Button (for demo) */}
+          <button
+            onClick={() => setUseNewStyle(!useNewStyle)}
+            className="flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg border border-border bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+            title={useNewStyle ? "Switch to simple list view" : "Switch to card view"}
+          >
+            {useNewStyle ? <ToggleRight className="w-4 h-4 text-primary" /> : <ToggleLeft className="w-4 h-4" />}
+            {useNewStyle ? "Card View" : "List View"}
+          </button>
         </div>
 
         {error ? (
@@ -294,7 +310,7 @@ export default function AssignmentsPage() {
               View My Courses
             </Button>
           </Card>
-        ) : USE_NEW_STUDENT_ASSIGNMENT_STYLE ? (
+        ) : useNewStyle ? (
           /* NEW STYLE: Filters, sorting, and fancy cards */
           <div className="space-y-6">
             {/* Filters and Sort */}
@@ -481,6 +497,18 @@ export default function AssignmentsPage() {
         ) : (
           /* OLD STYLE: Simple list view */
           <Card>
+            <div className="flex items-center justify-between gap-3 mb-6">
+              <h2 className="text-2xl font-semibold m-0">Assignments</h2>
+              {/* Style Toggle Button (for demo) */}
+              <button
+                onClick={() => setUseNewStyle(!useNewStyle)}
+                className="flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg border border-border bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                title={useNewStyle ? "Switch to simple list view" : "Switch to card view"}
+              >
+                {useNewStyle ? <ToggleRight className="w-4 h-4 text-primary" /> : <ToggleLeft className="w-4 h-4" />}
+                {useNewStyle ? "Card View" : "List View"}
+              </button>
+            </div>
             {assignments.map((a) => (
               <div key={a.id} className="border-b border-border pb-6 last:border-0 last:pb-0 mb-6 last:mb-0">
                 <div className="flex items-center gap-3 mb-3">

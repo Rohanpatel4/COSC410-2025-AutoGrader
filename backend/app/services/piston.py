@@ -566,6 +566,7 @@ def get_template_languages() -> Dict[str, str]:
         "python_test.py": "python",
         "java_test.java": "java",
         "cpp_test.cpp": "c++",  # Piston uses "c++" not "cpp"
+        "rust_test.rs": "rust",
     }
     
     # Scan templates directory for existing template files
@@ -921,6 +922,73 @@ def _generate_cpp_test_execution(test_cases: list[dict]) -> str:
     return "\n".join(code_parts)
 
 
+def _generate_rust_test_execution(test_cases: list[dict]) -> str:
+    """Generate Rust test execution code from test cases."""
+    code_parts = []
+    for test_case in test_cases:
+        test_id = test_case["id"]
+        points = test_case["point_value"]
+        test_code = test_case["test_code"]
+
+        # Clean up the test code - remove comments and extract assert statements
+        lines = test_code.split('\n')
+        assert_lines = []
+        for line in lines:
+            line = line.strip()
+            if line.startswith('assert'):
+                assert_lines.append(line)
+
+        if assert_lines:
+            # Convert assert statements to Rust format
+            rust_asserts = []
+            for line in assert_lines:
+                # Convert assert! or assert_eq! format
+                if "assert_eq!" in line or "assert_ne!" in line or "assert!" in line:
+                    rust_line = line
+                else:
+                    # Convert Python-style assert to Rust assert!
+                    rust_line = line.replace("assert ", "assert!(").replace("assert(", "assert!(")
+                    # Add closing paren and semicolon if needed
+                    if "assert!(" in rust_line and not rust_line.rstrip().endswith(';'):
+                        if not rust_line.rstrip().endswith(')'):
+                            rust_line = rust_line.rstrip() + ')'
+                        rust_line = rust_line.rstrip() + ';'
+                rust_asserts.append(rust_line)
+            rust_test_code = '\n'.join(rust_asserts)
+        else:
+            # If no assert found, use the whole code
+            rust_test_code = test_code
+            # Convert assert to Rust format
+            if "assert!(" not in rust_test_code and "assert_eq!(" not in rust_test_code:
+                rust_test_code = rust_test_code.replace("assert ", "assert!(").replace("assert(", "assert!(")
+            # Ensure semicolon is present
+            if not rust_test_code.rstrip().endswith(';'):
+                rust_test_code = rust_test_code.rstrip() + ';'
+
+        # Indent the Rust test code for inside the block
+        indented_rust_test_code = textwrap.indent(rust_test_code, "            ")
+
+        code_parts.append(f"""    {{
+        let test_passed = std::panic::catch_unwind(|| {{
+{indented_rust_test_code}
+        }}).is_ok();
+        
+        test_results.push(TestResult {{
+            id: {test_id},
+            passed: test_passed,
+            points: {points},
+        }});
+        
+        if test_passed {{
+            println!("PASSED: test_case_{test_id}:{points}");
+        }} else {{
+            println!("FAILED: test_case_{test_id}:{points}");
+        }}
+    }}
+""")
+    return "\n".join(code_parts)
+
+
 def _generate_generic_test_execution(language: str, test_cases: list[dict]) -> str:
     """Generate generic test execution code (fallback)."""
     code_parts = []
@@ -949,6 +1017,8 @@ def generate_test_execution_code(language: str, test_cases: list[dict]) -> str:
         return _generate_java_test_execution(test_cases)
     elif language_lower in ["gcc", "cpp", "c++"]:
         return _generate_cpp_test_execution(test_cases)
+    elif language_lower in ["rust", "rs"]:
+        return _generate_rust_test_execution(test_cases)
     else:
         return _generate_generic_test_execution(language, test_cases)
 

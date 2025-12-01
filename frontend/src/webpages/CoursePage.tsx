@@ -16,15 +16,17 @@ import {
   ChevronRight,
   SortAsc,
   Filter,
-  Flame
+  Flame,
+  ToggleLeft,
+  ToggleRight
 } from "lucide-react";
 
 // ============================================================================
-// STYLE TOGGLE: Change this to switch between assignment list styles
+// STYLE TOGGLE: Default style for assignment list
 // true  = New style with filters, sorting, and fancy cards
 // false = Old simple list style
 // ============================================================================
-const USE_NEW_STUDENT_ASSIGNMENT_STYLE = true;
+const DEFAULT_NEW_STYLE = true;
 
 type Student = { id: number; name?: string; role: "student" };
 type Faculty = { id: number; name?: string; role: "faculty" };
@@ -95,6 +97,9 @@ export default function CoursePage() {
   type AssignmentSortType = "due-date" | "name" | "status";
   const [assignmentFilter, setAssignmentFilter] = React.useState<AssignmentFilterType>("all");
   const [assignmentSort, setAssignmentSort] = React.useState<AssignmentSortType>("due-date");
+  
+  // Style toggle state (for demo purposes)
+  const [useNewStyle, setUseNewStyle] = React.useState(DEFAULT_NEW_STYLE);
 
   // Load course, students, faculty, assignments
   async function loadAll() {
@@ -797,7 +802,7 @@ export default function CoursePage() {
                       </div>
                     )}
                   </Card>
-                ) : USE_NEW_STUDENT_ASSIGNMENT_STYLE ? (
+                ) : useNewStyle ? (
                   /* NEW STYLE: Student View - Redesigned with Sorting/Filtering */
                   <div className="space-y-6">
                     {/* Header with Filters and Sort */}
@@ -837,6 +842,16 @@ export default function CoursePage() {
                           <option value="status">Sort by Status</option>
                         </select>
                       </div>
+                      
+                      {/* Style Toggle Button (for demo) */}
+                      <button
+                        onClick={() => setUseNewStyle(!useNewStyle)}
+                        className="flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg border border-border bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                        title={useNewStyle ? "Switch to simple list view" : "Switch to card view"}
+                      >
+                        {useNewStyle ? <ToggleRight className="w-4 h-4 text-primary" /> : <ToggleLeft className="w-4 h-4" />}
+                        {useNewStyle ? "Card View" : "List View"}
+                      </button>
                     </div>
 
                     {/* Assignments Grid */}
@@ -996,6 +1011,15 @@ export default function CoursePage() {
                   <Card>
                     <div className="flex items-center justify-between gap-3 mb-6">
                       <h2 className="text-2xl font-semibold m-0">Assignments</h2>
+                      {/* Style Toggle Button (for demo) */}
+                      <button
+                        onClick={() => setUseNewStyle(!useNewStyle)}
+                        className="flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg border border-border bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                        title={useNewStyle ? "Switch to simple list view" : "Switch to card view"}
+                      >
+                        {useNewStyle ? <ToggleRight className="w-4 h-4 text-primary" /> : <ToggleLeft className="w-4 h-4" />}
+                        {useNewStyle ? "Card View" : "List View"}
+                      </button>
                     </div>
 
                     {visibleAssignments.length === 0 ? (

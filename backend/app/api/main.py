@@ -11,7 +11,8 @@ from .courses import router as courses_router
 from .registrations import router as registrations_router
 from .assignments import router as assignments_router
 from .languages import router as languages_router
-from .syntax import router as syntax_router
+# Temporarily disabled
+# from .syntax import router as syntax_router
 
 # startup hook
 from app.services.piston import get_runtimes, ensure_languages_installed
@@ -103,7 +104,8 @@ app.include_router(attempts_router,    prefix="/api/v1/attempts",    tags=["atte
 app.include_router(courses_router,        prefix="/api/v1/courses",     tags=["courses"])
 app.include_router(registrations_router,  prefix="/api/v1",             tags=["registrations"])
 app.include_router(languages_router,      prefix="/api/v1/languages",   tags=["languages"])
-app.include_router(syntax_router,         prefix="/api/v1/syntax",      tags=["syntax"])
+# Temporarily disabled
+# app.include_router(syntax_router,         prefix="/api/v1/syntax",      tags=["syntax"])
 app.include_router(assignments_router,    prefix="/api/v1/assignments", tags=["assignments"])
 
 # Run the server when executed as a module

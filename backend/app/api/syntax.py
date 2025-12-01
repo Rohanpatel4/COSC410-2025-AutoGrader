@@ -123,6 +123,58 @@ def parse_cpp_error(error_text: str) -> list[CodeError]:
     return errors
 
 
+def parse_rust_error(error_text: str) -> list[CodeError]:
+    """Parse Rust compilation/runtime error output to extract line numbers and messages."""
+    errors = []
+    lines = error_text.strip().split('\n')
+    
+    for line in lines:
+        # Rust error format: error[E0425]: cannot find value `x` in this scope
+        #    --> main.rs:5:10
+        # Look for the --> line with file:line:column
+        match = re.search(r'-->\s*main\.rs:(\d+):(\d+)', line)
+        if match:
+            line_num = int(match.group(1))
+            col_num = int(match.group(2))
+            # Find the error message from previous lines
+            continue
+        
+        # Rust error message line: error[E0425]: cannot find value...
+        match = re.search(r'^error(\[E\d+\])?: (.+)', line)
+        if match:
+            error_code = match.group(1) or ""
+            message = match.group(2).strip()
+            # Get line number from next --> line if available
+            errors.append(CodeError(line=1, message=f"error{error_code}: {message}"[:200]))
+            continue
+        
+        # Also catch warnings that prevent compilation
+        match = re.search(r'^warning(\[.*\])?: (.+)', line)
+        if match and 'deny' in error_text:  # Only if warnings are errors
+            message = match.group(2).strip()
+            errors.append(CodeError(line=1, message=f"warning: {message}"[:200]))
+    
+    # Try to associate line numbers with errors
+    # Re-scan to match error messages with their line numbers
+    current_error_idx = 0
+    for i, line in enumerate(lines):
+        match = re.search(r'-->\s*main\.rs:(\d+):(\d+)', line)
+        if match and current_error_idx < len(errors):
+            line_num = int(match.group(1))
+            col_num = int(match.group(2))
+            errors[current_error_idx] = CodeError(
+                line=line_num, 
+                column=col_num, 
+                message=errors[current_error_idx].message
+            )
+            current_error_idx += 1
+    
+    if not errors and error_text.strip():
+        errors.append(CodeError(line=1, message=error_text.strip()[:200]))
+    
+    return errors
+
+
 @router.post("/validate", response_model=SyntaxCheckResponse)
 async def validate_syntax(request: SyntaxCheckRequest):
     """
@@ -139,6 +191,8 @@ async def validate_syntax(request: SyntaxCheckRequest):
     piston_language = language
     if language == "cpp":
         piston_language = "c++"
+    elif language == "rs":
+        piston_language = "rust"
     
     piston_url = settings.PISTON_URL
     
@@ -167,6 +221,16 @@ public class Main {{
     public static void main(String[] args) {{
         {code}
     }}
+}}
+'''
+            else:
+                check_code = code
+        elif language in ["rust", "rs"]:
+            # Rust: Wrap in main function if not already present
+            if "fn main" not in code:
+                check_code = f'''
+fn main() {{
+    {code}
 }}
 '''
             else:
@@ -217,6 +281,8 @@ int main() {{
                     errors = parse_java_error(compile_stderr)
                 elif language in ["cpp", "c++", "c"]:
                     errors = parse_cpp_error(compile_stderr)
+                elif language in ["rust", "rs"]:
+                    errors = parse_rust_error(compile_stderr)
                 else:
                     errors = parse_python_error(compile_stderr)
                 
@@ -235,6 +301,8 @@ int main() {{
                     errors = parse_python_error(stderr)
                 elif language == "java":
                     errors = parse_java_error(stderr)
+                elif language in ["rust", "rs"]:
+                    errors = parse_rust_error(stderr)
                 else:
                     errors = parse_cpp_error(stderr)
                 

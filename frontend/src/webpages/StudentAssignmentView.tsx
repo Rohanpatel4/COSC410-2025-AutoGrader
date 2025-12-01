@@ -7,6 +7,7 @@ import { formatGradeDisplay } from "../utils/formatGrade";
 import { Upload, X, FileCode, CheckCircle2, XCircle, ChevronLeft, PanelLeftClose, PanelLeftOpen, CheckCircle, BookOpen } from "lucide-react";
 import InstructionsManager from "../components/ui/InstructionsManager";
 import { SplitPane } from "../components/ui/SplitPane";
+import { Celebration } from "../components/ui/Celebration";
 
 interface StudentAssignmentViewProps {
   assignment: Assignment;
@@ -48,6 +49,8 @@ export default function StudentAssignmentView({
   const [activeTab, setActiveTab] = React.useState<"visible" | "hidden">("visible");
   const [isLeftPanelOpen, setIsLeftPanelOpen] = React.useState(true);
   const [verticalSplit, setVerticalSplit] = React.useState(60); // Track vertical split for code/test cases
+  const [showCelebration, setShowCelebration] = React.useState(false);
+  const [lastResultId, setLastResultId] = React.useState<string | null>(null); // Track to avoid re-triggering
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Separate visible and hidden test cases from the assignment
@@ -151,6 +154,22 @@ export default function StudentAssignmentView({
     if (!lastResult?.test_cases) return 0;
     return lastResult.test_cases.length;
   }, [lastResult]);
+
+  // Trigger celebration when user gets 100% (all tests passed)
+  React.useEffect(() => {
+    // Create a unique ID for this result to avoid re-triggering
+    const resultId = lastResult?.submission_id || lastResult?.id || JSON.stringify(lastResult?.test_cases?.map((tc: any) => tc.id));
+    
+    if (
+      lastResult?.test_cases &&
+      totalTestCasesCount > 0 &&
+      passedCount === totalTestCasesCount &&
+      resultId !== lastResultId
+    ) {
+      setLastResultId(resultId);
+      setShowCelebration(true);
+    }
+  }, [lastResult, passedCount, totalTestCasesCount, lastResultId]);
 
   // --- Render Assignment Panel (Top) ---
   const renderAssignmentPanel = () => (
@@ -489,31 +508,41 @@ export default function StudentAssignmentView({
   );
 
   return (
-    <div className="h-[calc(100vh-96px)] w-full overflow-hidden bg-background flex flex-col">
-        {isLeftPanelOpen ? (
-            <SplitPane direction="horizontal" initialSplit={35} minSize={20}>
-                {renderLeftPanel()}
-                <SplitPane 
-                  direction="vertical" 
-                  split={verticalSplit} 
-                  onSplitChange={setVerticalSplit}
-                  minSize={20}
-                >
-                    {renderRightPanel()}
-                    {renderBottomPanel()}
-                </SplitPane>
-            </SplitPane>
-        ) : (
-             <SplitPane 
-               direction="vertical" 
-               split={verticalSplit} 
-               onSplitChange={setVerticalSplit}
-               minSize={20}
-             >
-                {renderRightPanel()}
-                {renderBottomPanel()}
-            </SplitPane>
-        )}
-    </div>
+    <>
+      {/* Perfect Score Celebration */}
+      <Celebration 
+        show={showCelebration} 
+        onComplete={() => setShowCelebration(false)}
+        score={passedCount}
+        total={totalTestCasesCount}
+      />
+
+      <div className="h-[calc(100vh-96px)] w-full overflow-hidden bg-background flex flex-col">
+          {isLeftPanelOpen ? (
+              <SplitPane direction="horizontal" initialSplit={35} minSize={20}>
+                  {renderLeftPanel()}
+                  <SplitPane 
+                    direction="vertical" 
+                    split={verticalSplit} 
+                    onSplitChange={setVerticalSplit}
+                    minSize={20}
+                  >
+                      {renderRightPanel()}
+                      {renderBottomPanel()}
+                  </SplitPane>
+              </SplitPane>
+          ) : (
+               <SplitPane 
+                 direction="vertical" 
+                 split={verticalSplit} 
+                 onSplitChange={setVerticalSplit}
+                 minSize={20}
+               >
+                  {renderRightPanel()}
+                  {renderBottomPanel()}
+              </SplitPane>
+          )}
+      </div>
+    </>
   );
 }

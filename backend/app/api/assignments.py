@@ -649,6 +649,8 @@ async def submit_to_assignment(
                 "c++": ["cpp", "cc", "cxx"],
                 "gcc": ["cpp", "cc", "cxx", "c"],
                 "c": ["c"],
+                "rust": ["rs"],
+                "rs": ["rs"],
             }
             valid_extensions = language_ext_map.get(language.lower(), ["py"])  # Default to py
             if file_ext not in valid_extensions:
