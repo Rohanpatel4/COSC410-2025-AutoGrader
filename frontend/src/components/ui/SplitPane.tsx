@@ -4,6 +4,8 @@ interface SplitPaneProps {
   children: [React.ReactNode, React.ReactNode];
   direction?: "horizontal" | "vertical";
   initialSplit?: number; // percentage (0-100)
+  split?: number; // controlled split value (percentage 0-100)
+  onSplitChange?: (split: number) => void; // callback when split changes
   minSize?: number; // pixels
   className?: string;
 }
@@ -12,10 +14,13 @@ export const SplitPane: React.FC<SplitPaneProps> = ({
   children,
   direction = "horizontal",
   initialSplit = 50,
+  split: controlledSplit,
+  onSplitChange,
   minSize = 50,
   className = "",
 }) => {
-  const [split, setSplit] = useState(initialSplit);
+  const [internalSplit, setInternalSplit] = useState(initialSplit);
+  const split = controlledSplit !== undefined ? controlledSplit : internalSplit;
   const containerRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
 
@@ -46,7 +51,12 @@ export const SplitPane: React.FC<SplitPaneProps> = ({
     // Simple percent constraint:
     newSplit = Math.max(5, Math.min(95, newSplit));
     
-    setSplit(newSplit);
+    // Use controlled or uncontrolled mode
+    if (onSplitChange) {
+      onSplitChange(newSplit);
+    } else {
+      setInternalSplit(newSplit);
+    }
   };
 
   const handleMouseUp = () => {

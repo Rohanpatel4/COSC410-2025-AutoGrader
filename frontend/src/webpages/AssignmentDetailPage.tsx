@@ -4,10 +4,9 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { fetchJson, BASE } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import type { Assignment } from "../types/assignments";
-import { Button, Card, Alert, Input, Label, Badge } from "../components/ui";
+import { Button, Card, Alert, Badge } from "../components/ui";
 import { formatGradeDisplay } from "../utils/formatGrade";
 import { 
-  GripVertical, 
   ExternalLink, 
   Eye, 
   Clock, 
@@ -16,7 +15,10 @@ import {
   ArrowLeft,
   Settings,
   Users,
-  Trophy
+  Trophy,
+  ChevronDown,
+  ChevronUp,
+  BookOpen
 } from "lucide-react";
 import StudentAssignmentView from "./StudentAssignmentView";
 import InstructionsManager from "../components/ui/InstructionsManager";
@@ -26,15 +28,6 @@ type Attempt = { id: number; grade: number | null; earned_points?: number | null
 type FacAttempt = { id: number; earned_points: number | null };
 type FacRow = { student_id: number; username: string; attempts: FacAttempt[]; best: number | null };
 type FacPayload = { assignment: { id: number; title: string }; students: FacRow[] };
-
-type EditTestCase = {
-  id: number;
-  code: string;
-  points: number;
-  visible: boolean;
-  order: number;
-  isNew?: boolean;
-};
 
 
 export default function AssignmentDetailPage() {
@@ -58,20 +51,10 @@ export default function AssignmentDetailPage() {
   const [facLoading, setFacLoading] = React.useState(false);
   const [facErr, setFacErr] = React.useState<string | null>(null);
 
-  // Edit modal state
-  const [editModalOpen, setEditModalOpen] = React.useState(false);
-  const [editTitle, setEditTitle] = React.useState("");
-  const [editDescription, setEditDescription] = React.useState("");
-  const [editLanguage, setEditLanguage] = React.useState("python");
-  const [editSubLimit, setEditSubLimit] = React.useState("");
-  const [editStart, setEditStart] = React.useState("");
-  const [editStop, setEditStop] = React.useState("");
-  const [editInstructions, setEditInstructions] = React.useState<any>(null);
-  const [editLoading, setEditLoading] = React.useState(false);
+  // Expandable section state
+  const [descriptionExpanded, setDescriptionExpanded] = React.useState(false);
 
-  // Edit test cases state
-  const [editTestCases, setEditTestCases] = React.useState<EditTestCase[]>([]);
-  const [editTestCasesLoading, setEditTestCasesLoading] = React.useState(false);
+  // Test cases for calculating total points
   const [testCases, setTestCases] = React.useState<any[]>([]);
 
   // Get file extensions based on language
@@ -125,189 +108,6 @@ export default function AssignmentDetailPage() {
       alert(`Failed to download submission code: ${error}`);
     }
   };
-
-  const openEditModal = async () => {
-    if (!a) return;
-
-    // Set assignment fields
-    setEditTitle(a.title || "");
-    setEditDescription(a.description || "");
-    setEditLanguage(a.language || "python");
-    setEditSubLimit(a.sub_limit?.toString() || "");
-    setEditStart(a.start ? new Date(a.start).toISOString().slice(0, 16) : "");
-    setEditStop(a.stop ? new Date(a.stop).toISOString().slice(0, 16) : "");
-    // Set instructions directly
-    setEditInstructions(a.instructions || null);
-
-    // Fetch existing test cases
-    setEditTestCasesLoading(true);
-    try {
-      const testCases: any[] = await fetchJson(`/api/v1/assignments/${a.id}/test-cases?include_hidden=true&user_id=${userId}`);
-      setEditTestCases(testCases.map((tc: any, index: number) => ({
-        id: tc.id,
-        code: tc.test_code,
-        points: tc.point_value,
-        visible: tc.visibility,
-        order: index + 1
-      })));
-    } catch (error) {
-      console.error("Failed to fetch test cases:", error);
-      setEditTestCases([]);
-    } finally {
-      setEditTestCasesLoading(false);
-    }
-
-    setEditModalOpen(true);
-  };
-
-  // Test case management functions for edit modal
-  const addEditTestCase = () => {
-    const newId = Date.now(); // Temporary ID for new test cases
-    setEditTestCases(prev => [...prev, {
-      id: newId,
-      code: "",
-      points: 10,
-      visible: true,
-      order: prev.length + 1,
-      isNew: true // Mark as new for backend handling
-    }]);
-  };
-
-  const updateEditTestCase = (id: number, field: string, value: any) => {
-    setEditTestCases(prev => prev.map(tc =>
-      tc.id === id ? { ...tc, [field]: value } : tc
-    ));
-  };
-
-  const deleteEditTestCase = (id: number) => {
-    setEditTestCases(prev => prev.filter(tc => tc.id !== id));
-  };
-
-  const moveEditTestCase = (fromIndex: number, toIndex: number) => {
-    setEditTestCases(prev => {
-      const result = [...prev];
-      const [removed] = result.splice(fromIndex, 1);
-      result.splice(toIndex, 0, removed);
-      // Update order numbers
-      return result.map((tc, index) => ({ ...tc, order: index + 1 }));
-    });
-  };
-
-  const deleteAssignment = async () => {
-    if (!a || !assignment_id) return;
-
-    const confirmed = window.confirm(
-      `Are you sure you want to delete the assignment "${a.title}"? This action cannot be undone and will delete all associated submissions and test cases.`
-    );
-
-    if (!confirmed) return;
-
-    setEditLoading(true);
-    try {
-      await fetchJson(
-        `/api/v1/assignments/${encodeURIComponent(assignment_id)}`,
-        { method: "DELETE" }
-      );
-
-      // Navigate back to the course page
-      if (a.course_id) {
-        navigate(`/courses/${a.course_id}`);
-      } else {
-        navigate("/courses");
-      }
-    } catch (e: any) {
-      alert(`Failed to delete assignment: ${e?.message ?? "Unknown error"}`);
-    } finally {
-      setEditLoading(false);
-    }
-  };
-
-  const saveEdit = async () => {
-    if (!a || !assignment_id) return;
-
-    setEditLoading(true);
-    try {
-      // Update assignment details
-      const payload: any = {
-        title: editTitle.trim(),
-      };
-
-      if (editDescription.trim()) payload.description = editDescription.trim();
-      if (editLanguage) payload.language = editLanguage;
-      if (editSubLimit) payload.sub_limit = editSubLimit;
-      if (editStart) payload.start = editStart;
-      if (editStop) payload.stop = editStop;
-      payload.instructions = editInstructions;
-
-      await fetchJson(
-        `/api/v1/assignments/${encodeURIComponent(assignment_id)}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        }
-      );
-
-      // Handle test cases
-      const assignmentId = parseInt(assignment_id);
-
-      // Get original test cases to compare
-      const originalTestCases: any[] = await fetchJson(`/api/v1/assignments/${assignmentId}/test-cases`);
-      const originalIds = new Set(originalTestCases.map((tc: any) => tc.id));
-      const currentIds = new Set(editTestCases.map(tc => tc.id));
-
-      // Delete removed test cases
-      for (const originalTc of originalTestCases) {
-        if (!currentIds.has(originalTc.id)) {
-          await fetchJson(
-            `/api/v1/assignments/${assignmentId}/test-cases/${originalTc.id}`,
-            { method: "DELETE" }
-          );
-        }
-      }
-
-      // Update existing and create new test cases
-      for (const tc of editTestCases) {
-        const tcPayload = {
-          test_code: tc.code,
-          point_value: tc.points,
-          visibility: tc.visible,
-          order: tc.order
-        };
-
-        if (tc.isNew) {
-          // Create new test case
-          await fetchJson(
-            `/api/v1/assignments/${assignmentId}/test-cases`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(tcPayload),
-            }
-          );
-        } else {
-          // Update existing test case
-          await fetchJson(
-            `/api/v1/assignments/${assignmentId}/test-cases/${tc.id}`,
-            {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(tcPayload),
-            }
-          );
-        }
-      }
-
-      // Reload assignment data
-      await loadAll();
-      setEditModalOpen(false);
-    } catch (e: any) {
-      alert(`Failed to update assignment: ${e.message}`);
-    } finally {
-      setEditLoading(false);
-    }
-  };
-
 
   async function loadAll() {
     if (!assignment_id) return; // guard
@@ -546,15 +346,64 @@ export default function AssignmentDetailPage() {
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={openEditModal}
+                    onClick={() => navigate(`/assignments/${assignment_id}/edit`)}
                   >
                     <Settings className="w-4 h-4 mr-2" />
                     Edit
                   </Button>
                 </div>
-                {a.description && (
-                  <p className="text-muted-foreground mb-6 leading-relaxed">{a.description}</p>
-                )}
+                
+                {/* Description & Instructions - Combined */}
+                {(() => {
+                  const descriptionText = a.description || '';
+                  const hasDescription = descriptionText.length > 0;
+                  const hasInstructions = a.instructions && (Array.isArray(a.instructions) ? a.instructions.length > 0 : Object.keys(a.instructions).length > 0);
+                  const isLongDescription = descriptionText.length > 200;
+                  const needsExpansion = isLongDescription || hasInstructions;
+                  
+                  if (!hasDescription && !hasInstructions) return null;
+                  
+                  return (
+                    <div className="mb-6">
+                      {/* Description */}
+                      {hasDescription && (
+                        <div className={`text-muted-foreground leading-relaxed ${!descriptionExpanded && needsExpansion ? 'line-clamp-3' : ''}`}>
+                          {descriptionText}
+                        </div>
+                      )}
+                      
+                      {/* Instructions - shown when expanded */}
+                      {descriptionExpanded && hasInstructions && (
+                        <div className="mt-4 pt-4 border-t border-border">
+                          <div className="flex items-center gap-2 mb-3">
+                            <BookOpen className="w-4 h-4 text-amber-500" />
+                            <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">Instructions</h3>
+                          </div>
+                          <InstructionsManager
+                            instructions={a.instructions}
+                            onChange={() => {}}
+                            disabled={true}
+                            readOnly={true}
+                          />
+                        </div>
+                      )}
+                      
+                      {/* Show more/less button - only if there's content to expand */}
+                      {needsExpansion && (
+                        <button
+                          onClick={() => setDescriptionExpanded(!descriptionExpanded)}
+                          className="text-primary text-sm font-medium mt-2 flex items-center gap-1 hover:opacity-80"
+                        >
+                          {descriptionExpanded ? (
+                            <>Show less <ChevronUp className="w-4 h-4" /></>
+                          ) : (
+                            <>Show more <ChevronDown className="w-4 h-4" /></>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
                 
                 {/* Stats Grid - 5 items */}
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -804,218 +653,6 @@ export default function AssignmentDetailPage() {
                 </div>
               </div>
 
-            {/* Edit Assignment Modal */}
-            {editModalOpen && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div className="bg-card rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-                  <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-2xl font-bold">Edit Assignment</h2>
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      onClick={deleteAssignment}
-                      disabled={editLoading}
-                    >
-                      Delete
-                    </Button>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div>
-                      <Label htmlFor="edit-title">Title *</Label>
-                      <Input
-                        id="edit-title"
-                        value={editTitle}
-                        onChange={(e) => setEditTitle(e.target.value)}
-                        placeholder="Assignment title"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="edit-description">Description</Label>
-                      <textarea
-                        id="edit-description"
-                        value={editDescription}
-                        onChange={(e) => setEditDescription(e.target.value)}
-                        placeholder="Assignment description"
-                        rows={3}
-                        className="w-full p-2 border border-gray-300 rounded resize-vertical"
-                      />
-                    </div>
-
-                    <InstructionsManager
-                      instructions={editInstructions}
-                      onChange={setEditInstructions}
-                      disabled={editLoading}
-                    />
-
-                    <div>
-                      <Label htmlFor="edit-language">Language</Label>
-                      <select
-                        id="edit-language"
-                        value={editLanguage}
-                        onChange={(e) => setEditLanguage(e.target.value)}
-                        className="w-full p-2 border border-gray-300 rounded"
-                      >
-                        <option value="python">Python</option>
-                        <option value="java">Java</option>
-                        <option value="cpp">C++</option>
-
-                      </select>
-                    </div>
-
-                    <div>
-                      <Label htmlFor="edit-sub-limit">Submission Limit</Label>
-                      <Input
-                        id="edit-sub-limit"
-                        type="number"
-                        value={editSubLimit}
-                        onChange={(e) => setEditSubLimit(e.target.value)}
-                        placeholder="Unlimited if empty"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="edit-start">Start Date/Time</Label>
-                      <Input
-                        id="edit-start"
-                        type="datetime-local"
-                        value={editStart}
-                        onChange={(e) => setEditStart(e.target.value)}
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="edit-stop">End Date/Time</Label>
-                      <Input
-                        id="edit-stop"
-                        type="datetime-local"
-                        value={editStop}
-                        onChange={(e) => setEditStop(e.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Test Cases Section */}
-                  <div className="mt-6">
-                    <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-lg font-semibold">Test Cases</h3>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        onClick={addEditTestCase}
-                        disabled={editTestCasesLoading}
-                      >
-                        Add Test Case
-                      </Button>
-                    </div>
-
-                    {editTestCasesLoading ? (
-                      <p className="text-muted-foreground">Loading test cases...</p>
-                    ) : editTestCases.length === 0 ? (
-                      <p className="text-muted-foreground">No test cases yet. Click "Add Test Case" to create one.</p>
-                    ) : (
-                      <div className="space-y-4 max-h-96 overflow-y-auto">
-                        {editTestCases.map((testCase, index) => (
-                          <div
-                            key={testCase.id}
-                            className="space-y-2 border border-border rounded p-4 bg-muted/20"
-                            draggable
-                            onDragStart={(e) => e.dataTransfer.setData('text/plain', index.toString())}
-                            onDragOver={(e) => e.preventDefault()}
-                            onDrop={(e) => {
-                              e.preventDefault();
-                              const fromIndex = parseInt(e.dataTransfer.getData('text/plain'));
-                              moveEditTestCase(fromIndex, index);
-                            }}
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className="cursor-move text-muted-foreground hover:text-foreground">
-                                <GripVertical className="w-4 h-4" />
-                              </div>
-                              <Label className="text-sm font-medium">
-                                Test Case {index + 1}:
-                              </Label>
-                              <div className="flex items-center gap-4 ml-auto">
-                                <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={testCase.visible}
-                                    onChange={(e) => updateEditTestCase(testCase.id, 'visible', e.target.checked)}
-                                    className="w-4 h-4"
-                                  />
-                                  visible
-                                </label>
-                                <div className="flex items-center gap-2">
-                                  <Label className="text-sm text-muted-foreground">points:</Label>
-                                  <Input
-                                    type="number"
-                                    min="1"
-                                    value={testCase.points || ''}
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      if (val === '') {
-                                        updateEditTestCase(testCase.id, 'points', 0);
-                                      } else {
-                                        const numVal = parseInt(val);
-                                        updateEditTestCase(testCase.id, 'points', isNaN(numVal) ? 1 : numVal);
-                                      }
-                                    }}
-                                    onBlur={(e) => {
-                                      const val = parseInt(e.target.value);
-                                      if (!val || val < 1) {
-                                        updateEditTestCase(testCase.id, 'points', 1);
-                                      }
-                                    }}
-                                    className="w-16 h-8 text-center"
-                                  />
-                                </div>
-                                <Button
-                                  type="button"
-                                  variant="secondary"
-                                  size="sm"
-                                  onClick={() => deleteEditTestCase(testCase.id)}
-                                  disabled={editTestCases.length <= 1}
-                                >
-                                  ✕
-                                </Button>
-                              </div>
-                            </div>
-                            <textarea
-                              placeholder="Enter test case code (e.g., assert add(2, 3) == 5)"
-                              value={testCase.code}
-                              onChange={(e) => updateEditTestCase(testCase.id, 'code', e.target.value)}
-                              rows={3}
-                              className="w-full p-2 border border-border rounded text-sm font-mono resize-vertical"
-                              style={{ fontFamily: 'monospace' }}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex gap-3 mt-6">
-                    <Button
-                      variant="secondary"
-                      onClick={() => setEditModalOpen(false)}
-                      disabled={editLoading}
-                      className="flex-1"
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      onClick={saveEdit}
-                      disabled={editLoading || !editTitle.trim()}
-                      className="flex-1"
-                    >
-                      {editLoading ? "Saving..." : "Save Changes"}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            )}
           </>
         )}
     </div>

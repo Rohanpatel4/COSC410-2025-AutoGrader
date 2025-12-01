@@ -47,6 +47,7 @@ export default function StudentAssignmentView({
   const [uploadedFile, setUploadedFile] = React.useState<File | null>(null);
   const [activeTab, setActiveTab] = React.useState<"visible" | "hidden">("visible");
   const [isLeftPanelOpen, setIsLeftPanelOpen] = React.useState(true);
+  const [verticalSplit, setVerticalSplit] = React.useState(60); // Track vertical split for code/test cases
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Separate visible and hidden test cases from the assignment
@@ -151,13 +152,13 @@ export default function StudentAssignmentView({
     return lastResult.test_cases.length;
   }, [lastResult]);
 
-  // --- Render Left Panel (Exercise Info) ---
-  const renderLeftPanel = () => (
+  // --- Render Assignment Panel (Top) ---
+  const renderAssignmentPanel = () => (
     <div className="h-full flex flex-col overflow-hidden bg-card">
       {/* Header with back link */}
-      <div className="px-5 py-4 border-b border-border bg-muted/30 flex items-center gap-3">
+      <div className="px-5 py-4 border-b border-border bg-muted/30 flex items-center gap-3 shrink-0">
         <BookOpen className="w-4 h-4 text-primary" />
-        <span className="text-sm font-medium text-foreground">Exercise</span>
+        <span className="text-sm font-medium text-foreground tracking-wide">Assignment</span>
         <Link 
           to={`/courses/${assignment.course_id}`} 
           className="ml-auto text-xs text-primary hover:text-accent flex items-center gap-1 no-underline"
@@ -167,11 +168,23 @@ export default function StudentAssignmentView({
         </Link>
       </div>
 
-      {/* Main Content - Single scrollable area */}
+      {/* Assignment Content - scrollable */}
       <div className="flex-1 overflow-y-auto custom-scrollbar bg-card">
-        <div className="p-6 space-y-5">
-          {/* Title */}
-          <h1 className="text-2xl font-bold text-foreground leading-tight">{assignment.title}</h1>
+        <div className="p-6 space-y-4">
+          {/* Title with badges */}
+          <div className="flex items-start justify-between gap-4">
+            <h1 className="text-2xl font-bold text-foreground leading-tight">{assignment.title}</h1>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-xs font-medium text-muted-foreground bg-muted px-2.5 py-1 rounded-md border border-border">
+                {attempts.length} {assignment.sub_limit ? `/ ${assignment.sub_limit}` : ""} Attempts
+              </span>
+              {bestGrade != null && bestGrade >= 0 && (
+                <span className="text-xs font-medium text-primary bg-primary/10 px-2.5 py-1 rounded-md border border-primary/20">
+                  Best: {totalPoints > 0 ? `${bestGrade}/${totalPoints}` : `${formatGradeDisplay(bestGrade)}%`}
+                </span>
+              )}
+            </div>
+          </div>
           
           {/* Description */}
           {assignment.description && (
@@ -179,37 +192,46 @@ export default function StudentAssignmentView({
               <p className="whitespace-pre-wrap">{assignment.description}</p>
             </div>
           )}
-          
-          {/* Instructions Section */}
-          {instructions && (
-            <div className="pt-5 border-t border-border">
-              <div className="flex items-center gap-2 mb-4">
-                <CheckCircle className="w-5 h-5 text-primary" />
-                <h2 className="font-semibold text-foreground text-base">
-                  Instructions
-                </h2>
-                <div className="ml-auto flex items-center gap-2">
-                  <span className="text-xs font-medium text-muted-foreground bg-muted px-2.5 py-1 rounded-md border border-border">
-                    {attempts.length} {assignment.sub_limit ? `/ ${assignment.sub_limit}` : ""} Attempts
-                  </span>
-                  {bestGrade != null && bestGrade >= 0 && (
-                    <span className="text-xs font-medium text-primary bg-primary/10 px-2.5 py-1 rounded-md border border-primary/20">
-                      Best: {totalPoints > 0 ? `${bestGrade}/${totalPoints}` : `${formatGradeDisplay(bestGrade)}%`}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="instructions-content text-sm text-foreground">
-                <InstructionsManager 
-                  instructions={instructions} 
-                  onChange={() => {}} 
-                  readOnly={true} 
-                />
-              </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // --- Render Instructions Panel (Bottom) ---
+  const renderInstructionsPanel = () => (
+    <div className="h-full flex flex-col overflow-hidden bg-card">
+      {/* Header */}
+      <div className="px-5 py-4 border-b border-border bg-muted/30 flex items-center gap-3 shrink-0">
+        <CheckCircle className="w-4 h-4 text-primary" />
+        <span className="text-sm font-medium text-foreground tracking-wide">Instructions</span>
+      </div>
+
+      {/* Instructions Content - scrollable */}
+      <div className="flex-1 overflow-y-auto custom-scrollbar bg-card">
+        <div className="p-6">
+          {instructions ? (
+            <div className="instructions-content text-sm text-foreground">
+              <InstructionsManager 
+                instructions={instructions} 
+                onChange={() => {}} 
+                readOnly={true} 
+              />
             </div>
+          ) : (
+            <div className="text-muted-foreground text-sm">No instructions available.</div>
           )}
         </div>
       </div>
+    </div>
+  );
+
+  // --- Render Combined Left Panel with Draggable Divider ---
+  const renderLeftPanel = () => (
+    <div className="h-full flex flex-col overflow-hidden">
+      <SplitPane direction="vertical" initialSplit={35} minSize={15}>
+        {renderAssignmentPanel()}
+        {renderInstructionsPanel()}
+      </SplitPane>
     </div>
   );
 
@@ -243,11 +265,11 @@ export default function StudentAssignmentView({
         {/* Submit Message Badge */}
         {submitMsg && (
             <div className={`px-3 py-1 rounded-full text-xs font-medium flex items-center animate-in fade-in ${
-               submitMsg.includes("failed") || submitMsg.includes("Error") 
+               submitMsg.includes("failed") || submitMsg.includes("Error") || submitMsg.includes("unavailable") || submitMsg.includes("503")
                  ? "bg-danger/10 text-danger border border-danger/20" 
                  : "bg-success/10 text-success border border-success/20"
             }`}>
-               {submitMsg.includes("failed") || submitMsg.includes("Error") 
+               {submitMsg.includes("failed") || submitMsg.includes("Error") || submitMsg.includes("unavailable") || submitMsg.includes("503")
                  ? <XCircle className="w-3 h-3 mr-1.5" /> 
                  : <CheckCircle2 className="w-3 h-3 mr-1.5" />
                }
@@ -471,13 +493,23 @@ export default function StudentAssignmentView({
         {isLeftPanelOpen ? (
             <SplitPane direction="horizontal" initialSplit={35} minSize={20}>
                 {renderLeftPanel()}
-                <SplitPane direction="vertical" initialSplit={60} minSize={20}>
+                <SplitPane 
+                  direction="vertical" 
+                  split={verticalSplit} 
+                  onSplitChange={setVerticalSplit}
+                  minSize={20}
+                >
                     {renderRightPanel()}
                     {renderBottomPanel()}
                 </SplitPane>
             </SplitPane>
         ) : (
-             <SplitPane direction="vertical" initialSplit={60} minSize={20}>
+             <SplitPane 
+               direction="vertical" 
+               split={verticalSplit} 
+               onSplitChange={setVerticalSplit}
+               minSize={20}
+             >
                 {renderRightPanel()}
                 {renderBottomPanel()}
             </SplitPane>

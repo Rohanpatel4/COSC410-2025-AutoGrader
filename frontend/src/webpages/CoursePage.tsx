@@ -6,6 +6,25 @@ import type { Assignment } from "../types/assignments";
 import { useAuth } from "../auth/AuthContext";
 import { Button, Input, Card, Alert, Badge } from "../components/ui";
 import { formatGradeDisplay } from "../utils/formatGrade";
+import { 
+  Calendar, 
+  Clock, 
+  Trophy, 
+  FileCode, 
+  CheckCircle2, 
+  AlertTriangle,
+  ChevronRight,
+  SortAsc,
+  Filter,
+  Flame
+} from "lucide-react";
+
+// ============================================================================
+// STYLE TOGGLE: Change this to switch between assignment list styles
+// true  = New style with filters, sorting, and fancy cards
+// false = Old simple list style
+// ============================================================================
+const USE_NEW_STUDENT_ASSIGNMENT_STYLE = true;
 
 type Student = { id: number; name?: string; role: "student" };
 type Faculty = { id: number; name?: string; role: "faculty" };
@@ -70,6 +89,12 @@ export default function CoursePage() {
 
   // Grades display toggle
   const [showPoints, setShowPoints] = React.useState(false);
+
+  // Student assignments sorting and filtering
+  type AssignmentFilterType = "all" | "active" | "due-soon";
+  type AssignmentSortType = "due-date" | "name" | "status";
+  const [assignmentFilter, setAssignmentFilter] = React.useState<AssignmentFilterType>("all");
+  const [assignmentSort, setAssignmentSort] = React.useState<AssignmentSortType>("due-date");
 
   // Load course, students, faculty, assignments
   async function loadAll() {
@@ -152,7 +177,7 @@ export default function CoursePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [course_id]);
 
-  // Load gradebook or student attempts when grades tab is activated
+  // Load gradebook or student attempts when grades/course tab is activated
   React.useEffect(() => {
     if (activeTab === "grades") {
       if (isFaculty) {
@@ -163,6 +188,10 @@ export default function CoursePage() {
           loadStudentAttempts();
         }
       }
+    }
+    // Also load student attempts when on course tab for best grade display
+    if (activeTab === "course" && !isFaculty && assignments.length > 0) {
+      loadStudentAttempts();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, assignments.length]);
@@ -285,26 +314,107 @@ export default function CoursePage() {
   }
 
   // Assignment status calculation
-  function getAssignmentStatus(assignment: Assignment): "overdue" | "active" | "upcoming" {
-    // If no start and no stop, assignment is active
-    if (!assignment.start && !assignment.stop) return "active";
+  // For Faculty: "scheduled" (before start), "active" (in progress), "closed" (past due)
+  // For Students: "active" (can submit), "closed" (past due) - they don't see scheduled
+  function getAssignmentStatus(assignment: Assignment, forStudent: boolean = false): "scheduled" | "active" | "closed" {
+    const now = new Date();
     
-    // If no stop date, check start date
-    if (!assignment.stop) {
-      if (!assignment.start) return "active";
-      const startDate = new Date(assignment.start);
+    // Check start date first
+    const hasStarted = !assignment.start || now >= new Date(assignment.start);
+    
+    // Check stop date
+    const hasClosed = assignment.stop && now > new Date(assignment.stop);
+    
+    if (hasClosed) return "closed";
+    if (!hasStarted) return "scheduled";
+    return "active";
+  }
+  
+  // Filter assignments for students - they should only see active or closed assignments
+  const visibleAssignments = React.useMemo(() => {
+    if (isFaculty) return assignments;
+    // Students only see assignments that have started (or have no start date)
+    return assignments.filter(a => {
       const now = new Date();
-      return now >= startDate ? "active" : "upcoming";
+      return !a.start || now >= new Date(a.start);
+    });
+  }, [assignments, isFaculty]);
+
+  // Helper function to check if assignment is due soon (within 3 days)
+  const isDueSoon = (assignment: Assignment): boolean => {
+    if (!assignment.stop) return false;
+    const now = new Date();
+    const dueDate = new Date(assignment.stop);
+    const threeDaysFromNow = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+    return dueDate > now && dueDate <= threeDaysFromNow;
+  };
+
+  // Helper function to get time remaining string
+  const getTimeRemaining = (stopDate: string | null | undefined): string | null => {
+    if (!stopDate) return null;
+    const now = new Date();
+    const due = new Date(stopDate);
+    const diff = due.getTime() - now.getTime();
+    
+    if (diff < 0) return "Past due";
+    
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    
+    if (days > 7) return null; // Don't show countdown for far-off dates
+    if (days > 0) return `${days}d ${hours}h left`;
+    if (hours > 0) return `${hours}h left`;
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    return `${minutes}m left`;
+  };
+
+  // Filter and sort assignments for student view
+  const filteredAndSortedAssignments = React.useMemo(() => {
+    if (isFaculty) return visibleAssignments;
+    
+    let filtered = [...visibleAssignments];
+    
+    // Apply filter
+    if (assignmentFilter === "active") {
+      filtered = filtered.filter(a => getAssignmentStatus(a, true) === "active");
+    } else if (assignmentFilter === "due-soon") {
+      filtered = filtered.filter(a => {
+        const status = getAssignmentStatus(a, true);
+        return status === "active" && isDueSoon(a);
+      });
     }
     
-    const stopDate = new Date(assignment.stop);
-    const now = new Date();
-    const hoursUntilDue = (stopDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+    // Apply sort
+    filtered.sort((a, b) => {
+      if (assignmentSort === "due-date") {
+        // Assignments with no due date go to the end
+        if (!a.stop && !b.stop) return 0;
+        if (!a.stop) return 1;
+        if (!b.stop) return -1;
+        return new Date(a.stop).getTime() - new Date(b.stop).getTime();
+      } else if (assignmentSort === "name") {
+        return a.title.localeCompare(b.title);
+      } else if (assignmentSort === "status") {
+        const statusOrder = { active: 0, scheduled: 1, closed: 2 };
+        const statusA = getAssignmentStatus(a, true);
+        const statusB = getAssignmentStatus(b, true);
+        return statusOrder[statusA] - statusOrder[statusB];
+      }
+      return 0;
+    });
+    
+    return filtered;
+  }, [visibleAssignments, assignmentFilter, assignmentSort, isFaculty]);
 
-    if (hoursUntilDue < 0) return "overdue";
-    if (hoursUntilDue < 72) return "active";
-    return "upcoming";
-  }
+  // Get best grade for an assignment from student attempts
+  const getBestGradeForAssignment = (assignmentId: number): { best: number | null; totalPoints: number } => {
+    const attemptData = studentAttempts.find(sa => sa.assignmentId === assignmentId);
+    if (!attemptData || attemptData.attempts.length === 0) {
+      return { best: null, totalPoints: attemptData?.totalPoints ?? 0 };
+    }
+    const best = Math.max(...attemptData.attempts.map(a => (a.earned_points ?? a.grade) ?? -Infinity));
+    return { best: best === -Infinity ? null : best, totalPoints: attemptData.totalPoints ?? 0 };
+  };
 
   // Calculate best score across all assignments
   function calculateBestScore(grades: Record<string, number | null>): number | null {
@@ -615,71 +725,324 @@ export default function CoursePage() {
             {/* Course Tab (Assignments) */}
             {activeTab === "course" && (
               <div role="tabpanel" id="course-panel" aria-labelledby="course-tab">
-      <Card>
-        <div className="flex items-center justify-between gap-3 mb-6">
-          <h2 className="text-2xl font-semibold m-0">Assignments</h2>
-          {isFaculty && (
-            <Button
-              size="sm"
-              onClick={() => navigate(`/courses/${course_id}/assignments/new`)}
-            >
-              Create Assignment
-            </Button>
-          )}
-        </div>
+                {/* Faculty View - Simple List */}
+                {isFaculty ? (
+                  <Card>
+                    <div className="flex items-center justify-between gap-3 mb-6">
+                      <h2 className="text-2xl font-semibold m-0">Assignments</h2>
+                      <Button
+                        size="sm"
+                        onClick={() => navigate(`/courses/${course_id}/assignments/new`)}
+                      >
+                        Create Assignment
+                      </Button>
+                    </div>
 
-        {assignments.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground mb-4">No assignments yet.</p>
-            {isFaculty && (
-              <Button size="sm" onClick={() => navigate(`/courses/${course_id}/assignments/new`)}>
-                Create one
-              </Button>
-            )}
-          </div>
-        ) : (
-                    <div className="space-y-3">
-                      {assignments.map((a) => {
-                        const status = getAssignmentStatus(a);
-                        const statusColors = {
-                          overdue: "border-l-danger",
-                          active: "border-l-warning",
-                          upcoming: "border-l-primary/50",
-                        };
-                        const statusLabels = {
-                          overdue: "Overdue",
-                          active: "Active",
-                          upcoming: "Upcoming",
-                        };
+                    {visibleAssignments.length === 0 ? (
+                      <div className="text-center py-12">
+                        <p className="text-muted-foreground mb-4">No assignments yet.</p>
+                        <Button size="sm" onClick={() => navigate(`/courses/${course_id}/assignments/new`)}>
+                          Create one
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {visibleAssignments.map((a) => {
+                          const status = getAssignmentStatus(a, false);
+                          const statusColors = {
+                            closed: "border-l-danger",
+                            active: "border-l-accent",
+                            scheduled: "border-l-muted-foreground",
+                          };
+                          const statusLabels = {
+                            closed: "Closed",
+                            active: "Active",
+                            scheduled: "Scheduled",
+                          };
+                          const badgeVariants: Record<string, "default" | "info" | "success" | "warning" | "danger"> = {
+                            closed: "danger",
+                            active: "success",
+                            scheduled: "default",
+                          };
 
-                        return (
-                          <Link
-                            key={a.id}
-                            to={`/assignments/${a.id}`}
-                            className={`group block rounded-lg border-l-4 border border-border bg-card p-5 transition-all duration-200 hover:shadow-md hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${statusColors[status]}`}
-                          >
-                            <div className="flex items-start justify-between gap-4">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-3 mb-2">
-                                  <h3 className="text-lg font-semibold text-foreground group-hover:text-primary transition-colors">
-                  {a.title}
+                          return (
+                            <Link
+                              key={a.id}
+                              to={`/assignments/${a.id}`}
+                              className={`group block rounded-lg border-l-4 border border-border bg-card p-4 transition-all duration-200 hover:shadow-md hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${statusColors[status]}`}
+                            >
+                              <div className="flex items-center justify-between gap-4">
+                                <div className="flex items-center gap-3 min-w-0 flex-1">
+                                  <h3 className="text-base font-semibold text-foreground group-hover:text-primary transition-colors truncate">
+                                    {a.title}
                                   </h3>
-                                  <Badge variant={status === "overdue" ? "default" : "info"} className="text-xs whitespace-nowrap">
+                                  <Badge variant={badgeVariants[status]} className="text-xs whitespace-nowrap shrink-0">
                                     {statusLabels[status]}
                                   </Badge>
                                 </div>
 
-                                {a.description && (
-                                  <p className="text-sm text-muted-foreground mb-2">
-                                    {a.description}
-                                  </p>
+                                <div className="flex items-center gap-4 text-xs text-muted-foreground shrink-0">
+                                  {a.stop && (
+                                    <span className="hidden sm:inline">
+                                      <span className="font-medium">Due:</span>{" "}
+                                      {new Date(a.stop).toLocaleDateString()}
+                                    </span>
+                                  )}
+                                  <ChevronRight className="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary" />
+                                </div>
+                              </div>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </Card>
+                ) : USE_NEW_STUDENT_ASSIGNMENT_STYLE ? (
+                  /* NEW STYLE: Student View - Redesigned with Sorting/Filtering */
+                  <div className="space-y-6">
+                    {/* Header with Filters and Sort */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      {/* Filter Tabs */}
+                      <div className="flex items-center gap-1 p-1 bg-muted/40 rounded-xl border border-border">
+                        {[
+                          { id: "all" as AssignmentFilterType, label: "All", icon: FileCode },
+                          { id: "active" as AssignmentFilterType, label: "Active", icon: CheckCircle2 },
+                          { id: "due-soon" as AssignmentFilterType, label: "Due Soon", icon: Flame },
+                        ].map(({ id, label, icon: Icon }) => (
+                          <button
+                            key={id}
+                            onClick={() => setAssignmentFilter(id)}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                              assignmentFilter === id
+                                ? "bg-primary text-primary-foreground shadow-sm"
+                                : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                            }`}
+                          >
+                            <Icon className="w-4 h-4" />
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Sort Dropdown */}
+                      <div className="flex items-center gap-2">
+                        <SortAsc className="w-4 h-4 text-muted-foreground" />
+                        <select
+                          value={assignmentSort}
+                          onChange={(e) => setAssignmentSort(e.target.value as AssignmentSortType)}
+                          className="bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                        >
+                          <option value="due-date">Sort by Due Date</option>
+                          <option value="name">Sort by Name</option>
+                          <option value="status">Sort by Status</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Assignments Grid */}
+                    {filteredAndSortedAssignments.length === 0 ? (
+                      <Card className="text-center py-16">
+                        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted/50 flex items-center justify-center">
+                          <FileCode className="w-8 h-8 text-muted-foreground" />
+                        </div>
+                        <h3 className="text-lg font-semibold text-foreground mb-2">
+                          {assignmentFilter === "all" 
+                            ? "No assignments yet" 
+                            : assignmentFilter === "active"
+                              ? "No active assignments"
+                              : "No assignments due soon"}
+                        </h3>
+                        <p className="text-muted-foreground text-sm">
+                          {assignmentFilter !== "all" && "Try changing your filter to see more assignments."}
+                        </p>
+                      </Card>
+                    ) : (
+                      <div className="grid gap-4 md:grid-cols-2">
+                        {filteredAndSortedAssignments.map((a) => {
+                          const status = getAssignmentStatus(a, true);
+                          const timeRemaining = getTimeRemaining(a.stop);
+                          const isUrgent = isDueSoon(a) && status === "active";
+                          const gradeInfo = getBestGradeForAssignment(a.id);
+                          const hasAttempted = (a.num_attempts ?? 0) > 0;
+                          
+                          // Status styling
+                          const statusConfig = {
+                            active: { 
+                              bg: "bg-gradient-to-br from-accent/10 to-accent/5", 
+                              border: "border-accent/30",
+                              dot: "bg-accent",
+                              text: "text-accent"
+                            },
+                            closed: { 
+                              bg: "bg-gradient-to-br from-danger/10 to-danger/5", 
+                              border: "border-danger/30",
+                              dot: "bg-danger",
+                              text: "text-danger"
+                            },
+                            scheduled: { 
+                              bg: "bg-gradient-to-br from-muted to-muted/50", 
+                              border: "border-border",
+                              dot: "bg-muted-foreground",
+                              text: "text-muted-foreground"
+                            },
+                          };
+
+                          const config = statusConfig[status];
+
+                          return (
+                            <Link
+                              key={a.id}
+                              to={`/assignments/${a.id}`}
+                              className={`group relative block rounded-2xl border ${config.border} ${config.bg} p-5 transition-all duration-300 hover:shadow-lg hover:shadow-primary/5 hover:border-primary/40 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary overflow-hidden`}
+                            >
+                              {/* Urgent Indicator */}
+                              {isUrgent && (
+                                <div className="absolute top-0 right-0 w-24 h-24 overflow-hidden">
+                                  <div className="absolute top-3 -right-6 w-28 text-center py-1 bg-warning text-warning-foreground text-[10px] font-bold uppercase tracking-wider rotate-45 shadow-sm">
+                                    Due Soon
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Top Row: Title + Status */}
+                              <div className="flex items-start justify-between gap-3 mb-4">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className={`w-2 h-2 rounded-full ${config.dot} shrink-0`} />
+                                    <span className={`text-xs font-semibold uppercase tracking-wide ${config.text}`}>
+                                      {status === "active" ? "Active" : status === "closed" ? "Closed" : "Scheduled"}
+                                    </span>
+                                  </div>
+                                  <h3 className="text-lg font-bold text-foreground group-hover:text-primary transition-colors line-clamp-2">
+                                    {a.title}
+                                  </h3>
+                                </div>
+                                <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all shrink-0 mt-1" />
+                              </div>
+
+                              {/* Stats Row */}
+                              <div className="grid grid-cols-3 gap-3 mb-4">
+                                {/* Due Date */}
+                                <div className="flex flex-col items-center p-2.5 rounded-xl bg-background/50 border border-border/50">
+                                  <Calendar className={`w-4 h-4 mb-1 ${isUrgent ? "text-warning" : "text-muted-foreground"}`} />
+                                  <span className={`text-xs font-medium ${isUrgent ? "text-warning" : "text-foreground"}`}>
+                                    {a.stop ? new Date(a.stop).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "No due"}
+                                  </span>
+                                </div>
+
+                                {/* Attempts */}
+                                <div className="flex flex-col items-center p-2.5 rounded-xl bg-background/50 border border-border/50">
+                                  <FileCode className="w-4 h-4 mb-1 text-muted-foreground" />
+                                  <span className="text-xs font-medium text-foreground">
+                                    {a.num_attempts ?? 0}{a.sub_limit ? `/${a.sub_limit}` : ""} tries
+                                  </span>
+                                </div>
+
+                                {/* Best Grade / Points */}
+                                <div className="flex flex-col items-center p-2.5 rounded-xl bg-background/50 border border-border/50">
+                                  <Trophy className={`w-4 h-4 mb-1 ${hasAttempted && gradeInfo.best !== null ? "text-accent" : "text-muted-foreground"}`} />
+                                  <span className={`text-xs font-medium ${hasAttempted && gradeInfo.best !== null ? "text-accent" : "text-foreground"}`}>
+                                    {hasAttempted && gradeInfo.best !== null 
+                                      ? `${gradeInfo.best}/${gradeInfo.totalPoints}`
+                                      : `${a.total_points ?? 0} pts`
+                                    }
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Bottom Row: Time Remaining / Progress */}
+                              <div className="flex items-center justify-between pt-3 border-t border-border/50">
+                                {/* Time Remaining */}
+                                {timeRemaining && status === "active" ? (
+                                  <div className={`flex items-center gap-1.5 text-xs font-medium ${isUrgent ? "text-warning" : "text-muted-foreground"}`}>
+                                    <Clock className="w-3.5 h-3.5" />
+                                    {timeRemaining}
+                                  </div>
+                                ) : status === "closed" ? (
+                                  <div className="flex items-center gap-1.5 text-xs font-medium text-danger">
+                                    <AlertTriangle className="w-3.5 h-3.5" />
+                                    Submissions closed
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                                    <Clock className="w-3.5 h-3.5" />
+                                    {a.stop ? `Due ${new Date(a.stop).toLocaleDateString()}` : "No deadline"}
+                                  </div>
                                 )}
 
-                                <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+                                {/* Progress Indicator */}
+                                {hasAttempted && gradeInfo.best !== null && gradeInfo.totalPoints > 0 && (
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-16 h-1.5 rounded-full bg-muted overflow-hidden">
+                                      <div 
+                                        className="h-full rounded-full bg-accent transition-all duration-500"
+                                        style={{ width: `${Math.min(100, (gradeInfo.best / gradeInfo.totalPoints) * 100)}%` }}
+                                      />
+                                    </div>
+                                    <span className="text-xs font-medium text-accent">
+                                      {Math.round((gradeInfo.best / gradeInfo.totalPoints) * 100)}%
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  /* OLD STYLE: Simple list view for students */
+                  <Card>
+                    <div className="flex items-center justify-between gap-3 mb-6">
+                      <h2 className="text-2xl font-semibold m-0">Assignments</h2>
+                    </div>
+
+                    {visibleAssignments.length === 0 ? (
+                      <div className="text-center py-12">
+                        <p className="text-muted-foreground mb-4">No assignments yet.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {visibleAssignments.map((a) => {
+                          const status = getAssignmentStatus(a, true);
+                          const statusColors = {
+                            closed: "border-l-danger",
+                            active: "border-l-accent",
+                            scheduled: "border-l-muted-foreground",
+                          };
+                          const statusLabels = {
+                            closed: "Closed",
+                            active: "Active",
+                            scheduled: "Scheduled",
+                          };
+                          const badgeVariants: Record<string, "default" | "info" | "success" | "warning" | "danger"> = {
+                            closed: "danger",
+                            active: "success",
+                            scheduled: "default",
+                          };
+
+                          return (
+                            <Link
+                              key={a.id}
+                              to={`/assignments/${a.id}`}
+                              className={`group block rounded-lg border-l-4 border border-border bg-card p-4 transition-all duration-200 hover:shadow-md hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${statusColors[status]}`}
+                            >
+                              <div className="flex items-center justify-between gap-4">
+                                <div className="flex items-center gap-3 min-w-0 flex-1">
+                                  <h3 className="text-base font-semibold text-foreground group-hover:text-primary transition-colors truncate">
+                                    {a.title}
+                                  </h3>
+                                  <Badge variant={badgeVariants[status]} className="text-xs whitespace-nowrap shrink-0">
+                                    {statusLabels[status]}
+                                  </Badge>
+                                </div>
+
+                                <div className="flex items-center gap-4 text-xs text-muted-foreground shrink-0">
                                   {a.stop && (
-                                    <span>
+                                    <span className="hidden sm:inline">
                                       <span className="font-medium">Due:</span>{" "}
-                                      {new Date(a.stop).toLocaleString()}
+                                      {new Date(a.stop).toLocaleDateString()}
                                     </span>
                                   )}
                                   {a.num_attempts !== undefined && (
@@ -687,23 +1050,16 @@ export default function CoursePage() {
                                       <span className="font-medium">Attempts:</span> {a.num_attempts}
                                     </span>
                                   )}
+                                  <ChevronRight className="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary" />
                                 </div>
                               </div>
-                              <svg 
-                                className="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary flex-shrink-0" 
-                                fill="none" 
-                                stroke="currentColor" 
-                                viewBox="0 0 24 24"
-                              >
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                              </svg>
-                            </div>
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  )}
-                </Card>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </Card>
+                )}
               </div>
             )}
 

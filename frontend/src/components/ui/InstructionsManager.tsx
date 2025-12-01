@@ -441,7 +441,7 @@ export default function InstructionsManager({
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <Label>Instructions</Label>
+        <Label>Instructions <span className="text-red-500">*</span></Label>
         <span className="text-xs text-muted-foreground">
           <b>Tab</b> indent, <b>Shift+Tab</b> outdent.
         </span>

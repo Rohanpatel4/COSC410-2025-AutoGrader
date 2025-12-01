@@ -11,9 +11,58 @@ from app.models.models import (
     Assignment, Course, StudentSubmission, TestCase,
     User, RoleEnum, user_course_association
 )
-from app.services.piston import execute_code
+from app.services.piston import execute_code, get_template_languages, check_piston_available
 
 router = APIRouter()
+
+# ---- Supported Languages Endpoint ------------------------------------------
+# Note: Using path /meta/languages to avoid path parameter conflicts
+
+@router.get("/_languages", response_model=list[dict])
+def get_supported_languages():
+    """
+    Get list of supported programming languages based on available templates.
+    Returns a list of language objects with id and display name.
+    """
+    template_languages = get_template_languages()
+    
+    # Define display names for each language
+    display_names = {
+        "python": "Python",
+        "java": "Java",
+        "c++": "C++",
+        "cpp": "C++",
+        "javascript": "JavaScript",
+        "typescript": "TypeScript",
+        "c": "C",
+        "go": "Go",
+        "rust": "Rust",
+        "ruby": "Ruby",
+    }
+    
+    # Build unique list of supported languages
+    languages = []
+    seen = set()
+    
+    for template_file, piston_lang in template_languages.items():
+        # Use lowercase version as the ID
+        lang_id = piston_lang.lower().replace("+", "p")  # c++ -> cpp for frontend
+        if lang_id == "c++":
+            lang_id = "cpp"
+        
+        if lang_id not in seen:
+            seen.add(lang_id)
+            display_name = display_names.get(piston_lang.lower(), piston_lang.capitalize())
+            languages.append({
+                "id": lang_id,
+                "name": display_name,
+                "piston_name": piston_lang
+            })
+    
+    # Sort by name
+    languages.sort(key=lambda x: x["name"])
+    
+    return languages
 
 # ---- helpers ---------------------------------------------------------------
 
@@ -116,7 +165,7 @@ def create_assignment(payload: dict, db: Session = Depends(get_db)):
     """
     course_id = payload.get("course_id")
     title = (payload.get("title") or "").strip()
-    description = payload.get("description") or None
+    description = (payload.get("description") or "").strip()  # Use empty string, not None - DB requires non-null
     language = (payload.get("language") or "python").strip().lower()
     
     instructions = payload.get("instructions", [])
@@ -202,7 +251,7 @@ def update_assignment(assignment_id: int, payload: dict, db: Session = Depends(g
     
     # Update description if provided
     if "description" in payload:
-        description = payload.get("description") or None
+        description = (payload.get("description") or "").strip()  # Use empty string, not None - DB requires non-null
         if description is not None and not isinstance(description, str):
             raise HTTPException(400, "description must be a string")
         a.description = description
@@ -541,6 +590,15 @@ async def submit_to_assignment(
     assignment's test cases.
     Accepts either a file upload (submission) or text input (code), but at least one must be provided.
     """
+    # Check if Piston (grading service) is available FIRST
+    # This prevents wasting a student's attempt if the grader is down
+    piston_available, piston_message = await check_piston_available()
+    if not piston_available:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Grading service is currently unavailable. Your submission was NOT counted. Please try again later. ({piston_message})"
+        )
+    
     a = db.get(Assignment, assignment_id)
     if not a:
         raise HTTPException(404, "Assignment not found")
@@ -631,9 +689,37 @@ async def submit_to_assignment(
     if "grading" not in result:
         result["grading"] = {}
     
+    # Check for execution errors (Piston connection issues, timeouts, etc.)
+    # If there's an error in stderr and no tests were run, it's likely a grading service error
+    stderr = result.get("stderr", "")
+    has_tests = result["grading"].get("has_tests", False)
+    status_id = result.get("status", {}).get("id", 0)
+    
+    # Status 13 = Internal Error, Status 5 = Time Limit Exceeded
+    if status_id == 13 and not has_tests:
+        # This is a grading service error, not a student code error
+        error_msg = stderr if stderr else "Unknown grading service error"
+        raise HTTPException(
+            status_code=503,
+            detail=f"Grading service error. Your submission was NOT counted. Please try again later. Error: {error_msg}"
+        )
+    
     # Check for invalid test configuration
     if result["grading"].get("error"):
         raise HTTPException(400, f"Invalid test configuration: {result['grading']['error']}")
+    
+    # Check if code execution actually happened (has_tests should be True if tests ran)
+    if not has_tests and result["grading"].get("total_tests", 0) == 0:
+        # If there's a compilation error, show it to the student
+        if "Compilation error" in stderr:
+            # This is a student error - let it save with 0 points but include the error message
+            pass
+        elif stderr and ("Cannot connect" in stderr or "timed out" in stderr or "temporarily unavailable" in stderr):
+            # This is a service error
+            raise HTTPException(
+                status_code=503,
+                detail=f"Grading service error. Your submission was NOT counted. Please try again later. Error: {stderr}"
+            )
     
     # Calculate grade from all test cases (visible + hidden)
     total_points = result["grading"].get("total_points", 0)

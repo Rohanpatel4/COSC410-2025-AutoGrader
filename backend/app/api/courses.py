@@ -476,7 +476,7 @@ def create_assignment_for_course(
     if not title:
         raise HTTPException(400, "title is required")
 
-    description = (payload.get("description") or "") or None
+    description = (payload.get("description") or "").strip()  # Use empty string, not None - DB requires non-null
     language = (payload.get("language") or "python").strip().lower()
     if not language:
         raise HTTPException(400, "language is required")

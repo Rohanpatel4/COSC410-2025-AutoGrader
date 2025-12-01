@@ -2,7 +2,8 @@ x-logging: &default-logging
   logging:
     driver: json-file
     options:
-      max-size: 100M
+      max-size: 50M
+      max-file: "3"
 
 services:
   # ===================== Piston (Code Execution Engine) =====================
@@ -17,7 +18,26 @@ services:
     networks:
       - app-network
     <<: *default-logging
-    restart: always
+    # Use on-failure instead of always to prevent restart loops that crash Docker
+    restart: on-failure:3
+    # Resource limits to prevent Piston from consuming all system resources
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+    # Health check for Piston - generous timeouts for cross-platform compatibility
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:2000/api/v2/runtimes"]
+      interval: 45s
+      timeout: 20s
+      retries: 5
+      start_period: 120s
+    # Prevent container from holding up Docker on stop
+    stop_grace_period: 15s
 
   # ===================== Backend (FastAPI) =====================
   backend:
@@ -35,16 +55,23 @@ services:
       - storage_data:/app/storage
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/docs'); print('ok')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+    # Don't wait for Piston health - backend handles Piston unavailability gracefully
     depends_on:
       - piston
     networks:
       - app-network
     <<: *default-logging
-    restart: always
+    restart: on-failure:3
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+    stop_grace_period: 10s
 
   # ===== Frontend (Vite dev server) =====
   frontend:
@@ -63,13 +90,19 @@ services:
       "
     ports:
       - "5173:5173"
+    # Don't wait for backend health - frontend can start independently
     depends_on:
-      backend:
-        condition: service_healthy
+      - backend
     networks:
       - app-network
     <<: *default-logging
-    restart: always
+    restart: on-failure:3
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+    stop_grace_period: 10s
 
 volumes:
   storage_data:        # backend storage

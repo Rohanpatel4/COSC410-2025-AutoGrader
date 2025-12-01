@@ -1,11 +1,98 @@
 # backend/app/services/piston.py
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 import httpx
 import re
 import textwrap
+import asyncio
 from pathlib import Path
 from string import Template
 from app.core.settings import settings
+
+# Connection pool settings to prevent overwhelming Docker/Piston
+_piston_client: Optional[httpx.AsyncClient] = None
+_connection_failures: int = 0
+_max_connection_failures: int = 5
+_backoff_until: float = 0
+
+
+def _get_piston_client() -> httpx.AsyncClient:
+    """Get or create a shared httpx client for Piston connections."""
+    global _piston_client
+    if _piston_client is None or _piston_client.is_closed:
+        _piston_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(10.0, connect=5.0),
+            limits=httpx.Limits(max_connections=10, max_keepalive_connections=5)
+        )
+    return _piston_client
+
+
+async def _check_backoff() -> Tuple[bool, str]:
+    """Check if we should back off from Piston connections."""
+    global _connection_failures, _backoff_until
+    import time
+    
+    if _connection_failures >= _max_connection_failures:
+        if time.time() < _backoff_until:
+            wait_time = int(_backoff_until - time.time())
+            return (False, f"Piston temporarily unavailable. Retry in {wait_time}s.")
+        else:
+            # Reset after backoff period
+            _connection_failures = 0
+    return (True, "")
+
+
+def _record_connection_failure():
+    """Record a connection failure and potentially trigger backoff."""
+    global _connection_failures, _backoff_until
+    import time
+    
+    _connection_failures += 1
+    if _connection_failures >= _max_connection_failures:
+        # Exponential backoff: 30s, 60s, 120s, etc.
+        backoff_seconds = min(30 * (2 ** (_connection_failures - _max_connection_failures)), 300)
+        _backoff_until = time.time() + backoff_seconds
+        print(f"[piston] Too many connection failures. Backing off for {backoff_seconds}s", flush=True)
+
+
+def _record_connection_success():
+    """Record a successful connection."""
+    global _connection_failures
+    _connection_failures = 0
+
+
+async def check_piston_available() -> Tuple[bool, str]:
+    """
+    Check if Piston API is available and responding.
+    
+    Returns:
+        Tuple of (is_available: bool, message: str)
+    """
+    # Check if we should back off
+    can_proceed, backoff_msg = await _check_backoff()
+    if not can_proceed:
+        return (False, backoff_msg)
+    
+    piston_url = settings.PISTON_URL
+    runtimes_url = f"{piston_url}/api/v2/runtimes"
+    
+    try:
+        client = _get_piston_client()
+        response = await client.get(runtimes_url)
+        if response.status_code == 200:
+            _record_connection_success()
+            return (True, "Piston is available")
+        else:
+            _record_connection_failure()
+            return (False, f"Piston returned status {response.status_code}")
+    except httpx.ConnectError:
+        _record_connection_failure()
+        return (False, "Cannot connect to grading service. Please try again later.")
+    except httpx.TimeoutException:
+        _record_connection_failure()
+        return (False, "Grading service timed out. Please try again later.")
+    except Exception as e:
+        _record_connection_failure()
+        return (False, f"Grading service error: {str(e)}")
 
 
 
@@ -196,61 +283,77 @@ async def execute_code(
         "run_memory_limit": -1
     }
     
+    # Check if we should back off
+    can_proceed, backoff_msg = await _check_backoff()
+    if not can_proceed:
+        return {
+            "stdout": "",
+            "stderr": backoff_msg,
+            "returncode": -1,
+            "status": {"id": 13},
+            "time": None,
+            "memory": None,
+            "language_id_used": 0,
+            "grading": {"total_tests": 0, "passed_tests": 0, "failed_tests": 0, "earned_points": 0, "total_points": 0, "passed": False, "all_passed": False, "has_tests": False}
+        }
+    
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(execute_url, json=request_body)
-            if response.status_code == 400 and "runtime is unknown" in (response.text or ""):
-                # Try to get latest version and retry
-                language_version = await get_language_version(language)
-                request_body["version"] = language_version
-                response = await client.post(execute_url, json=request_body)
-            response.raise_for_status()
-            result = response.json()
-            
-            # Check for compilation errors first (Piston v2 structure)
-            compile_stderr = result.get("compile", {}).get("stderr", "")
-            if compile_stderr:
-                return {
-                    "stdout": "",
-                    "stderr": f"Compilation error: {compile_stderr}",
-                    "returncode": -1,
-                    "status": {"id": 13},  # Internal Error
-                    "time": None,
-                    "memory": None,
-                    "language_id_used": 0,
-                    "grading": {"total_tests": 0, "passed_tests": 0, "failed_tests": 0, "earned_points": 0, "total_points": 0, "passed": False, "all_passed": False, "has_tests": False}
-                }
-            
-            # Extract Piston response - handle case where "run" might not exist
-            run_result = result.get("run", {})
-            if not isinstance(run_result, dict):
-                run_result = {}
-            
-            stdout = run_result.get("stdout", "")
-            stderr = run_result.get("stderr", "")
-            code = run_result.get("code", -1)
-            # Handle None/null code values
-            if code is None:
-                code = -1
-            signal = run_result.get("signal", "")
-            timed_out = "Timed out" in stderr or signal == "SIGKILL"
-            
-            # Parse test output for grading
-            grading = parse_test_output(stdout, stderr)
-            
-            # Build response in Piston execution result format
+        client = _get_piston_client()
+        response = await client.post(execute_url, json=request_body, timeout=30.0)
+        if response.status_code == 400 and "runtime is unknown" in (response.text or ""):
+            # Try to get latest version and retry
+            language_version = await get_language_version(language)
+            request_body["version"] = language_version
+            response = await client.post(execute_url, json=request_body, timeout=30.0)
+        response.raise_for_status()
+        _record_connection_success()
+        result = response.json()
+        
+        # Check for compilation errors first (Piston v2 structure)
+        compile_stderr = result.get("compile", {}).get("stderr", "")
+        if compile_stderr:
             return {
-                "stdout": stdout,
-                "stderr": stderr,
-                "returncode": code,
-                "status": {"id": _map_status_to_result(code, timed_out)},
-                "time": None,  # Piston doesn't provide precise timing
-                "memory": None,  # Piston doesn't provide precise memory
-                "language_id_used": 0,  # Language-agnostic
-                "grading": grading
+                "stdout": "",
+                "stderr": f"Compilation error: {compile_stderr}",
+                "returncode": -1,
+                "status": {"id": 13},  # Internal Error
+                "time": None,
+                "memory": None,
+                "language_id_used": 0,
+                "grading": {"total_tests": 0, "passed_tests": 0, "failed_tests": 0, "earned_points": 0, "total_points": 0, "passed": False, "all_passed": False, "has_tests": False}
             }
+        
+        # Extract Piston response - handle case where "run" might not exist
+        run_result = result.get("run", {})
+        if not isinstance(run_result, dict):
+            run_result = {}
+        
+        stdout = run_result.get("stdout", "")
+        stderr = run_result.get("stderr", "")
+        code = run_result.get("code", -1)
+        # Handle None/null code values
+        if code is None:
+            code = -1
+        signal = run_result.get("signal", "")
+        timed_out = "Timed out" in stderr or signal == "SIGKILL"
+        
+        # Parse test output for grading
+        grading = parse_test_output(stdout, stderr)
+        
+        # Build response in Piston execution result format
+        return {
+            "stdout": stdout,
+            "stderr": stderr,
+            "returncode": code,
+            "status": {"id": _map_status_to_result(code, timed_out)},
+            "time": None,  # Piston doesn't provide precise timing
+            "memory": None,  # Piston doesn't provide precise memory
+            "language_id_used": 0,  # Language-agnostic
+            "grading": grading
+        }
             
     except httpx.TimeoutException:
+        _record_connection_failure()
         return {
             "stdout": "",
             "stderr": "Timeout: Code execution took too long",
@@ -262,6 +365,7 @@ async def execute_code(
             "grading": {"total_tests": 0, "passed_tests": 0, "failed_tests": 0, "earned_points": 0, "total_points": 0, "passed": False, "all_passed": False, "has_tests": False}
         }
     except httpx.HTTPStatusError as e:
+        _record_connection_failure()
         return {
             "stdout": "",
             "stderr": f"Piston API error: {e.response.status_code} - {e.response.text[:200]}",
@@ -272,7 +376,20 @@ async def execute_code(
             "language_id_used": 0,
             "grading": {"total_tests": 0, "passed_tests": 0, "failed_tests": 0, "earned_points": 0, "total_points": 0, "passed": False, "all_passed": False, "has_tests": False}
         }
+    except httpx.ConnectError:
+        _record_connection_failure()
+        return {
+            "stdout": "",
+            "stderr": "Cannot connect to grading service. Please try again later.",
+            "returncode": -1,
+            "status": {"id": 13},  # Internal Error
+            "time": None,
+            "memory": None,
+            "language_id_used": 0,
+            "grading": {"total_tests": 0, "passed_tests": 0, "failed_tests": 0, "earned_points": 0, "total_points": 0, "passed": False, "all_passed": False, "has_tests": False}
+        }
     except Exception as e:
+        _record_connection_failure()
         return {
             "stdout": "",
             "stderr": f"Execution error: {str(e)}",
@@ -292,15 +409,22 @@ async def get_runtimes() -> Dict[str, Any]:
     Returns:
         Dictionary with available languages and versions
     """
+    # Check if we should back off
+    can_proceed, backoff_msg = await _check_backoff()
+    if not can_proceed:
+        return {"error": backoff_msg}
+    
     piston_url = settings.PISTON_URL
     runtimes_url = f"{piston_url}/api/v2/runtimes"
     
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(runtimes_url)
-            response.raise_for_status()
-            return response.json()
+        client = _get_piston_client()
+        response = await client.get(runtimes_url)
+        response.raise_for_status()
+        _record_connection_success()
+        return response.json()
     except Exception as e:
+        _record_connection_failure()
         return {"error": str(e)}
 
 
@@ -311,15 +435,22 @@ async def get_packages() -> Dict[str, Any]:
     Returns:
         Dictionary with installed packages and their status
     """
+    # Check if we should back off
+    can_proceed, backoff_msg = await _check_backoff()
+    if not can_proceed:
+        return {"error": backoff_msg}
+    
     piston_url = settings.PISTON_URL
     packages_url = f"{piston_url}/api/v2/packages"
     
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(packages_url)
-            response.raise_for_status()
-            return response.json()
+        client = _get_piston_client()
+        response = await client.get(packages_url)
+        response.raise_for_status()
+        _record_connection_success()
+        return response.json()
     except Exception as e:
+        _record_connection_failure()
         return {"error": str(e)}
 
 
@@ -334,6 +465,11 @@ async def install_package(language: str, version: str = "*") -> Dict[str, Any]:
     Returns:
         Dictionary with installation result
     """
+    # Check if we should back off
+    can_proceed, backoff_msg = await _check_backoff()
+    if not can_proceed:
+        return {"success": False, "error": backoff_msg}
+    
     piston_url = settings.PISTON_URL
     
     # Map user-facing language names to Piston language names
@@ -352,54 +488,63 @@ async def install_package(language: str, version: str = "*") -> Dict[str, Any]:
     if version == "*":
         # Try to get the version from available packages
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                packages_response = await client.get(f"{piston_url}/api/v2/packages")
-                packages_response.raise_for_status()
-                packages = packages_response.json()
-                matching_packages = [
-                    pkg for pkg in packages
-                    if isinstance(pkg, dict)
-                    and pkg.get("language", "").lower() == piston_language
-                ]
-                if matching_packages:
-                    version = matching_packages[0].get("language_version", "*")
+            client = _get_piston_client()
+            packages_response = await client.get(f"{piston_url}/api/v2/packages")
+            packages_response.raise_for_status()
+            packages = packages_response.json()
+            matching_packages = [
+                pkg for pkg in packages
+                if isinstance(pkg, dict)
+                and pkg.get("language", "").lower() == piston_language
+            ]
+            if matching_packages:
+                version = matching_packages[0].get("language_version", "*")
         except:
             version = "*"  # Fallback to * if we can't determine version
     
     request_body = {"language": piston_language, "version": version}
     
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:  # Longer timeout for installation
-            headers = {"Content-Type": "application/json"}
-            response = await client.post(install_url, headers=headers, json=request_body)
-            # 200 = success, 201 = created
-            if response.status_code in [200, 201]:
-                try:
-                    response_data = response.json()
-                    message = response_data.get("message", f"Installed {piston_language} {version}")
-                    # "Already installed" is also a success
-                    if "already installed" in message.lower():
-                        return {"success": True, "message": f"{piston_language} already installed"}
-                    return {"success": True, "message": message}
-                except:
-                    return {"success": True, "message": f"Installed {piston_language} {version}"}
-            elif response.status_code == 400:
-                # Package might already be installed or invalid request
-                try:
-                    error_data = response.json()
-                    error_msg = error_data.get("message", "Installation failed")
-                    # Check if it's actually "already installed" (success case)
-                    if "already installed" in error_msg.lower():
-                        return {"success": True, "message": f"{piston_language} already installed"}
-                    return {"success": False, "error": error_msg}
-                except:
-                    return {"success": False, "error": response.text or "Installation failed"}
-            else:
-                response.raise_for_status()
-                return {"success": True, "message": response.json()}
+        # Use longer timeout for installation but still use the shared client
+        client = _get_piston_client()
+        headers = {"Content-Type": "application/json"}
+        response = await client.post(install_url, headers=headers, json=request_body, timeout=120.0)
+        # 200 = success, 201 = created
+        if response.status_code in [200, 201]:
+            _record_connection_success()
+            try:
+                response_data = response.json()
+                message = response_data.get("message", f"Installed {piston_language} {version}")
+                # "Already installed" is also a success
+                if "already installed" in message.lower():
+                    return {"success": True, "message": f"{piston_language} already installed"}
+                return {"success": True, "message": message}
+            except:
+                return {"success": True, "message": f"Installed {piston_language} {version}"}
+        elif response.status_code == 400:
+            # Package might already be installed or invalid request
+            try:
+                error_data = response.json()
+                error_msg = error_data.get("message", "Installation failed")
+                # Check if it's actually "already installed" (success case)
+                if "already installed" in error_msg.lower():
+                    _record_connection_success()
+                    return {"success": True, "message": f"{piston_language} already installed"}
+                return {"success": False, "error": error_msg}
+            except:
+                return {"success": False, "error": response.text or "Installation failed"}
+        else:
+            response.raise_for_status()
+            _record_connection_success()
+            return {"success": True, "message": response.json()}
     except httpx.HTTPStatusError as e:
+        _record_connection_failure()
         return {"success": False, "error": f"HTTP {e.response.status_code}: {e.response.text[:200]}"}
+    except httpx.ConnectError:
+        _record_connection_failure()
+        return {"success": False, "error": "Cannot connect to Piston service"}
     except Exception as e:
+        _record_connection_failure()
         return {"success": False, "error": str(e)}
 
 
@@ -838,6 +983,11 @@ def generate_test_harness(language: str, student_code: str, test_cases: list[dic
 
 async def get_language_version(language: str, version: Optional[str] = None) -> str:
     """Get available version for a language from Piston."""
+    # Check if we should back off
+    can_proceed, _ = await _check_backoff()
+    if not can_proceed:
+        return "latest"
+    
     piston_url = settings.PISTON_URL
     
     # Map user-facing language names to Piston runtime names
@@ -855,53 +1005,71 @@ async def get_language_version(language: str, version: Optional[str] = None) -> 
         runtime_language = language_lower
     
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            # First, check installed packages to see what's actually installed
-            packages_url = f"{piston_url}/api/v2/packages"
-            response = await client.get(packages_url)
-            response.raise_for_status()
-            packages = response.json()
-            
-            # Find installed packages matching the Piston language name
-            installed_packages = [
-                pkg for pkg in packages
-                if isinstance(pkg, dict) 
-                and pkg.get("language", "").lower() == package_language
-                and pkg.get("installed", False)
-            ]
-            
-            # If we found installed packages, return the first one's version
-            if installed_packages:
-                return installed_packages[0].get("language_version", "latest")
-            
-            # If not installed, check available runtimes
-            runtimes_url = f"{piston_url}/api/v2/runtimes"
-            response = await client.get(runtimes_url)
-            response.raise_for_status()
-            runtimes = response.json()
-            
-            # Find matching language (using Piston's runtime language name)
-            matching_runtimes = [
-                rt for rt in runtimes
-                if isinstance(rt, dict) and rt.get("language", "").lower() == runtime_language
-            ]
-            
-            if not matching_runtimes:
-                # Language not found, return default version selector
-                return "latest"
-            
-            # If version specified, try to find exact match
-            if version:
-                for rt in matching_runtimes:
-                    if rt.get("version", "") == version:
-                        return version
-                # Version not found, return first available
-                return matching_runtimes[0].get("version", "latest")
-            
-            # Return first available version
+        client = _get_piston_client()
+        # First, check installed packages to see what's actually installed
+        packages_url = f"{piston_url}/api/v2/packages"
+        response = await client.get(packages_url)
+        response.raise_for_status()
+        packages = response.json()
+        
+        # Find installed packages matching the Piston language name
+        installed_packages = [
+            pkg for pkg in packages
+            if isinstance(pkg, dict) 
+            and pkg.get("language", "").lower() == package_language
+            and pkg.get("installed", False)
+        ]
+        
+        # If we found installed packages, prefer Python 3 over Python 2
+        # and generally prefer newer versions
+        if installed_packages:
+            _record_connection_success()
+            # Sort by version, preferring major version 3+ over 2 for Python
+            if package_language == "python":
+                # Filter to prefer Python 3.x versions
+                python3_packages = [
+                    pkg for pkg in installed_packages
+                    if pkg.get("language_version", "").startswith("3.")
+                ]
+                if python3_packages:
+                    # Return the highest Python 3 version
+                    python3_packages.sort(key=lambda x: x.get("language_version", "0"), reverse=True)
+                    return python3_packages[0].get("language_version", "latest")
+            # For other languages or if no Python 3, return highest version
+            installed_packages.sort(key=lambda x: x.get("language_version", "0"), reverse=True)
+            return installed_packages[0].get("language_version", "latest")
+        
+        # If not installed, check available runtimes
+        runtimes_url = f"{piston_url}/api/v2/runtimes"
+        response = await client.get(runtimes_url)
+        response.raise_for_status()
+        runtimes = response.json()
+        
+        # Find matching language (using Piston's runtime language name)
+        matching_runtimes = [
+            rt for rt in runtimes
+            if isinstance(rt, dict) and rt.get("language", "").lower() == runtime_language
+        ]
+        
+        _record_connection_success()
+        
+        if not matching_runtimes:
+            # Language not found, return default version selector
+            return "latest"
+        
+        # If version specified, try to find exact match
+        if version:
+            for rt in matching_runtimes:
+                if rt.get("version", "") == version:
+                    return version
+            # Version not found, return first available
             return matching_runtimes[0].get("version", "latest")
-            
+        
+        # Return first available version
+        return matching_runtimes[0].get("version", "latest")
+        
     except Exception as e:
+        _record_connection_failure()
         # Fallback to default
         return "latest"
 

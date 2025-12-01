@@ -16,6 +16,7 @@ import GradebookIndexPage from "./webpages/GradebookIndexPage";
 import StudentAttemptViewPage from "./webpages/StudentAttemptViewPage";
 import CreateCoursePage from "./webpages/CreateCoursePage";
 import CreateAssignmentPage from "./webpages/CreateAssignmentPage";
+import EditAssignmentPage from "./webpages/EditAssignmentPage";
 import JoinCoursePage from "./webpages/JoinCoursePage";
 
 // Upload pages
@@ -227,6 +228,18 @@ function AppRouter() {
             <Protected>
               <Layout title="Gradebook">
                 <GradebookIndexPage />
+              </Layout>
+            </Protected>
+          }
+        />
+
+        {/* Edit assignment (faculty) - must be before /assignments/:assignment_id */}
+        <Route
+          path="/assignments/:assignment_id/edit"
+          element={
+            <Protected>
+              <Layout title="Edit Assignment">
+                <EditAssignmentPage />
               </Layout>
             </Protected>
           }
