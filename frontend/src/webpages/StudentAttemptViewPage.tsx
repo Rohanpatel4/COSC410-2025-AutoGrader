@@ -281,11 +281,11 @@ export default function StudentAttemptViewPage() {
       {/* Back Navigation */}
       <div className="mb-4">
         <Link
-          to={course.id ? `/courses/${course.id}` : `/courses`}
+          to={`/assignments/${assignment_id}`}
           className="text-primary hover:opacity-80 flex items-center gap-2"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back to Course
+          Back to Assignment
         </Link>
       </div>
 
