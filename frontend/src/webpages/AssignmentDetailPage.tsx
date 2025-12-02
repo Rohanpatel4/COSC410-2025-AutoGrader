@@ -70,6 +70,9 @@ export default function AssignmentDetailPage() {
       case "javascript":
       case "js":
         return ".js,.jsx";
+      case "rust":
+      case "rs":
+        return ".rs";
       default:
         return ".py"; // Default to Python
     }

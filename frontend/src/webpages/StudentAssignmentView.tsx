@@ -4,7 +4,7 @@ import Editor from "@monaco-editor/react";
 import { Assignment } from "../types/assignments";
 import { Button, Badge } from "../components/ui";
 import { formatGradeDisplay } from "../utils/formatGrade";
-import { Upload, X, FileCode, CheckCircle2, XCircle, ChevronLeft, PanelLeftClose, PanelLeftOpen, CheckCircle, BookOpen } from "lucide-react";
+import { Upload, X, FileCode, CheckCircle2, XCircle, ChevronLeft, PanelLeftClose, PanelLeftOpen, CheckCircle, BookOpen, Terminal } from "lucide-react";
 import InstructionsManager from "../components/ui/InstructionsManager";
 import { SplitPane } from "../components/ui/SplitPane";
 import { Celebration } from "../components/ui/Celebration";
@@ -46,7 +46,7 @@ export default function StudentAssignmentView({
 }: StudentAssignmentViewProps) {
   const [code, setCode] = React.useState(initialCode);
   const [uploadedFile, setUploadedFile] = React.useState<File | null>(null);
-  const [activeTab, setActiveTab] = React.useState<"visible" | "hidden">("visible");
+  const [activeTab, setActiveTab] = React.useState<"visible" | "hidden" | "output">("visible");
   const [isLeftPanelOpen, setIsLeftPanelOpen] = React.useState(true);
   const [verticalSplit, setVerticalSplit] = React.useState(60); // Track vertical split for code/test cases
   const [showCelebration, setShowCelebration] = React.useState(false);
@@ -387,6 +387,19 @@ export default function StudentAssignmentView({
                 >
                     Hidden Test Cases
                 </button>
+                <button
+                    onClick={() => setActiveTab("output")}
+                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === "output" 
+                        ? "border-primary text-primary" 
+                        : "border-transparent text-muted-foreground hover:text-foreground"
+                    }`}
+                >
+                    <span className="flex items-center gap-1.5">
+                        <Terminal className="w-3.5 h-3.5" />
+                        Output
+                    </span>
+                </button>
             </div>
 
             <div className="flex items-center gap-4 pr-2">
@@ -420,8 +433,12 @@ export default function StudentAssignmentView({
               visibleTestCases.length > 0 ? (
                 <div className="space-y-3">
                   {visibleTestCases.map((tc: any) => {
-                    const passed = tc.passed ?? (testCaseResults.get(tc.id)?.passed ?? null);
-                    const pointsEarned = tc.points_earned ?? (testCaseResults.get(tc.id)?.points_earned ?? null);
+                    const resultData = testCaseResults.get(tc.id);
+                    const passed = tc.passed ?? (resultData?.passed ?? null);
+                    const pointsEarned = tc.points_earned ?? (resultData?.points_earned ?? null);
+                    const errorMessage = tc.error_message ?? resultData?.error_message;
+                    const actualOutput = tc.actual_output ?? resultData?.actual_output;
+                    const expectedOutput = tc.expected_output ?? resultData?.expected_output;
                     
                     return (
                       <div key={tc.id} className="bg-muted/20 border border-border/50 rounded-lg p-3 hover:bg-muted/30 transition-colors">
@@ -453,6 +470,36 @@ export default function StudentAssignmentView({
                             </div>
                           </div>
                         )}
+                        
+                        {/* Show error message and actual output when test fails */}
+                        {passed === false && (
+                          <div className="mt-3 ml-6 space-y-2">
+                            {errorMessage && (
+                              <div className="bg-red-500/10 border border-red-500/30 rounded p-2.5">
+                                <div className="text-xs font-semibold text-red-400 uppercase tracking-wider mb-1">Error</div>
+                                <div className="font-mono text-xs text-red-300 whitespace-pre-wrap overflow-x-auto">
+                                  {errorMessage}
+                                </div>
+                              </div>
+                            )}
+                            {expectedOutput && (
+                              <div className="bg-blue-500/10 border border-blue-500/30 rounded p-2.5">
+                                <div className="text-xs font-semibold text-blue-400 uppercase tracking-wider mb-1">Expected Output</div>
+                                <div className="font-mono text-xs text-blue-300 whitespace-pre-wrap overflow-x-auto">
+                                  {expectedOutput}
+                                </div>
+                              </div>
+                            )}
+                            {actualOutput && (
+                              <div className="bg-amber-500/10 border border-amber-500/30 rounded p-2.5">
+                                <div className="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-1">Actual Output</div>
+                                <div className="font-mono text-xs text-amber-300 whitespace-pre-wrap overflow-x-auto">
+                                  {actualOutput}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -463,7 +510,7 @@ export default function StudentAssignmentView({
                   <p className="text-sm">No visible test cases available</p>
                 </div>
               )
-            ) : (
+            ) : activeTab === "hidden" ? (
               hiddenTestCases.length > 0 ? (
                 <div className="space-y-3">
                   <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
@@ -502,7 +549,64 @@ export default function StudentAssignmentView({
                   <p className="text-sm">No hidden test cases available</p>
                 </div>
               )
-            )}
+            ) : activeTab === "output" ? (
+              /* Output Tab - Shows raw stdout/stderr from code execution */
+              lastResult ? (
+                <div className="space-y-4">
+                  {/* Standard Output */}
+                  <div>
+                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-2">
+                      <Terminal className="w-3.5 h-3.5" />
+                      Standard Output (stdout)
+                    </div>
+                    <div className="bg-black/60 border border-border/30 rounded-lg p-3 font-mono text-sm text-green-400 whitespace-pre-wrap overflow-x-auto min-h-[80px] max-h-[300px] overflow-y-auto">
+                      {lastResult.result?.stdout || lastResult.stdout || <span className="text-muted-foreground italic">No output</span>}
+                    </div>
+                  </div>
+                  
+                  {/* Standard Error */}
+                  <div>
+                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-2">
+                      <XCircle className="w-3.5 h-3.5 text-red-400" />
+                      Standard Error (stderr)
+                    </div>
+                    <div className="bg-black/60 border border-red-500/30 rounded-lg p-3 font-mono text-sm text-red-400 whitespace-pre-wrap overflow-x-auto min-h-[80px] max-h-[300px] overflow-y-auto">
+                      {lastResult.result?.stderr || lastResult.stderr || <span className="text-muted-foreground italic">No errors</span>}
+                    </div>
+                  </div>
+
+                  {/* Execution Info */}
+                  {(lastResult.result?.time || lastResult.result?.memory || lastResult.result?.status) && (
+                    <div className="flex flex-wrap gap-3 pt-2 border-t border-border/30">
+                      {lastResult.result?.status && (
+                        <div className="text-xs text-muted-foreground">
+                          <span className="font-medium">Status:</span>{" "}
+                          <span className={lastResult.result.status.id === 3 ? "text-green-400" : "text-amber-400"}>
+                            {lastResult.result.status.description || `Code ${lastResult.result.status.id}`}
+                          </span>
+                        </div>
+                      )}
+                      {lastResult.result?.time && (
+                        <div className="text-xs text-muted-foreground">
+                          <span className="font-medium">Time:</span> {lastResult.result.time}s
+                        </div>
+                      )}
+                      {lastResult.result?.memory && (
+                        <div className="text-xs text-muted-foreground">
+                          <span className="font-medium">Memory:</span> {lastResult.result.memory} KB
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full p-8 text-muted-foreground/40">
+                  <Terminal className="w-10 h-10 mb-2 opacity-20" />
+                  <p className="text-sm">No output yet</p>
+                  <p className="text-xs mt-1">Submit your code to see the output</p>
+                </div>
+              )
+            ) : null}
           </div>
       </div>
   );
