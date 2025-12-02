@@ -517,6 +517,16 @@ export default function AssignmentDetailPage() {
                               const maxAttempts =
                                 facRows?.reduce((m, r) => Math.max(m, r.attempts.length), 0) ?? 0;
                               const headers = [];
+                              // Add "Best" column first (after Student)
+                              headers.push(
+                                <th
+                                  key="best"
+                                  className="text-center p-2 border-b border-border whitespace-nowrap min-w-[80px] bg-muted/30"
+                                >
+                                  Best
+                                </th>
+                              );
+                              // Then add attempt columns
                               for (let i = 0; i < maxAttempts; i++) {
                                 headers.push(
                                   <th
@@ -527,14 +537,6 @@ export default function AssignmentDetailPage() {
                                   </th>
                                 );
                               }
-                              headers.push(
-                                <th
-                                  key="best"
-                                  className="text-center p-2 border-b border-border whitespace-nowrap min-w-[80px] bg-muted/30"
-                                >
-                                  Best
-                                </th>
-                              );
                               return headers;
                             })()}
                           </tr>
@@ -568,6 +570,45 @@ export default function AssignmentDetailPage() {
                                     </span>
                                   )}
                                 </td>
+                                {/* Best column - rendered first */}
+                                <td className="p-2 border-b border-border font-semibold text-center whitespace-nowrap bg-muted/30">
+                                  {(() => {
+                                    if (row.best == null) return "—";
+                                    
+                                    // Find the best attempt (the one with earned_points matching row.best)
+                                    const bestAttempt = row.attempts.find(att => att.earned_points === row.best);
+                                    const displayBest = totalPoints > 0 
+                                      ? `${row.best}/${totalPoints}` 
+                                      : formatGradeDisplay(row.best);
+                                    const percentage = totalPoints > 0
+                                      ? Math.round((row.best / totalPoints) * 100)
+                                      : null;
+                                    
+                                    if (!bestAttempt) return displayBest;
+                                    
+                                    return (
+                                      <button
+                                        onClick={() => navigate(`/assignments/${assignment_id}/submissions/${bestAttempt.id}`)}
+                                        className={`
+                                          px-3 py-1 rounded-lg font-semibold transition-all duration-200
+                                          hover:scale-105 cursor-pointer
+                                          ${percentage !== null
+                                            ? percentage >= 70
+                                              ? "bg-accent/10 text-accent hover:bg-accent/20 border border-accent/20"
+                                              : percentage >= 50
+                                                ? "bg-warning/10 text-warning hover:bg-warning/20 border border-warning/20"
+                                                : "bg-danger/10 text-danger hover:bg-danger/20 border border-danger/20"
+                                            : "bg-muted text-muted-foreground hover:bg-muted/80"
+                                          }
+                                        `}
+                                        title="Click to view best submission"
+                                      >
+                                        {displayBest}
+                                      </button>
+                                    );
+                                  })()}
+                                </td>
+                                {/* Attempt columns */}
                                 {[...Array(maxAttempts)].map((_, i) => {
                                   const att = row.attempts[i];
                                   const earnedPoints = att?.earned_points ?? null;
@@ -606,43 +647,6 @@ export default function AssignmentDetailPage() {
                                     </td>
                                   );
                                 })}
-                                <td className="p-2 border-b border-border font-semibold text-center whitespace-nowrap bg-muted/30">
-                                  {(() => {
-                                    if (row.best == null) return "—";
-                                    
-                                    // Find the best attempt (the one with earned_points matching row.best)
-                                    const bestAttempt = row.attempts.find(att => att.earned_points === row.best);
-                                    const displayBest = totalPoints > 0 
-                                      ? `${row.best}/${totalPoints}` 
-                                      : formatGradeDisplay(row.best);
-                                    const percentage = totalPoints > 0
-                                      ? Math.round((row.best / totalPoints) * 100)
-                                      : null;
-                                    
-                                    if (!bestAttempt) return displayBest;
-                                    
-                                    return (
-                                      <button
-                                        onClick={() => navigate(`/assignments/${assignment_id}/submissions/${bestAttempt.id}`)}
-                                        className={`
-                                          px-3 py-1 rounded-lg font-semibold transition-all duration-200
-                                          hover:scale-105 cursor-pointer
-                                          ${percentage !== null
-                                            ? percentage >= 70
-                                              ? "bg-accent/10 text-accent hover:bg-accent/20 border border-accent/20"
-                                              : percentage >= 50
-                                                ? "bg-warning/10 text-warning hover:bg-warning/20 border border-warning/20"
-                                                : "bg-danger/10 text-danger hover:bg-danger/20 border border-danger/20"
-                                            : "bg-muted text-muted-foreground hover:bg-muted/80"
-                                          }
-                                        `}
-                                        title="Click to view best submission"
-                                      >
-                                        {displayBest}
-                                      </button>
-                                    );
-                                  })()}
-                                </td>
                               </tr>
                             );
                           })}

@@ -940,9 +940,20 @@ export default function CoursePage() {
                                 {/* Due Date */}
                                 <div className="flex flex-col items-center p-2.5 rounded-xl bg-background/50 border border-border/50">
                                   <Calendar className={`w-4 h-4 mb-1 ${isUrgent ? "text-warning" : "text-muted-foreground"}`} />
-                                  <span className={`text-xs font-medium ${isUrgent ? "text-warning" : "text-foreground"}`}>
-                                    {a.stop ? new Date(a.stop).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "No due"}
-                                  </span>
+                                  {a.stop ? (
+                                    <div className="flex flex-col items-center">
+                                      <span className={`text-xs font-medium ${isUrgent ? "text-warning" : "text-foreground"}`}>
+                                        {new Date(a.stop).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                      </span>
+                                      <span className={`text-[10px] font-medium ${isUrgent ? "text-warning" : "text-muted-foreground"}`}>
+                                        {new Date(a.stop).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <span className={`text-xs font-medium ${isUrgent ? "text-warning" : "text-foreground"}`}>
+                                      No due
+                                    </span>
+                                  )}
                                 </div>
 
                                 {/* Attempts */}
@@ -1213,6 +1224,9 @@ export default function CoursePage() {
                                     <th className="sticky left-0 bg-card z-10 text-left p-3 font-semibold border-r border-border w-[200px]">
                                       Assignment
                                     </th>
+                                    <th className="text-center p-3 font-semibold bg-muted/30 min-w-[120px]">
+                                      BEST
+                                    </th>
                                     {(() => {
                                       // Find max attempts across all assignments
                                       const maxAttempts = Math.max(
@@ -1228,9 +1242,6 @@ export default function CoursePage() {
                                         </th>
                                       ));
                                     })()}
-                                    <th className="text-center p-3 font-semibold bg-muted/30 min-w-[120px]">
-                                      Best Score
-                                    </th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -1260,6 +1271,15 @@ export default function CoursePage() {
                                         <td className="sticky left-0 bg-card z-10 p-3 font-medium border-r border-border">
                                           {assignment.title}
                                         </td>
+                                        {/* BEST column - rendered first */}
+                                        <td className="p-3 text-center font-semibold bg-muted/30">
+                                          {bestScoreDisplay === "—" ? (
+                                            <span className="text-muted-foreground">—</span>
+                                          ) : (
+                                            <span>{bestScoreDisplay}</span>
+                                          )}
+                                        </td>
+                                        {/* Attempt columns */}
                                         {(() => {
                                           const maxAttempts = Math.max(
                                             ...studentAttempts.map((sa) => sa.attempts.length),
@@ -1292,13 +1312,6 @@ export default function CoursePage() {
                                             );
                                           });
                                         })()}
-                                        <td className="p-3 text-center font-semibold bg-muted/30">
-                                          {bestScoreDisplay === "—" ? (
-                                            <span className="text-muted-foreground">—</span>
-                                          ) : (
-                                            <span>{bestScoreDisplay}</span>
-                                          )}
-                                        </td>
                                       </tr>
                                     );
                                   })}

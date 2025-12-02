@@ -113,14 +113,22 @@ function RoleRouter() {
 // Root route that redirects based on auth state
 function RootRoute() {
   const { role } = useAuth();
+  const location = useLocation();
   
-  // If authenticated, redirect to dashboard
-  if (role) {
-    return <Navigate to="/my" replace />;
+  // Only redirect if we're actually on the root path
+  // This prevents redirect loops when using browser back button
+  if (location.pathname === "/") {
+    // If authenticated, redirect to dashboard (without replace to preserve history)
+    if (role) {
+      return <Navigate to="/my" replace={false} />;
+    }
+    
+    // If not authenticated, redirect to login (without replace to preserve history)
+    return <Navigate to="/login" replace={false} />;
   }
   
-  // If not authenticated, redirect to login
-  return <Navigate to="/login" replace />;
+  // If not on root path, don't redirect (let other routes handle it)
+  return null;
 }
 
 function AppRouter() {
