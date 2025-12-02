@@ -14,6 +14,19 @@ export const AuthContext = createContext<Ctx | undefined>(undefined);
 
 const STORAGE_KEY = "auth";
 
+// Helper function to load auth state from localStorage synchronously
+function loadAuthFromStorage(): Partial<AuthState> {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      return JSON.parse(raw) as Partial<AuthState>;
+    }
+  } catch {
+    // ignore
+  }
+  return {};
+}
+
 export function AuthProvider({
   children,
   /** lets tests (or SSR) seed auth without calling login() */
@@ -22,28 +35,15 @@ export function AuthProvider({
   children: React.ReactNode;
   initial?: Partial<AuthState>;
 }) {
-  // initial state (tests can pass role/userId here)
-  const [token, setToken] = useState<string | null>(initial?.token ?? null);
-  const [userId, setUserId] = useState<string | null>(initial?.userId ?? null);
-  const [userEmail, setUserEmail] = useState<string | null>(initial?.userEmail ?? null);
-  const [role, setRole] = useState<Role | null>(initial?.role ?? null);
-
-  // hydrate from localStorage (only if not already provided by initial)
-  useEffect(() => {
-    if (initial?.role || initial?.userId || initial?.token) return;
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as Partial<AuthState>;
-        setUserId(parsed.userId ?? null);
-        setUserEmail(parsed.userEmail ?? null);
-        setRole((parsed.role as Role) ?? null);
-        setToken(parsed.token ?? null);
-      }
-    } catch {
-      // ignore
-    }
-  }, [initial?.role, initial?.userId, initial?.token, initial?.userEmail]);
+  // Load from localStorage synchronously on initial render to prevent race conditions
+  // Only use localStorage if initial values are not provided (for tests)
+  const storedAuth = initial?.role || initial?.userId || initial?.token ? {} : loadAuthFromStorage();
+  
+  // initial state (tests can pass role/userId here, otherwise use localStorage)
+  const [token, setToken] = useState<string | null>(initial?.token ?? storedAuth.token ?? null);
+  const [userId, setUserId] = useState<string | null>(initial?.userId ?? storedAuth.userId ?? null);
+  const [userEmail, setUserEmail] = useState<string | null>(initial?.userEmail ?? storedAuth.userEmail ?? null);
+  const [role, setRole] = useState<Role | null>(initial?.role ?? (storedAuth.role as Role) ?? null);
 
   const login = ({ userId, role, token = null, userEmail: email = null }: { userId: string; role: Role; token?: string | null; userEmail?: string | null }) => {
     setUserId(userId);
