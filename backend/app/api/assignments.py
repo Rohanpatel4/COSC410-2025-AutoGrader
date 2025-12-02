@@ -5,6 +5,7 @@ from sqlalchemy import select, func, and_
 from typing import Optional
 from datetime import datetime
 from collections import defaultdict
+import re
 
 from app.core.db import get_db
 from app.models.models import (
@@ -83,6 +84,99 @@ def _to_iso_or_raw(v):
         except Exception:
             return str(v)
     return v
+
+def _sanitize_output_for_students(stdout: str, stderr: str, test_cases: list, visible_test_case_ids: set[int]) -> tuple[str, str]:
+    """
+    Sanitize stdout/stderr to remove information about hidden test cases.
+    
+    Args:
+        stdout: Raw stdout from Piston
+        stderr: Raw stderr from Piston
+        test_cases: All test cases (to get IDs and point values)
+        visible_test_case_ids: Set of test case IDs that are visible to students
+        
+    Returns:
+        Tuple of (sanitized_stdout, sanitized_stderr)
+    """
+    hidden_test_case_ids = {tc.id for tc in test_cases if not tc.visibility}
+    
+    def filter_line(line: str) -> bool:
+        """Check if a line should be filtered out (contains hidden test case info)."""
+        line_stripped = line.strip()
+        # Filter out PASSED/FAILED lines for hidden test cases
+        for hidden_id in hidden_test_case_ids:
+            if f"test_case_{hidden_id}:" in line_stripped:
+                return True
+        return False
+    
+    # Filter stdout
+    stdout_lines = stdout.split('\n')
+    filtered_stdout_lines = [line for line in stdout_lines if not filter_line(line)]
+    
+    # Recalculate summary if needed (to hide total count that includes hidden tests)
+    sanitized_stdout = '\n'.join(filtered_stdout_lines)
+    
+    # Update summary section to only reflect visible test cases
+    if "=== Test Results ===" in sanitized_stdout:
+        lines = sanitized_stdout.split('\n')
+        in_summary = False
+        new_lines = []
+        visible_passed = 0
+        visible_failed = 0
+        visible_earned = 0
+        visible_total_points = sum(tc.point_value for tc in test_cases if tc.visibility)
+        
+        # Count visible test results from filtered lines
+        for line in filtered_stdout_lines:
+            line_stripped = line.strip()
+            if line_stripped.startswith("PASSED:") and "test_case_" in line_stripped:
+                # Extract test case ID
+                match = re.search(r'test_case_(\d+):', line_stripped)
+                if match:
+                    test_id = int(match.group(1))
+                    if test_id in visible_test_case_ids:
+                        visible_passed += 1
+                        # Extract points
+                        points_match = re.search(r':(\d+)$', line_stripped)
+                        if points_match:
+                            visible_earned += int(points_match.group(1))
+            elif line_stripped.startswith("FAILED:") and "test_case_" in line_stripped:
+                match = re.search(r'test_case_(\d+):', line_stripped)
+                if match:
+                    test_id = int(match.group(1))
+                    if test_id in visible_test_case_ids:
+                        visible_failed += 1
+        
+        for line in lines:
+            if line.strip() == "=== Test Results ===":
+                in_summary = True
+                new_lines.append(line)
+            elif in_summary and line.startswith("Total:"):
+                # Replace with count of only visible test cases
+                visible_count = len(visible_test_case_ids)
+                new_lines.append(f"Total: {visible_count}")
+            elif in_summary and line.startswith("Passed:"):
+                # Update to only visible passed tests
+                new_lines.append(f"Passed: {visible_passed}")
+            elif in_summary and line.startswith("Failed:"):
+                # Update to only visible failed tests
+                new_lines.append(f"Failed: {visible_failed}")
+            elif in_summary and line.startswith("Earned:"):
+                # Update to only visible earned points
+                new_lines.append(f"Earned: {visible_earned}")
+            elif in_summary and line.startswith("TotalPoints:"):
+                # Update to only visible test case points
+                new_lines.append(f"TotalPoints: {visible_total_points}")
+            else:
+                new_lines.append(line)
+        sanitized_stdout = '\n'.join(new_lines)
+    
+    # Filter stderr similarly (though stderr usually doesn't contain test case info)
+    stderr_lines = stderr.split('\n')
+    filtered_stderr_lines = [line for line in stderr_lines if not filter_line(line)]
+    sanitized_stderr = '\n'.join(filtered_stderr_lines)
+    
+    return sanitized_stdout, sanitized_stderr
 
 def _serialize_assignment(db: Session, a: Assignment) -> dict:
     attempts = db.execute(
@@ -773,12 +867,26 @@ async def submit_to_assignment(
             
         visible_test_cases.append(tc_data)
     
+    # Sanitize stdout/stderr to hide information about hidden test cases
+    visible_test_case_ids = {tc.id for tc in test_cases if tc.visibility}
+    sanitized_stdout, sanitized_stderr = _sanitize_output_for_students(
+        result.get("stdout", ""),
+        result.get("stderr", ""),
+        test_cases,
+        visible_test_case_ids
+    )
+    
+    # Create sanitized result for students
+    sanitized_result = result.copy()
+    sanitized_result["stdout"] = sanitized_stdout
+    sanitized_result["stderr"] = sanitized_stderr
+    
     # Return complete result with filtered test cases for students
     return {
         "ok": True,
         "submission_id": submission_record.id,
         "grade": grade,
-        "result": result,
+        "result": sanitized_result,  # Use sanitized result instead of raw result
         "test_cases": visible_test_cases  # Includes all test cases with pass/fail status (code hidden for invisible ones)
     }
 
