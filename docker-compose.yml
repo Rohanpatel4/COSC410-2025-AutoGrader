@@ -2,8 +2,8 @@ x-logging: &default-logging
   logging:
     driver: json-file
     options:
-      max-size: 50M
-      max-file: "3"
+      max-size: 20M
+      max-file: "2"
 
 services:
   # ===================== Piston (Code Execution Engine) =====================
@@ -11,6 +11,7 @@ services:
     image: ghcr.io/engineer-man/piston:latest
     container_name: piston
     privileged: true
+    # Note: Do NOT use init: true with Piston - it conflicts with Piston's cgroup initialization
     ports:
       - "2000:2000"
     volumes:
@@ -18,32 +19,35 @@ services:
     networks:
       - app-network
     <<: *default-logging
-    # Use on-failure instead of always to prevent restart loops that crash Docker
+    # Use on-failure with limited retries to allow recovery from transient issues
     restart: on-failure:3
-    # Resource limits to prevent Piston from consuming all system resources
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-          cpus: '2.0'
-        reservations:
-          memory: 1G
-          cpus: '0.5'
-    # Health check for Piston - generous timeouts for cross-platform compatibility
+    # Prevent OOM from killing Docker VM - reduced limits for stability
+    mem_limit: 2g
+    memswap_limit: 2g
+    # Shared memory size (prevents /dev/shm exhaustion)
+    shm_size: 256m
+    # CPU limits to prevent Piston from starving other containers
+    cpus: 1.5
+    cpu_shares: 512
+    # Note: Do not set ulimits - Piston manages its own limits internally
+    # Health check for Piston - using Python 2 compatible urllib2 (Piston uses Python 2)
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:2000/api/v2/runtimes"]
-      interval: 45s
-      timeout: 20s
-      retries: 5
-      start_period: 120s
-    # Prevent container from holding up Docker on stop
-    stop_grace_period: 15s
+      test: ["CMD", "python", "-c", "import urllib2; urllib2.urlopen('http://localhost:2000/api/v2/runtimes', timeout=5)"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 90s
+    # Quick stop to prevent hanging Docker
+    stop_grace_period: 10s
+    # Automatically remove container when it stops (keeps system clean)
+    # Note: Removed because it conflicts with docker compose behavior
 
   # ===================== Backend (FastAPI) =====================
   backend:
     build:
       context: .
       dockerfile: infra/docker/backend.Dockerfile
+    init: true
     environment:
       - CORS_ORIGINS=["http://localhost:5173"]
       - PISTON_URL=http://piston:2000
@@ -55,27 +59,27 @@ services:
       - storage_data:/app/storage
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/docs'); print('ok')"]
-      interval: 15s
+      interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 45s
+      start_period: 30s
     # Don't wait for Piston health - backend handles Piston unavailability gracefully
     depends_on:
       - piston
     networks:
       - app-network
     <<: *default-logging
-    restart: on-failure:3
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-          cpus: '1.0'
+    restart: "no"
+    # Resource limits
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: 0.75
     stop_grace_period: 10s
 
   # ===== Frontend (Vite dev server) =====
   frontend:
     image: node:20-alpine
+    init: true
     working_dir: /app/frontend
     environment:
       - VITE_API_URL=http://backend:8000
@@ -96,12 +100,11 @@ services:
     networks:
       - app-network
     <<: *default-logging
-    restart: on-failure:3
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-          cpus: '1.0'
+    restart: "no"
+    # Resource limits
+    mem_limit: 768m
+    memswap_limit: 768m
+    cpus: 0.75
     stop_grace_period: 10s
 
 volumes:

@@ -1,4 +1,5 @@
 #include <iostream>
+#include <sstream>
 #include <vector>
 #include <string>
 #include <cassert>
@@ -20,9 +21,29 @@ struct TestResult {
     int id;
     bool passed;
     int points;
+    std::string error_msg;
+    std::string output;
+    std::string stderr_output;
 };
 
 int main() {
+    // Capture any output from student code initialization
+    std::stringstream console_buffer;
+    std::streambuf* old_cout = std::cout.rdbuf(console_buffer.rdbuf());
+    std::streambuf* old_cerr = std::cerr.rdbuf(console_buffer.rdbuf());
+    
+    // Restore stdout/stderr for test output
+    std::cout.rdbuf(old_cout);
+    std::cerr.rdbuf(old_cerr);
+    
+    // Print console output if any
+    std::string console_output = console_buffer.str();
+    if (!console_output.empty()) {
+        std::cout << "=== Console Output ===" << std::endl;
+        std::cout << console_output;
+        std::cout << "=== End Console Output ===" << std::endl;
+    }
+    
     std::vector<TestResult> testResults;
     
     // Test execution
@@ -52,4 +73,3 @@ int main() {
     
     return 0;
 }
-

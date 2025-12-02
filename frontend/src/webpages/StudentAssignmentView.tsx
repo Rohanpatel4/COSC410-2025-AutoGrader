@@ -4,7 +4,7 @@ import Editor from "@monaco-editor/react";
 import { Assignment } from "../types/assignments";
 import { Button, Badge } from "../components/ui";
 import { formatGradeDisplay } from "../utils/formatGrade";
-import { Upload, X, FileCode, CheckCircle2, XCircle, ChevronLeft, PanelLeftClose, PanelLeftOpen, CheckCircle, BookOpen, Terminal } from "lucide-react";
+import { Upload, X, FileCode, CheckCircle2, XCircle, ChevronLeft, PanelLeftClose, PanelLeftOpen, CheckCircle, BookOpen, AlertTriangle } from "lucide-react";
 import InstructionsManager from "../components/ui/InstructionsManager";
 import { SplitPane } from "../components/ui/SplitPane";
 import { Celebration } from "../components/ui/Celebration";
@@ -46,12 +46,36 @@ export default function StudentAssignmentView({
 }: StudentAssignmentViewProps) {
   const [code, setCode] = React.useState(initialCode);
   const [uploadedFile, setUploadedFile] = React.useState<File | null>(null);
-  const [activeTab, setActiveTab] = React.useState<"visible" | "hidden" | "output">("visible");
+  const [activeTab, setActiveTab] = React.useState<"visible" | "hidden">("visible");
   const [isLeftPanelOpen, setIsLeftPanelOpen] = React.useState(true);
   const [verticalSplit, setVerticalSplit] = React.useState(60); // Track vertical split for code/test cases
   const [showCelebration, setShowCelebration] = React.useState(false);
   const [lastResultId, setLastResultId] = React.useState<string | null>(null); // Track to avoid re-triggering
+  const [showConfirmModal, setShowConfirmModal] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Calculate attempts info
+  const attemptsUsed = attempts.length;
+  const attemptsLimit = assignment.sub_limit || null;
+  const attemptsRemaining = attemptsLimit ? attemptsLimit - attemptsUsed : null;
+  const isLowOnAttempts = attemptsRemaining !== null && attemptsRemaining <= 3 && attemptsRemaining > 0;
+
+  // Get compile error from lastResult if it exists
+  const compileError = React.useMemo(() => {
+    if (lastResult?.result?.stderr) return lastResult.result.stderr;
+    if (lastResult?.stderr) return lastResult.stderr;
+    return null;
+  }, [lastResult]);
+
+  // Handle submission with confirmation
+  const handleSubmitClick = () => {
+    setShowConfirmModal(true);
+  };
+
+  const confirmSubmit = (e: React.FormEvent) => {
+    setShowConfirmModal(false);
+    onSubmit(e);
+  };
 
   // Separate visible and hidden test cases from the assignment
   const visibleTestCases = React.useMemo(() => {
@@ -274,6 +298,10 @@ export default function StudentAssignmentView({
           <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
             {uploadedFile ? "File Upload Mode" : "Source Code"}
           </span>
+          {/* Language Badge */}
+          <Badge variant="info" className="text-[10px] px-2 h-5 font-mono capitalize">
+            {assignment.language || "Python"}
+          </Badge>
           {uploadedFile && (
             <Badge variant="default" className="text-[10px] px-1.5 h-5">
               Read-only
@@ -387,19 +415,6 @@ export default function StudentAssignmentView({
                 >
                     Hidden Test Cases
                 </button>
-                <button
-                    onClick={() => setActiveTab("output")}
-                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                    activeTab === "output" 
-                        ? "border-primary text-primary" 
-                        : "border-transparent text-muted-foreground hover:text-foreground"
-                    }`}
-                >
-                    <span className="flex items-center gap-1.5">
-                        <Terminal className="w-3.5 h-3.5" />
-                        Output
-                    </span>
-                </button>
             </div>
 
             <div className="flex items-center gap-4 pr-2">
@@ -410,19 +425,23 @@ export default function StudentAssignmentView({
                     </Badge>
                 )}
 
-                 {/* Submit Button */}
+                 {/* Submit Button with attempt counter */}
                  {nowBlocked ? (
                     <Button size="sm" disabled>Closed</Button>
                 ) : limitReached ? (
-                    <Button size="sm" disabled>Limit Reached</Button>
+                    <Button size="sm" disabled>Limit Reached (0 of {attemptsLimit})</Button>
                 ) : (
                     <Button 
-                    size="sm" 
-                    onClick={onSubmit} 
-                    disabled={loading || (!code.trim() && !uploadedFile)}
-                    className="font-bold shadow-glow"
+                      size="sm" 
+                      onClick={handleSubmitClick} 
+                      disabled={loading || (!code.trim() && !uploadedFile)}
+                      className={`font-bold shadow-glow ${isLowOnAttempts ? 'ring-2 ring-warning/50' : ''}`}
                     >
-                    {loading ? "Grading..." : "Submit Solution"}
+                      {loading ? "Grading..." : (
+                        attemptsLimit 
+                          ? `Submit (${attemptsUsed} of ${attemptsLimit})` 
+                          : "Submit Solution"
+                      )}
                     </Button>
                 )}
             </div>
@@ -430,15 +449,27 @@ export default function StudentAssignmentView({
 
           <div className="flex-1 overflow-y-auto custom-scrollbar bg-card/50 p-4">
             {activeTab === "visible" ? (
-              visibleTestCases.length > 0 ? (
-                <div className="space-y-3">
-                  {visibleTestCases.map((tc: any) => {
+              <div className="space-y-3">
+                {/* Show compile error at top if exists */}
+                {compileError && (
+                  <div className="bg-danger/10 border border-danger/30 rounded-lg p-4 mb-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <XCircle className="w-4 h-4 text-danger shrink-0" />
+                      <span className="font-semibold text-danger text-sm">Compilation Error</span>
+                    </div>
+                    <div className="bg-[#0d1117] rounded-lg p-3 font-mono text-xs text-red-400 whitespace-pre-wrap overflow-x-auto max-h-[200px] overflow-y-auto custom-scrollbar">
+                      {compileError}
+                    </div>
+                  </div>
+                )}
+                
+                {visibleTestCases.length > 0 ? (
+                  visibleTestCases.map((tc: any) => {
                     const resultData = testCaseResults.get(tc.id);
                     const passed = tc.passed ?? (resultData?.passed ?? null);
                     const pointsEarned = tc.points_earned ?? (resultData?.points_earned ?? null);
                     const errorMessage = tc.error_message ?? resultData?.error_message;
                     const actualOutput = tc.actual_output ?? resultData?.actual_output;
-                    const expectedOutput = tc.expected_output ?? resultData?.expected_output;
                     
                     return (
                       <div key={tc.id} className="bg-muted/20 border border-border/50 rounded-lg p-3 hover:bg-muted/30 transition-colors">
@@ -471,45 +502,63 @@ export default function StudentAssignmentView({
                           </div>
                         )}
                         
-                        {/* Show error message and actual output when test fails */}
-                        {passed === false && (
-                          <div className="mt-3 ml-6 space-y-2">
-                            {errorMessage && (
-                              <div className="bg-red-500/10 border border-red-500/30 rounded p-2.5">
-                                <div className="text-xs font-semibold text-red-400 uppercase tracking-wider mb-1">Error</div>
-                                <div className="font-mono text-xs text-red-300 whitespace-pre-wrap overflow-x-auto">
-                                  {errorMessage}
+                        {/* Show compile error under test case if exists and test failed */}
+                        {passed === false && compileError && (
+                          <div className="mt-3 ml-6">
+                            <div className="bg-[#0d1117] border border-red-500/30 rounded-lg overflow-hidden">
+                              <div className="p-3 font-mono text-xs leading-relaxed max-h-[150px] overflow-y-auto custom-scrollbar">
+                                <div className="text-red-400">
+                                  <span className="text-red-500">Compile Error: </span>See error above
                                 </div>
                               </div>
-                            )}
-                            {expectedOutput && (
-                              <div className="bg-blue-500/10 border border-blue-500/30 rounded p-2.5">
-                                <div className="text-xs font-semibold text-blue-400 uppercase tracking-wider mb-1">Expected Output</div>
-                                <div className="font-mono text-xs text-blue-300 whitespace-pre-wrap overflow-x-auto">
-                                  {expectedOutput}
-                                </div>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Show output/error for failed tests (non-compile errors) */}
+                        {passed === false && !compileError && (errorMessage || actualOutput || tc.stderr) && (
+                          <div className="mt-3 ml-6">
+                            <div className="bg-[#0d1117] border border-red-500/30 rounded-lg overflow-hidden">
+                              <div className="p-3 font-mono text-xs leading-relaxed max-h-[200px] overflow-y-auto custom-scrollbar">
+                                {errorMessage && (
+                                  <div className="text-red-400">
+                                    <span className="text-red-500">Error: </span>{errorMessage}
+                                  </div>
+                                )}
+                                {actualOutput && (
+                                  <div className="text-amber-300 mt-1">
+                                    <span className="text-muted-foreground">stdout: </span>{actualOutput}
+                                  </div>
+                                )}
+                                {tc.stderr && (
+                                  <div className="text-red-300 mt-1">
+                                    <span className="text-muted-foreground">stderr: </span>{tc.stderr}
+                                  </div>
+                                )}
                               </div>
-                            )}
-                            {actualOutput && (
-                              <div className="bg-amber-500/10 border border-amber-500/30 rounded p-2.5">
-                                <div className="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-1">Actual Output</div>
-                                <div className="font-mono text-xs text-amber-300 whitespace-pre-wrap overflow-x-auto">
-                                  {actualOutput}
-                                </div>
-                              </div>
-                            )}
+                            </div>
+                          </div>
+                        )}
+                        {/* Show "no output" message for failed tests without any output and no compile error */}
+                        {passed === false && !compileError && !errorMessage && !actualOutput && !tc.stderr && (
+                          <div className="mt-3 ml-6">
+                            <div className="text-xs text-muted-foreground italic">
+                              Test failed with no output - check your function return value
+                            </div>
                           </div>
                         )}
                       </div>
                     );
-                  })}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full p-8 text-muted-foreground/40">
-                  <FileCode className="w-10 h-10 mb-2 opacity-20" />
-                  <p className="text-sm">No visible test cases available</p>
-                </div>
-              )
+                  })
+                ) : (
+                  !compileError && (
+                    <div className="flex flex-col items-center justify-center h-full p-8 text-muted-foreground/40">
+                      <FileCode className="w-10 h-10 mb-2 opacity-20" />
+                      <p className="text-sm">No visible test cases available</p>
+                    </div>
+                  )
+                )}
+              </div>
             ) : activeTab === "hidden" ? (
               hiddenTestCases.length > 0 ? (
                 <div className="space-y-3">
@@ -549,63 +598,6 @@ export default function StudentAssignmentView({
                   <p className="text-sm">No hidden test cases available</p>
                 </div>
               )
-            ) : activeTab === "output" ? (
-              /* Output Tab - Shows raw stdout/stderr from code execution */
-              lastResult ? (
-                <div className="space-y-4">
-                  {/* Standard Output */}
-                  <div>
-                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-2">
-                      <Terminal className="w-3.5 h-3.5" />
-                      Standard Output (stdout)
-                    </div>
-                    <div className="bg-black/60 border border-border/30 rounded-lg p-3 font-mono text-sm text-green-400 whitespace-pre-wrap overflow-x-auto min-h-[80px] max-h-[300px] overflow-y-auto">
-                      {lastResult.result?.stdout || lastResult.stdout || <span className="text-muted-foreground italic">No output</span>}
-                    </div>
-                  </div>
-                  
-                  {/* Standard Error */}
-                  <div>
-                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-2">
-                      <XCircle className="w-3.5 h-3.5 text-red-400" />
-                      Standard Error (stderr)
-                    </div>
-                    <div className="bg-black/60 border border-red-500/30 rounded-lg p-3 font-mono text-sm text-red-400 whitespace-pre-wrap overflow-x-auto min-h-[80px] max-h-[300px] overflow-y-auto">
-                      {lastResult.result?.stderr || lastResult.stderr || <span className="text-muted-foreground italic">No errors</span>}
-                    </div>
-                  </div>
-
-                  {/* Execution Info */}
-                  {(lastResult.result?.time || lastResult.result?.memory || lastResult.result?.status) && (
-                    <div className="flex flex-wrap gap-3 pt-2 border-t border-border/30">
-                      {lastResult.result?.status && (
-                        <div className="text-xs text-muted-foreground">
-                          <span className="font-medium">Status:</span>{" "}
-                          <span className={lastResult.result.status.id === 3 ? "text-green-400" : "text-amber-400"}>
-                            {lastResult.result.status.description || `Code ${lastResult.result.status.id}`}
-                          </span>
-                        </div>
-                      )}
-                      {lastResult.result?.time && (
-                        <div className="text-xs text-muted-foreground">
-                          <span className="font-medium">Time:</span> {lastResult.result.time}s
-                        </div>
-                      )}
-                      {lastResult.result?.memory && (
-                        <div className="text-xs text-muted-foreground">
-                          <span className="font-medium">Memory:</span> {lastResult.result.memory} KB
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full p-8 text-muted-foreground/40">
-                  <Terminal className="w-10 h-10 mb-2 opacity-20" />
-                  <p className="text-sm">No output yet</p>
-                  <p className="text-xs mt-1">Submit your code to see the output</p>
-                </div>
-              )
             ) : null}
           </div>
       </div>
@@ -620,6 +612,79 @@ export default function StudentAssignmentView({
         score={passedCount}
         total={totalTestCasesCount}
       />
+
+      {/* Submission Confirmation Modal */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-card border border-border rounded-2xl shadow-2xl max-w-md w-full p-6 animate-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-4">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                isLowOnAttempts ? 'bg-warning/20' : 'bg-primary/20'
+              }`}>
+                {isLowOnAttempts ? (
+                  <AlertTriangle className="w-5 h-5 text-warning" />
+                ) : (
+                  <CheckCircle className="w-5 h-5 text-primary" />
+                )}
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-foreground">Confirm Submission</h3>
+                <p className="text-sm text-muted-foreground">
+                  {attemptsLimit 
+                    ? `${attemptsUsed} of ${attemptsLimit} attempts used`
+                    : "Unlimited attempts"}
+                </p>
+              </div>
+            </div>
+
+            {/* Warning message if low on attempts */}
+            {isLowOnAttempts && (
+              <div className="bg-warning/10 border border-warning/30 rounded-xl p-4 mb-4">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-warning shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-warning">
+                      {attemptsRemaining === 1 
+                        ? "Last Attempt!" 
+                        : `Only ${attemptsRemaining} attempts remaining!`}
+                    </p>
+                    <p className="text-xs text-warning/80 mt-1">
+                      Make sure your code is ready before submitting.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Description */}
+            <p className="text-sm text-muted-foreground mb-6">
+              Are you sure you want to submit your solution? This action will use one of your attempts.
+            </p>
+
+            {/* Actions */}
+            <div className="flex gap-3">
+              <Button 
+                variant="ghost" 
+                className="flex-1" 
+                onClick={() => setShowConfirmModal(false)}
+              >
+                Cancel
+              </Button>
+              <Button 
+                className={`flex-1 font-bold ${
+                  isLowOnAttempts 
+                    ? 'bg-warning hover:bg-warning/90 text-warning-foreground' 
+                    : ''
+                }`}
+                onClick={confirmSubmit}
+              >
+                {isLowOnAttempts ? "Submit Anyway" : "Submit Solution"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="h-[calc(100vh-96px)] w-full overflow-hidden bg-background flex flex-col">
           {isLeftPanelOpen ? (

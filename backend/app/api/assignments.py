@@ -103,9 +103,15 @@ def _sanitize_output_for_students(stdout: str, stderr: str, test_cases: list, vi
     def filter_line(line: str) -> bool:
         """Check if a line should be filtered out (contains hidden test case info)."""
         line_stripped = line.strip()
-        # Filter out PASSED/FAILED lines for hidden test cases
+        # Filter out PASSED/FAILED/ERROR_/OUTPUT_/STDERR_ lines for hidden test cases
         for hidden_id in hidden_test_case_ids:
             if f"test_case_{hidden_id}:" in line_stripped:
+                return True
+            if line_stripped.startswith(f"ERROR_{hidden_id}:"):
+                return True
+            if line_stripped.startswith(f"OUTPUT_{hidden_id}:"):
+                return True
+            if line_stripped.startswith(f"STDERR_{hidden_id}:"):
                 return True
         return False
     
@@ -859,10 +865,15 @@ async def submit_to_assignment(
         }
         
         if tc.visibility:
-            # Visible test cases include code
+            # Visible test cases include code and per-test output/errors
             tc_data["test_code"] = tc.test_code
+            # Include per-test-case output and error messages for visible tests
+            if not test_result.get("passed", False):
+                tc_data["error_message"] = test_result.get("error_message")
+                tc_data["actual_output"] = test_result.get("actual_output")
+                tc_data["stderr"] = test_result.get("stderr")
         else:
-            # Hidden test cases do not include code
+            # Hidden test cases do not include code or detailed output
             tc_data["test_code"] = None
             
         visible_test_cases.append(tc_data)
@@ -881,13 +892,17 @@ async def submit_to_assignment(
     sanitized_result["stdout"] = sanitized_stdout
     sanitized_result["stderr"] = sanitized_stderr
     
+    # Extract console output (dry run output) from grading results
+    console_output = result.get("grading", {}).get("console_output", "")
+    
     # Return complete result with filtered test cases for students
     return {
         "ok": True,
         "submission_id": submission_record.id,
         "grade": grade,
         "result": sanitized_result,  # Use sanitized result instead of raw result
-        "test_cases": visible_test_cases  # Includes all test cases with pass/fail status (code hidden for invisible ones)
+        "test_cases": visible_test_cases,  # Includes all test cases with pass/fail status (code hidden for invisible ones)
+        "console_output": console_output  # Dry run output from student code
     }
 
 @router.get("/{assignment_id}/submissions/{submission_id}/code")
