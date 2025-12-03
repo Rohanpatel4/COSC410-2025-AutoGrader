@@ -396,9 +396,35 @@ def remove_student_from_course(
     student_id: int,
     db: Session = Depends(get_db),
 ):
+    """
+    Remove a student from a course and delete all their submission data for assignments in this course.
+    This includes:
+    - All student submissions for assignments in this course
+    - The enrollment record (user_course_association)
+    """
     c = _course_by_key(db, course_key)
     if not c:
         raise HTTPException(404, "Course not found")
+
+    # Get all assignments for this course
+    assignments = db.execute(
+        select(Assignment).where(Assignment.course_id == c.id)
+    ).scalars().all()
+    
+    assignment_ids = [a.id for a in assignments]
+    
+    # Delete all student submissions for this student in this course's assignments
+    if assignment_ids:
+        submissions = db.execute(
+            select(StudentSubmission).where(
+                and_(
+                    StudentSubmission.student_id == student_id,
+                    StudentSubmission.assignment_id.in_(assignment_ids)
+                )
+            )
+        ).scalars().all()
+        for submission in submissions:
+            db.delete(submission)
 
     # Delete from user_course_association
     res = db.execute(
@@ -530,6 +556,12 @@ def delete_assignment(
     assignment_id: int,
     db: Session = Depends(get_db),
 ):
+    """
+    Delete an assignment and all related data:
+    - All test cases for this assignment
+    - All student submissions for this assignment
+    - The assignment itself
+    """
     c = _course_by_key(db, course_key)
     if not c:
         raise HTTPException(404, "Course not found")
@@ -538,6 +570,21 @@ def delete_assignment(
     if not a or a.course_id != c.id:
         raise HTTPException(404, "Assignment not found")
 
+    # Delete all student submissions for this assignment
+    submissions = db.execute(
+        select(StudentSubmission).where(StudentSubmission.assignment_id == assignment_id)
+    ).scalars().all()
+    for submission in submissions:
+        db.delete(submission)
+    
+    # Delete all test cases for this assignment
+    test_cases = db.execute(
+        select(TestCase).where(TestCase.assignment_id == assignment_id)
+    ).scalars().all()
+    for tc in test_cases:
+        db.delete(tc)
+
+    # Delete the assignment itself
     db.delete(a)
     db.commit()
     return {"ok": True}

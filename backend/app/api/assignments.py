@@ -317,9 +317,31 @@ def create_assignment(payload: dict, db: Session = Depends(get_db)):
 
 @router.delete("/{assignment_id}", response_model=dict)
 def delete_assignment(assignment_id: int, db: Session = Depends(get_db)):
+    """
+    Delete an assignment and all related data:
+    - All test cases for this assignment
+    - All student submissions for this assignment
+    - The assignment itself
+    """
     a = db.get(Assignment, assignment_id)
     if not a:
         raise HTTPException(status_code=404, detail="Assignment not found")
+    
+    # Delete all student submissions for this assignment
+    submissions = db.execute(
+        select(StudentSubmission).where(StudentSubmission.assignment_id == assignment_id)
+    ).scalars().all()
+    for submission in submissions:
+        db.delete(submission)
+    
+    # Delete all test cases for this assignment
+    test_cases = db.execute(
+        select(TestCase).where(TestCase.assignment_id == assignment_id)
+    ).scalars().all()
+    for tc in test_cases:
+        db.delete(tc)
+    
+    # Delete the assignment itself
     db.delete(a)
     db.commit()
     return {"ok": True, "id": assignment_id}
