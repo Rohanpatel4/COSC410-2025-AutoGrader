@@ -6,19 +6,20 @@ import { useAuth } from "../auth/AuthContext";
 import type { Assignment } from "../types/assignments";
 import { Button, Card, Alert, Badge } from "../components/ui";
 import { formatGradeDisplay } from "../utils/formatGrade";
-import { 
-  ExternalLink, 
-  Eye, 
-  Clock, 
-  FileCode, 
-  Calendar, 
+import {
+  ExternalLink,
+  Eye,
+  Clock,
+  FileCode,
+  Calendar,
   ArrowLeft,
   Settings,
   Users,
   Trophy,
   ChevronDown,
   ChevronUp,
-  BookOpen
+  BookOpen,
+  RotateCcw
 } from "lucide-react";
 import StudentAssignmentView from "./StudentAssignmentView";
 import InstructionsManager from "../components/ui/InstructionsManager";
@@ -43,72 +44,57 @@ export default function AssignmentDetailPage() {
 
   const [attempts, setAttempts] = React.useState<Attempt[]>([]);
   const [file, setFile] = React.useState<File | null>(null);
-  
-  // Get sessionStorage key for this assignment and student
-  const getCodeStorageKey = React.useCallback(() => {
-    if (!assignment_id || !userId) return null;
-    return `assignment_code_${assignment_id}_${userId}`;
-  }, [assignment_id, userId]);
-  
-  // Load code from sessionStorage on mount
-  const [code, setCode] = React.useState<string>(() => {
-    if (!assignment_id || !userId) return "";
-    const key = `assignment_code_${assignment_id}_${userId}`;
-    try {
-      const saved = sessionStorage.getItem(key);
-      return saved || "";
-    } catch {
-      return "";
-    }
-  });
-  
-  // Reload code from sessionStorage when assignment_id or userId changes
-  React.useEffect(() => {
-    if (!assignment_id || !userId) {
-      setCode("");
-      return;
-    }
-    const key = `assignment_code_${assignment_id}_${userId}`;
-    try {
-      const saved = sessionStorage.getItem(key);
-      setCode(saved || "");
-    } catch {
-      setCode("");
-    }
-  }, [assignment_id, userId]);
-  
-  // Save code to sessionStorage whenever it changes (with debouncing)
-  React.useEffect(() => {
-    const key = getCodeStorageKey();
-    if (!key) return;
-    
-    // Debounce saves to avoid too many sessionStorage writes
-    const timeoutId = setTimeout(() => {
-      try {
-        if (code.trim()) {
-          sessionStorage.setItem(key, code);
-        } else {
-          // Remove empty code from storage
-          sessionStorage.removeItem(key);
-        }
-      } catch (e) {
-        // Ignore sessionStorage errors (e.g., quota exceeded)
-        console.warn("Failed to save code to sessionStorage:", e);
-      }
-    }, 500); // Save 500ms after user stops typing
-    
-    return () => clearTimeout(timeoutId);
-  }, [code, getCodeStorageKey]);
-  
+  const [code, setCode] = React.useState<string>("");
   const [submitMsg, setSubmitMsg] = React.useState<string | null>(null);
   const [lastResult, setLastResult] = React.useState<any>(null);
 
   const [facRows, setFacRows] = React.useState<FacRow[] | null>(null);
   const [facLoading, setFacLoading] = React.useState(false);
   const [facErr, setFacErr] = React.useState<string | null>(null);
+  const [rerunningStudent, setRerunningStudent] = React.useState<number | null>(null);
+
+  async function loadFacRows() {
+    if (!assignment_id || isStudent) return;
+
+    setFacLoading(true);
+    setFacErr(null);
+    try {
+      const data = await fetchJson<FacPayload>(
+        `/api/v1/assignments/${encodeURIComponent(assignment_id)}/grades`
+      );
+      setFacRows(data.students || []);
+    } catch (e: any) {
+      setFacErr(e?.message ?? "Failed to load grades");
+      setFacRows([]);
+    } finally {
+      setFacLoading(false);
+    }
+  }
+
+  async function rerunStudentAttempts(studentId: number) {
+    if (!assignment_id || !userId) return;
+
+    setRerunningStudent(studentId);
+    try {
+      const res = await fetchJson(`/api/v1/assignments/${assignment_id}/rerun-student-attempts/${studentId}?user_id=${userId}`, {
+        method: 'POST'
+      });
+      setSubmitMsg(`Successfully reran all attempts for student. ${res.results.length} attempts updated.`);
+
+      // Refresh the faculty data to show updated grades
+      await loadFacRows();
+    } catch (e: any) {
+      setFacErr(e?.message ?? "Failed to rerun student attempts");
+    } finally {
+      setRerunningStudent(null);
+    }
+  }
 
   // Expandable section state
   const [descriptionExpanded, setDescriptionExpanded] = React.useState(false);
+
+  // Grades table expansion state
+  const [gradesExpanded, setGradesExpanded] = React.useState(false);
 
   // Test cases for calculating total points
   const [testCases, setTestCases] = React.useState<any[]>([]);
@@ -126,9 +112,6 @@ export default function AssignmentDetailPage() {
       case "javascript":
       case "js":
         return ".js,.jsx";
-      case "rust":
-      case "rs":
-        return ".rs";
       default:
         return ".py"; // Default to Python
     }
@@ -202,20 +185,8 @@ export default function AssignmentDetailPage() {
       }
 
       if (!isStudent && assignment_id) {
-        setFacLoading(true);
-        setFacErr(null);
-        try {
-          const data = await fetchJson<FacPayload>(
-            `/api/v1/assignments/${encodeURIComponent(assignment_id)}/grades`
-          );
-          setFacRows(data.students || []);
-        } catch (e: any) {
-          setFacErr(e?.message ?? "Failed to load grades");
-          setFacRows([]);
-        } finally {
-          setFacLoading(false);
-        }
-    }
+        await loadFacRows();
+      }
 
     } catch (e: any) {
       setErr(e?.message ?? "Failed to load assignment");
@@ -307,10 +278,6 @@ export default function AssignmentDetailPage() {
 
       setSubmitMsg(`Submitted. Grade: ${formatGradeDisplay(data?.grade)}%`);
       setLastResult(data ?? null);
-
-      // Keep code in editor after submission so students can reference/modify it
-      // Code will remain saved in sessionStorage automatically via the existing useEffect
-      setFile(null);
 
       // refresh attempts
       const list = await fetchJson<Attempt[]>(
@@ -552,7 +519,7 @@ export default function AssignmentDetailPage() {
                 <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 mb-4 flex items-center gap-3">
                   <Eye className="w-5 h-5 text-primary shrink-0" />
                   <p className="text-sm text-foreground">
-                    <span className="font-medium">Tip:</span> Click on any grade or the best score to view submitted code. Click a student name to view their first submission.
+                    <span className="font-medium">Tip:</span> Click on any grade to view submitted code. The best score is shown first, followed by attempts. Click a student name to view their first submission.
                   </p>
                 </div>
               )}
@@ -569,34 +536,67 @@ export default function AssignmentDetailPage() {
                   )}
 
                   {!facLoading && !facErr && (facRows?.length ?? 0) > 0 && (
-                    <div className="overflow-x-auto">
-                      <table className="w-full border-collapse">
+                    <div className="space-y-4">
+                      {/* Expand/Collapse Button */}
+                      {(() => {
+                        const maxAttempts = facRows?.reduce((m, r) => Math.max(m, r.attempts.length), 0) ?? 0;
+                        const showExpandButton = maxAttempts > 5;
+
+                        return showExpandButton && (
+                          <div className="flex justify-center">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => setGradesExpanded(!gradesExpanded)}
+                              className="gap-2"
+                            >
+                              {gradesExpanded ? (
+                                <>Show Less Attempts <ChevronUp className="w-4 h-4" /></>
+                              ) : (
+                                <>Show All Attempts <ChevronDown className="w-4 h-4" /></>
+                              )}
+                            </Button>
+                          </div>
+                        );
+                      })()}
+
+                      <div className="overflow-x-auto">
+                        <table className="w-full border-collapse">
                         <thead>
                           <tr>
                             <th className="text-left p-2 border-b border-border whitespace-nowrap sticky left-0 bg-card z-10 min-w-[150px]">
                               Student
                             </th>
+                            {/* Actions column */}
+                            <th className="text-center p-2 border-b border-border whitespace-nowrap min-w-[120px]">
+                              Actions
+                            </th>
+                            {/* Best column first */}
+                            <th className="text-center p-2 border-b border-border whitespace-nowrap min-w-[80px] bg-primary/5 font-semibold">
+                              Best
+                            </th>
                             {(() => {
                               const maxAttempts =
                                 facRows?.reduce((m, r) => Math.max(m, r.attempts.length), 0) ?? 0;
+                              const displayAttempts = gradesExpanded ? maxAttempts : Math.min(maxAttempts, 5);
                               const headers = [];
-                              // Add "Best" column first (after Student)
-                              headers.push(
-                                <th
-                                  key="best"
-                                  className="text-center p-2 border-b border-border whitespace-nowrap min-w-[80px] bg-muted/30"
-                                >
-                                  Best
-                                </th>
-                              );
-                              // Then add attempt columns
-                              for (let i = 0; i < maxAttempts; i++) {
+                              for (let i = 0; i < displayAttempts; i++) {
                                 headers.push(
                                   <th
                                     key={`h-${i}`}
                                     className="text-center p-2 border-b border-border whitespace-nowrap min-w-[80px]"
                                   >
                                     Attempt {i + 1}
+                                  </th>
+                                );
+                              }
+                              if (!gradesExpanded && maxAttempts > 5) {
+                                headers.push(
+                                  <th
+                                    key="more"
+                                    className="text-center p-2 border-b border-border whitespace-nowrap min-w-[80px] text-muted-foreground"
+                                  >
+                                    +{maxAttempts - 5} more
                                   </th>
                                 );
                               }
@@ -608,10 +608,11 @@ export default function AssignmentDetailPage() {
                           {facRows!.map((row) => {
                             const maxAttempts =
                               facRows?.reduce((m, r) => Math.max(m, r.attempts.length), 0) ?? 0;
-                            
+                            const displayAttempts = gradesExpanded ? maxAttempts : Math.min(maxAttempts, 5);
+
                             // Get first attempt for student name click
                             const firstAttempt = row.attempts[0];
-                            
+
                             return (
                               <tr key={row.student_id} className="group hover:bg-muted/30 transition-colors">
                                 <td className="p-2 border-b border-border whitespace-nowrap sticky left-0 bg-card z-10 font-medium">
@@ -633,22 +634,41 @@ export default function AssignmentDetailPage() {
                                     </span>
                                   )}
                                 </td>
-                                {/* Best column - rendered first */}
-                                <td className="p-2 border-b border-border font-semibold text-center whitespace-nowrap bg-muted/30">
+                                {/* Actions column */}
+                                <td className="p-2 border-b border-border text-center whitespace-nowrap">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => rerunStudentAttempts(row.student_id)}
+                                    disabled={rerunningStudent === row.student_id}
+                                    className="h-7 px-2 text-xs"
+                                  >
+                                    {rerunningStudent === row.student_id ? (
+                                      <div className="w-3 h-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                                    ) : (
+                                      <>
+                                        <RotateCcw className="w-3 h-3 mr-1" />
+                                        Rerun All
+                                      </>
+                                    )}
+                                  </Button>
+                                </td>
+                                {/* Best column first */}
+                                <td className="p-2 border-b border-border font-semibold text-center whitespace-nowrap bg-primary/5">
                                   {(() => {
                                     if (row.best == null) return "—";
-                                    
+
                                     // Find the best attempt (the one with earned_points matching row.best)
                                     const bestAttempt = row.attempts.find(att => att.earned_points === row.best);
-                                    const displayBest = totalPoints > 0 
-                                      ? `${row.best}/${totalPoints}` 
+                                    const displayBest = totalPoints > 0
+                                      ? `${row.best}/${totalPoints}`
                                       : formatGradeDisplay(row.best);
                                     const percentage = totalPoints > 0
                                       ? Math.round((row.best / totalPoints) * 100)
                                       : null;
-                                    
+
                                     if (!bestAttempt) return displayBest;
-                                    
+
                                     return (
                                       <button
                                         onClick={() => navigate(`/assignments/${assignment_id}/submissions/${bestAttempt.id}`)}
@@ -660,7 +680,7 @@ export default function AssignmentDetailPage() {
                                               ? "bg-accent/10 text-accent hover:bg-accent/20 border border-accent/20"
                                               : percentage >= 50
                                                 ? "bg-warning/10 text-warning hover:bg-warning/20 border border-warning/20"
-                                                : "bg-danger/10 text-danger hover:bg-danger/20 border border-danger/20"
+                                              : "bg-danger/10 text-danger hover:bg-danger/20 border border-danger/20"
                                             : "bg-muted text-muted-foreground hover:bg-muted/80"
                                           }
                                         `}
@@ -672,17 +692,17 @@ export default function AssignmentDetailPage() {
                                   })()}
                                 </td>
                                 {/* Attempt columns */}
-                                {[...Array(maxAttempts)].map((_, i) => {
+                                {[...Array(displayAttempts)].map((_, i) => {
                                   const att = row.attempts[i];
                                   const earnedPoints = att?.earned_points ?? null;
                                   const displayPoints = earnedPoints !== null && totalPoints > 0
                                     ? `${earnedPoints}/${totalPoints}`
                                     : formatGradeDisplay(earnedPoints);
-                                  
+
                                   const percentage = earnedPoints !== null && totalPoints > 0
                                     ? Math.round((earnedPoints / totalPoints) * 100)
                                     : null;
-                                  
+
                                   return (
                                     <td key={i} className="p-2 border-b border-border text-center whitespace-nowrap">
                                       {att ? (
@@ -710,11 +730,26 @@ export default function AssignmentDetailPage() {
                                     </td>
                                   );
                                 })}
+                                {/* Empty cell for Actions column when collapsed */}
+                                {!gradesExpanded && maxAttempts > 5 && (
+                                  <td className="p-2 border-b border-border text-center whitespace-nowrap">
+                                    {/* Empty cell */}
+                                  </td>
+                                )}
+                                {/* "More" indicator when collapsed */}
+                                {!gradesExpanded && maxAttempts > 5 && (
+                                  <td className="p-2 border-b border-border text-center whitespace-nowrap text-muted-foreground">
+                                    <span className="px-3 py-1 rounded-lg bg-muted/50 text-sm">
+                                      +{maxAttempts - 5}
+                                    </span>
+                                  </td>
+                                )}
                               </tr>
                             );
                           })}
                         </tbody>
                       </table>
+                      </div>
                     </div>
                   )}
                 </div>

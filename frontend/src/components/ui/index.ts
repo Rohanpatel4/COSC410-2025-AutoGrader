@@ -7,4 +7,5 @@ export { Badge, type BadgeProps } from "./Badge";
 export { Alert, type AlertProps } from "./Alert";
 export { HeroHeader } from "./hero-header";
 export { ContentRow, ContentCard } from "./content-row";
+export { default as CalendarWidget } from "./CalendarWidget";
 

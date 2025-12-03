@@ -4,13 +4,16 @@ import { useAuth } from "../auth/AuthContext";
 import { fetchJson } from "../api/client";
 import type { Course } from "../types/courses";
 import { Button } from "../components/ui/Button";
-import { 
-  BookOpen, 
+import {
+  BookOpen,
   ClipboardList,
   UserPlus,
   ArrowRight,
-  FileText
+  FileText,
+  Calendar,
+  Clock
 } from "lucide-react";
+import CalendarWidget from "../components/ui/CalendarWidget";
 
 // Generate a consistent gradient based on course code
 function getCourseGradient(code: string): string {
@@ -61,15 +64,22 @@ export default function StudentDashboard() {
   React.useEffect(() => { loadMyCourses(); }, [studentId]);
 
   return (
-    <div className="w-full px-10 lg:px-16 py-6 space-y-6">
+    <div className="w-full px-10 lg:px-16 py-4 space-y-4">
       {/* Header */}
-      <div>
-        <h1 className="text-5xl font-bold text-foreground tracking-tight">Student Dashboard</h1>
-        <p className="text-xl text-muted-foreground mt-3">Welcome back to your learning dashboard</p>
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+        <div className="flex-1">
+          <h1 className="text-4xl font-bold text-foreground tracking-tight">Student Dashboard</h1>
+          <p className="text-lg text-muted-foreground mt-2">Welcome back to your learning dashboard</p>
+        </div>
+
+        {/* Calendar Widget */}
+        <div className="lg:w-72">
+          <CalendarWidget studentId={studentId} />
+        </div>
       </div>
 
       {/* Top Action Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* Enrolled Courses Stat Card */}
         <div 
           className="bg-card border border-border rounded-xl shadow-sm flex items-center gap-5 p-5 hover:shadow-md transition-shadow"

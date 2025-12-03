@@ -1294,6 +1294,127 @@ def gradebook_for_course(course_key: str, db: Session = Depends(get_db)):
     }
 
 
+@router.post("/{assignment_id}/rerun-student-attempts/{student_id}")
+async def rerun_student_attempts(
+    assignment_id: int,
+    student_id: int,
+    user_id: int = Query(..., description="User ID of faculty member"),
+    db: Session = Depends(get_db),
+):
+    """
+    Faculty endpoint to rerun all attempts for a specific student on an assignment.
+    This re-executes each submission against the current test cases.
+    """
+    # Verify user is faculty
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(404, "User not found")
+    if user.role != RoleEnum.faculty:
+        raise HTTPException(403, "Only faculty members can rerun student attempts")
+
+    # Get assignment
+    assignment = db.get(Assignment, assignment_id)
+    if not assignment:
+        raise HTTPException(404, "Assignment not found")
+
+    # Verify student is enrolled in the course
+    student_enrollment = db.execute(
+        select(user_course_association).where(
+            and_(
+                user_course_association.c.user_id == student_id,
+                user_course_association.c.course_id == assignment.course_id
+            )
+        )
+    ).first()
+    if not student_enrollment:
+        raise HTTPException(404, "Student is not enrolled in this course")
+
+    # Get all submissions for this student on this assignment
+    submissions = db.execute(
+        select(StudentSubmission).where(
+            and_(
+                StudentSubmission.assignment_id == assignment_id,
+                StudentSubmission.student_id == student_id
+            )
+        ).order_by(StudentSubmission.id)
+    ).scalars().all()
+
+    if not submissions:
+        raise HTTPException(404, "No submissions found for this student on this assignment")
+
+    # Get test cases for this assignment
+    test_cases = db.execute(
+        select(TestCase).where(TestCase.assignment_id == assignment_id)
+    ).scalars().all()
+
+    # Check if piston is available
+    piston_available, piston_message = await check_piston_available()
+    if not piston_available:
+        raise HTTPException(503, f"Grading service is currently unavailable: {piston_message}")
+
+    # Prepare test cases for execution
+    test_cases_for_execution = [
+        {
+            "id": tc.id,
+            "point_value": tc.point_value,
+            "test_code": tc.test_code
+        }
+        for tc in test_cases
+    ]
+
+    # Rerun each submission
+    rerun_results = []
+    for submission in submissions:
+        try:
+            # Re-execute the code
+            result = await execute_code(assignment.language, submission.code, test_cases_for_execution)
+
+            # Ensure grading structure exists
+            if "grading" not in result:
+                result["grading"] = {}
+
+            # Calculate grade from all test cases (visible + hidden)
+            total_points = result["grading"].get("total_points", 0)
+            earned_points = result["grading"].get("earned_points", 0)
+
+            # Handle division by zero
+            if total_points > 0:
+                grade = (earned_points / total_points) * 100
+            else:
+                grade = 0
+
+            # Get test case results mapping
+            test_case_results = result["grading"].get("test_case_results", {})
+
+            # Update the submission record
+            submission.earned_points = earned_points
+            submission.grade = grade
+            submission.test_case_results = test_case_results
+            submission.updated_at = datetime.utcnow()
+
+            rerun_results.append({
+                "submission_id": submission.id,
+                "old_grade": submission.grade,
+                "new_grade": grade,
+                "earned_points": earned_points,
+                "success": True
+            })
+
+        except Exception as e:
+            rerun_results.append({
+                "submission_id": submission.id,
+                "error": str(e),
+                "success": False
+            })
+
+    # Commit all changes
+    db.commit()
+
+    return {
+        "message": f"Successfully reran {len(submissions)} attempts for student {student_id}",
+        "results": rerun_results
+    }
+
 
 
 
