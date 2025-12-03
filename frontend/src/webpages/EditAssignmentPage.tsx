@@ -35,23 +35,48 @@ export default function EditAssignmentPage() {
   const navigate = useNavigate();
   const { userId } = useAuth();
 
+  // Get sessionStorage key for this assignment and user
+  const getStorageKey = React.useCallback(() => {
+    if (!assignment_id || !userId) return null;
+    return `edit_assignment_${assignment_id}_${userId}`;
+  }, [assignment_id, userId]);
+
+  // Load form data from sessionStorage helper
+  const loadFromStorage = React.useCallback(() => {
+    const key = getStorageKey();
+    if (!key) return null;
+    try {
+      const saved = sessionStorage.getItem(key);
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch {
+      // Ignore errors
+    }
+    return null;
+  }, [getStorageKey]);
+
+  // Load saved data on mount
+  const savedData = React.useMemo(() => loadFromStorage(), [loadFromStorage]);
+
   // Assignment data
   const [assignment, setAssignment] = React.useState<Assignment | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [err, setErr] = React.useState<string | null>(null);
 
-  // Form state
-  const [title, setTitle] = React.useState("");
-  const [description, setDescription] = React.useState("");
-  const [language, setLanguage] = React.useState("python");
+  // Form state - initialize from saved data if available, otherwise defaults
+  const [title, setTitle] = React.useState(savedData?.title || "");
+  const [description, setDescription] = React.useState(savedData?.description || "");
+  const [language, setLanguage] = React.useState(savedData?.language || "python");
   const [languages, setLanguages] = React.useState<SupportedLanguage[]>([]);
   const [languagesLoading, setLanguagesLoading] = React.useState(true);
-  const [instructions, setInstructions] = React.useState<any>(null);
-  const [subLimit, setSubLimit] = React.useState<string>("");
-  const [start, setStart] = React.useState<string>("");
-  const [stop, setStop] = React.useState<string>("");
-  const [testCases, setTestCases] = React.useState<EditTestCase[]>([]);
+  const [instructions, setInstructions] = React.useState<any>(savedData?.instructions || null);
+  const [subLimit, setSubLimit] = React.useState<string>(savedData?.subLimit || "");
+  const [start, setStart] = React.useState<string>(savedData?.start || "");
+  const [stop, setStop] = React.useState<string>(savedData?.stop || "");
+  const [testCases, setTestCases] = React.useState<EditTestCase[]>(savedData?.testCases || []);
   const [testCasesLoading, setTestCasesLoading] = React.useState(false);
+  const [hasLoadedFromServer, setHasLoadedFromServer] = React.useState(false);
   
   const [msg, setMsg] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
@@ -99,34 +124,41 @@ export default function EditAssignmentPage() {
         );
         setAssignment(data);
         
-        // Populate form fields
-        setTitle(data.title || "");
-        setDescription(data.description || "");
-        setLanguage(data.language || "python");
-        setSubLimit(data.sub_limit?.toString() || "");
-        setStart(data.start ? new Date(data.start).toISOString().slice(0, 16) : "");
-        setStop(data.stop ? new Date(data.stop).toISOString().slice(0, 16) : "");
-        setInstructions(data.instructions || null);
-        
-        // Fetch test cases
-        setTestCasesLoading(true);
-        try {
-          const testCasesData: any[] = await fetchJson(
-            `/api/v1/assignments/${data.id}/test-cases?include_hidden=true&user_id=${userId}`
-          );
-          setTestCases(testCasesData.map((tc: any, index: number) => ({
-            id: tc.id,
-            code: tc.test_code,
-            points: tc.point_value,
-            visible: tc.visibility,
-            order: index + 1
-          })));
-        } catch (error) {
-          console.error("Failed to fetch test cases:", error);
-          setTestCases([]);
-        } finally {
-          setTestCasesLoading(false);
+        // Populate form fields from server (only if no saved data from sessionStorage)
+        if (!savedData) {
+          setTitle(data.title || "");
+          setDescription(data.description || "");
+          setLanguage(data.language || "python");
+          setSubLimit(data.sub_limit?.toString() || "");
+          setStart(data.start ? new Date(data.start).toISOString().slice(0, 16) : "");
+          setStop(data.stop ? new Date(data.stop).toISOString().slice(0, 16) : "");
+          setInstructions(data.instructions || null);
         }
+        
+        // Fetch test cases from server (only if no saved data from sessionStorage)
+        if (!savedData?.testCases || savedData.testCases.length === 0) {
+          setTestCasesLoading(true);
+          try {
+            const testCasesData: any[] = await fetchJson(
+              `/api/v1/assignments/${data.id}/test-cases?include_hidden=true&user_id=${userId}`
+            );
+            setTestCases(testCasesData.map((tc: any, index: number) => ({
+              id: tc.id,
+              code: tc.test_code,
+              points: tc.point_value,
+              visible: tc.visibility,
+              order: index + 1
+            })));
+          } catch (error) {
+            console.error("Failed to fetch test cases:", error);
+            if (!savedData?.testCases) {
+              setTestCases([]);
+            }
+          } finally {
+            setTestCasesLoading(false);
+          }
+        }
+        setHasLoadedFromServer(true);
       } catch (e: any) {
         setErr(e?.message ?? "Failed to load assignment");
       } finally {
@@ -482,6 +514,16 @@ export default function EditAssignmentPage() {
               body: JSON.stringify(tcPayload),
             }
           );
+        }
+      }
+
+      // Clear saved form data from sessionStorage after successful update
+      const key = getStorageKey();
+      if (key) {
+        try {
+          sessionStorage.removeItem(key);
+        } catch {
+          // Ignore errors
         }
       }
 

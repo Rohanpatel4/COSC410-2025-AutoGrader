@@ -38,6 +38,28 @@ export default function CreateAssignmentPage() {
   const navigate = useNavigate();
   const { userId } = useAuth();
 
+  // Get sessionStorage key for this course and user
+  const getStorageKey = React.useCallback(() => {
+    if (!course_id || !userId) return null;
+    return `create_assignment_${course_id}_${userId}`;
+  }, [course_id, userId]);
+
+  // Load form data from sessionStorage helper
+  const loadFromStorage = React.useCallback(() => {
+    const key = getStorageKey();
+    if (!key) return null;
+    try {
+      const saved = sessionStorage.getItem(key);
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch {
+      // Ignore errors
+    }
+    return null;
+  }, [getStorageKey]);
+
+  // Initialize state - will be updated by useEffect if saved data exists
   const [title, setTitle] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [language, setLanguage] = React.useState("python");
@@ -51,6 +73,25 @@ export default function CreateAssignmentPage() {
   const [testCases, setTestCases] = React.useState<TestCase[]>([
     { id: 1, code: "", visible: true, points: 10 }
   ]);
+
+  // Reload form data from sessionStorage when course_id or userId changes
+  React.useEffect(() => {
+    if (!course_id || !userId) return;
+    
+    const saved = loadFromStorage();
+    if (saved) {
+      if (saved.title !== undefined) setTitle(saved.title);
+      if (saved.description !== undefined) setDescription(saved.description);
+      if (saved.language !== undefined) setLanguage(saved.language);
+      if (saved.instructions !== undefined) setInstructions(saved.instructions);
+      if (saved.subLimit !== undefined) setSubLimit(saved.subLimit);
+      if (saved.start !== undefined) setStart(saved.start);
+      if (saved.stop !== undefined) setStop(saved.stop);
+      if (saved.testCases && saved.testCases.length > 0) {
+        setTestCases(saved.testCases);
+      }
+    }
+  }, [course_id, userId, loadFromStorage]);
   const [msg, setMsg] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [validationErrors, setValidationErrors] = React.useState<string[]>([]);
@@ -60,6 +101,32 @@ export default function CreateAssignmentPage() {
   const [validatingSyntax, setValidatingSyntax] = React.useState<Record<number, boolean>>({});
   const editorRefs = React.useRef<Record<number, editor.IStandaloneCodeEditor>>({});
   const monacoRef = React.useRef<Monaco | null>(null);
+
+  // Save form data to sessionStorage whenever it changes (with debouncing)
+  React.useEffect(() => {
+    const key = getStorageKey();
+    if (!key) return;
+
+    const timeoutId = setTimeout(() => {
+      try {
+        const dataToSave = {
+          title,
+          description,
+          language,
+          instructions,
+          subLimit,
+          start,
+          stop,
+          testCases,
+        };
+        sessionStorage.setItem(key, JSON.stringify(dataToSave));
+      } catch (e) {
+        console.warn("Failed to save form data to sessionStorage:", e);
+      }
+    }, 500); // Debounce saves
+
+    return () => clearTimeout(timeoutId);
+  }, [title, description, language, instructions, subLimit, start, stop, testCases, getStorageKey]);
 
   // Fetch supported languages on mount
   React.useEffect(() => {
@@ -403,6 +470,16 @@ export default function CreateAssignmentPage() {
             body: JSON.stringify(testCasesPayload),
           }
         );
+      }
+
+      // Clear saved form data from sessionStorage after successful creation
+      const key = getStorageKey();
+      if (key) {
+        try {
+          sessionStorage.removeItem(key);
+        } catch {
+          // Ignore errors
+        }
       }
 
       setMsg("Assignment created successfully!");

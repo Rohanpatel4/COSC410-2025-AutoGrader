@@ -43,7 +43,63 @@ export default function AssignmentDetailPage() {
 
   const [attempts, setAttempts] = React.useState<Attempt[]>([]);
   const [file, setFile] = React.useState<File | null>(null);
-  const [code, setCode] = React.useState<string>("");
+  
+  // Get sessionStorage key for this assignment and student
+  const getCodeStorageKey = React.useCallback(() => {
+    if (!assignment_id || !userId) return null;
+    return `assignment_code_${assignment_id}_${userId}`;
+  }, [assignment_id, userId]);
+  
+  // Load code from sessionStorage on mount
+  const [code, setCode] = React.useState<string>(() => {
+    if (!assignment_id || !userId) return "";
+    const key = `assignment_code_${assignment_id}_${userId}`;
+    try {
+      const saved = sessionStorage.getItem(key);
+      return saved || "";
+    } catch {
+      return "";
+    }
+  });
+  
+  // Reload code from sessionStorage when assignment_id or userId changes
+  React.useEffect(() => {
+    if (!assignment_id || !userId) {
+      setCode("");
+      return;
+    }
+    const key = `assignment_code_${assignment_id}_${userId}`;
+    try {
+      const saved = sessionStorage.getItem(key);
+      setCode(saved || "");
+    } catch {
+      setCode("");
+    }
+  }, [assignment_id, userId]);
+  
+  // Save code to sessionStorage whenever it changes (with debouncing)
+  React.useEffect(() => {
+    const key = getCodeStorageKey();
+    if (!key) return;
+    
+    // Debounce saves to avoid too many sessionStorage writes
+    const timeoutId = setTimeout(() => {
+      try {
+        if (code.trim()) {
+          sessionStorage.setItem(key, code);
+        } else {
+          // Remove empty code from storage
+          sessionStorage.removeItem(key);
+        }
+      } catch (e) {
+        // Ignore sessionStorage errors (e.g., quota exceeded)
+        console.warn("Failed to save code to sessionStorage:", e);
+      }
+    }, 500); // Save 500ms after user stops typing
+    
+    return () => clearTimeout(timeoutId);
+  }, [code, getCodeStorageKey]);
+  
   const [submitMsg, setSubmitMsg] = React.useState<string | null>(null);
   const [lastResult, setLastResult] = React.useState<any>(null);
 
@@ -251,6 +307,10 @@ export default function AssignmentDetailPage() {
 
       setSubmitMsg(`Submitted. Grade: ${formatGradeDisplay(data?.grade)}%`);
       setLastResult(data ?? null);
+
+      // Keep code in editor after submission so students can reference/modify it
+      // Code will remain saved in sessionStorage automatically via the existing useEffect
+      setFile(null);
 
       // refresh attempts
       const list = await fetchJson<Attempt[]>(
