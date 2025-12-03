@@ -97,7 +97,7 @@ async def check_piston_available() -> Tuple[bool, str]:
 
 
 def parse_test_output(stdout: str, stderr: str) -> Dict[str, Any]:
-    """Parse test output to determine pass/fail status, test counts, and point values."""
+    """Parse test output to determine pass/fail status, test counts, point values, and per-test output."""
     combined_output = (stdout or "") + "\n" + (stderr or "")
 
     lines = combined_output.split('\n')
@@ -107,7 +107,15 @@ def parse_test_output(stdout: str, stderr: str) -> Dict[str, Any]:
     earned_points = 0
     total_points = 0
     error_message = None
-    test_case_results: Dict[int, Dict[str, Any]] = {}  # test_case_id -> {passed: bool, points: int}
+    console_output = ""  # Dry run output from student code
+    test_case_results: Dict[int, Dict[str, Any]] = {}  # test_case_id -> {passed: bool, points: int, output: str, error: str}
+
+    # Extract console output (dry run output from student code)
+    if "=== Console Output ===" in combined_output:
+        console_start = combined_output.find("=== Console Output ===") + len("=== Console Output ===")
+        console_end = combined_output.find("=== End Console Output ===")
+        if console_end != -1:
+            console_output = combined_output[console_start:console_end].strip()
 
     # Check for error about missing points
     if "ERROR: Tests without point markers:" in combined_output:
@@ -128,7 +136,11 @@ def parse_test_output(stdout: str, stderr: str) -> Dict[str, Any]:
             if match:
                 test_id = int(match.group(1))
                 points = int(match.group(2))
-                test_case_results[test_id] = {"passed": True, "points": points}
+                if test_id not in test_case_results:
+                    test_case_results[test_id] = {"passed": True, "points": points}
+                else:
+                    test_case_results[test_id]["passed"] = True
+                    test_case_results[test_id]["points"] = points
         elif line.startswith('FAILED:'):
             failed_tests += 1
             # Extract test case ID and points
@@ -136,7 +148,48 @@ def parse_test_output(stdout: str, stderr: str) -> Dict[str, Any]:
             if match:
                 test_id = int(match.group(1))
                 points = int(match.group(2))
-                test_case_results[test_id] = {"passed": False, "points": points}
+                if test_id not in test_case_results:
+                    test_case_results[test_id] = {"passed": False, "points": points}
+                else:
+                    test_case_results[test_id]["passed"] = False
+                    test_case_results[test_id]["points"] = points
+        elif line.startswith('ERROR_'):
+            # Extract per-test error message: ERROR_{id}: message
+            match = re.match(r'ERROR_(\d+):\s*(.+)', line)
+            if match:
+                test_id = int(match.group(1))
+                err_msg = match.group(2)
+                if test_id not in test_case_results:
+                    test_case_results[test_id] = {"passed": False, "points": 0}
+                test_case_results[test_id]["error_message"] = err_msg
+        elif line.startswith('OUTPUT_'):
+            # Extract per-test output: OUTPUT_{id}: 'output string'
+            match = re.match(r'OUTPUT_(\d+):\s*(.+)', line)
+            if match:
+                test_id = int(match.group(1))
+                output_repr = match.group(2)
+                # Try to parse the repr string
+                try:
+                    output = eval(output_repr)  # Safe here since we control the format
+                except:
+                    output = output_repr
+                if test_id not in test_case_results:
+                    test_case_results[test_id] = {"passed": False, "points": 0}
+                test_case_results[test_id]["actual_output"] = output
+        elif line.startswith('STDERR_'):
+            # Extract per-test stderr: STDERR_{id}: 'stderr string'
+            match = re.match(r'STDERR_(\d+):\s*(.+)', line)
+            if match:
+                test_id = int(match.group(1))
+                stderr_repr = match.group(2)
+                # Try to parse the repr string
+                try:
+                    stderr_val = eval(stderr_repr)  # Safe here since we control the format
+                except:
+                    stderr_val = stderr_repr
+                if test_id not in test_case_results:
+                    test_case_results[test_id] = {"passed": False, "points": 0}
+                test_case_results[test_id]["stderr"] = stderr_val
 
     # Look for summary section
     in_summary = False
@@ -185,7 +238,8 @@ def parse_test_output(stdout: str, stderr: str) -> Dict[str, Any]:
         "passed": failed_tests == 0 and total_tests > 0,  # Frontend compatibility
         "all_passed": failed_tests == 0 and total_tests > 0,
         "has_tests": total_tests > 0,
-        "test_case_results": test_case_results  # Mapping of test_case_id -> {passed: bool, points: int}
+        "test_case_results": test_case_results,  # Mapping of test_case_id -> {passed: bool, points: int, error_message?: str, actual_output?: str}
+        "console_output": console_output  # Dry run output from student code
     }
     
     if error_message:
@@ -598,6 +652,7 @@ async def ensure_languages_installed() -> Dict[str, Any]:
     # Get currently installed packages and available packages
     packages_result = await get_packages()
     installed_languages = set()
+    installed_python3 = False  # Track specifically if Python 3 is installed
     available_package_languages = set()  # Languages available as packages (even if not installed)
     
     # Handle both list and dict response formats from packages endpoint
@@ -607,12 +662,16 @@ async def ensure_languages_installed() -> Dict[str, Any]:
         for pkg in packages:
             if isinstance(pkg, dict):
                 lang = pkg.get("language", "").lower()
+                version = pkg.get("language_version", "")
                 if lang:
                     # Track available package languages (even if not installed)
                     available_package_languages.add(lang)
                     # Track installed languages
                     if pkg.get("installed", False):
                         installed_languages.add(lang)
+                        # Special handling for Python: only count as installed if it's Python 3
+                        if lang == "python" and version.startswith("3."):
+                            installed_python3 = True
     else:
         # If packages endpoint fails, log warning but continue
         print(f"[piston] Warning: Could not fetch packages: {packages_result.get('error', 'Unknown error')}. Will attempt installation anyway.", flush=True)
@@ -647,7 +706,16 @@ async def ensure_languages_installed() -> Dict[str, Any]:
         original_lang = piston_lang
         
         # Check if already installed
-        if piston_lang_lower in installed_languages:
+        # Special case for Python: must be Python 3, not Python 2
+        if piston_lang_lower == "python":
+            if installed_python3:
+                results[piston_lang] = {"success": True, "message": "Already installed (Python 3)"}
+                print(f"[piston] ✓ {piston_lang} already installed (Python 3)", flush=True)
+                continue
+            else:
+                print(f"[piston] Python 2 found but Python 3 needed, will install...", flush=True)
+                # Don't skip - need to install Python 3
+        elif piston_lang_lower in installed_languages:
             results[piston_lang] = {"success": True, "message": "Already installed"}
             print(f"[piston] ✓ {piston_lang} already installed", flush=True)
             continue
@@ -690,8 +758,14 @@ async def ensure_languages_installed() -> Dict[str, Any]:
             install_lang = "gcc"
         
         # Attempt installation
-        print(f"[piston] Installing {install_lang} (from {template_file}, mapped from {original_lang})...", flush=True)
-        install_result = await install_package(piston_lang, "*")  # Install latest version
+        # For Python, explicitly request version 3.12.0 to avoid getting Python 2
+        install_version = "*"
+        if piston_lang_lower == "python":
+            install_version = "3.12.0"
+            print(f"[piston] Installing Python 3.12.0 (from {template_file})...", flush=True)
+        else:
+            print(f"[piston] Installing {install_lang} (from {template_file}, mapped from {original_lang})...", flush=True)
+        install_result = await install_package(piston_lang, install_version)
         results[original_lang] = install_result
         
         if install_result.get("success"):
@@ -772,19 +846,58 @@ def _generate_python_test_execution(test_cases: list[dict]) -> str:
 
         if assert_lines:
             # Execute all assert statements in this test case
-            indented_code = textwrap.indent('\n'.join(assert_lines), "    ")
+            indented_code = textwrap.indent('\n'.join(assert_lines), "        ")
         else:
             # If no assert found, execute the whole code
             dedented_code = textwrap.dedent(test_code).strip()
-            indented_code = textwrap.indent(dedented_code, "    ")
+            indented_code = textwrap.indent(dedented_code, "        ")
 
-        code_parts.append(f"""try:
+        # Generate code that captures output and errors per test case
+        # All code is indented by 4 spaces since it will be inside "if _student_code_loaded:"
+        # Note: AssertionError from test assertions is expected (test failed) - don't show as error
+        # Only show error messages for actual runtime errors from student code
+        code_parts.append(f"""    # Test case {test_id}
+    _tc_{test_id}_out = io.StringIO()
+    _tc_{test_id}_err = io.StringIO()
+    sys.stdout = _tc_{test_id}_out
+    sys.stderr = _tc_{test_id}_err
+    _tc_{test_id}_error_msg = None
+    _tc_{test_id}_passed = False
+    try:
 {indented_code}
-    test_results.append({{"id": {test_id}, "passed": True, "points": {points}}})
-    print("PASSED: test_case_{test_id}:{points}")
-except Exception as e:
-    test_results.append({{"id": {test_id}, "passed": False, "points": {points}}})
-    print("FAILED: test_case_{test_id}:{points}")
+        _tc_{test_id}_passed = True
+    except AssertionError:
+        # Test assertion failed - this is expected, not an error to display
+        pass
+    except Exception as e:
+        # Actual runtime error from student code - show this
+        _tc_{test_id}_error_msg = f"{{type(e).__name__}}: {{e}}"
+    finally:
+        sys.stdout = _original_stdout
+        sys.stderr = _original_stderr
+
+    _tc_{test_id}_output = _tc_{test_id}_out.getvalue()
+    _tc_{test_id}_stderr = _tc_{test_id}_err.getvalue()
+
+    test_results.append({{
+        "id": {test_id},
+        "passed": _tc_{test_id}_passed,
+        "points": {points},
+        "output": _tc_{test_id}_output,
+        "error": _tc_{test_id}_error_msg,
+        "stderr": _tc_{test_id}_stderr
+    }})
+
+    if _tc_{test_id}_passed:
+        print(f"PASSED: test_case_{test_id}:{points}")
+    else:
+        print(f"FAILED: test_case_{test_id}:{points}")
+        if _tc_{test_id}_error_msg:
+            print(f"ERROR_{test_id}: {{_tc_{test_id}_error_msg}}")
+        if _tc_{test_id}_output:
+            print(f"OUTPUT_{test_id}: {{repr(_tc_{test_id}_output)}}")
+        if _tc_{test_id}_stderr:
+            print(f"STDERR_{test_id}: {{repr(_tc_{test_id}_stderr)}}")
 """)
     return "\n".join(code_parts)
 
@@ -828,24 +941,45 @@ def _generate_java_test_execution(test_cases: list[dict]) -> str:
             )
 
         # Indent the java test code for inside the try block
-        indented_java_test_code = textwrap.indent(java_test_code, "            ")
+        indented_java_test_code = textwrap.indent(java_test_code, "                ")
 
-        code_parts.append(f"""        try {{
-            Solution s = new Solution();
-            {indented_java_test_code}
+        # Note: AssertionError from test assertions is expected (test failed) - don't show as error
+        code_parts.append(f"""        {{
+            ByteArrayOutputStream testOut{test_id} = new ByteArrayOutputStream();
+            PrintStream testStream{test_id} = new PrintStream(testOut{test_id});
+            PrintStream savedOut{test_id} = System.out;
+            System.setOut(testStream{test_id});
+            String errorMsg{test_id} = null;
+            boolean passed{test_id} = false;
+            try {{
+                Solution s = new Solution();
+{indented_java_test_code}
+                passed{test_id} = true;
+            }} catch (AssertionError ae) {{
+                // Test assertion failed - expected, not an error to display
+            }} catch (Throwable e) {{
+                // Actual runtime error from student code - show this
+                errorMsg{test_id} = e.getClass().getSimpleName() + ": " + e.getMessage();
+            }} finally {{
+                System.setOut(savedOut{test_id});
+            }}
+            String output{test_id} = testOut{test_id}.toString();
             Map<String, Object> r{test_id} = new HashMap<>();
             r{test_id}.put("id", {test_id});
-            r{test_id}.put("passed", true);
+            r{test_id}.put("passed", passed{test_id});
             r{test_id}.put("points", {points});
             testResults.add(r{test_id});
-            System.out.println("PASSED: test_case_{test_id}:{points}");
-        }} catch (Throwable e) {{
-            Map<String, Object> r{test_id} = new HashMap<>();
-            r{test_id}.put("id", {test_id});
-            r{test_id}.put("passed", false);
-            r{test_id}.put("points", {points});
-            testResults.add(r{test_id});
-            System.out.println("FAILED: test_case_{test_id}:{points}");
+            if (passed{test_id}) {{
+                System.out.println("PASSED: test_case_{test_id}:{points}");
+            }} else {{
+                System.out.println("FAILED: test_case_{test_id}:{points}");
+                if (errorMsg{test_id} != null) {{
+                    System.out.println("ERROR_{test_id}: " + errorMsg{test_id});
+                }}
+                if (!output{test_id}.isEmpty()) {{
+                    System.out.println("OUTPUT_{test_id}: " + output{test_id}.replace("\\n", " "));
+                }}
+            }}
         }}
 """)
     return "\n".join(code_parts)
@@ -900,22 +1034,49 @@ def _generate_cpp_test_execution(test_cases: list[dict]) -> str:
         # Indent the C++ test code for inside the try block
         indented_cpp_test_code = textwrap.indent(cpp_test_code, "            ")
 
+        # Note: test_assert throws runtime_error with "Assertion failed" - don't show as error
         code_parts.append(f"""    {{
-        bool test_passed = true;
+        std::stringstream test_out_{test_id};
+        std::streambuf* saved_cout_{test_id} = std::cout.rdbuf(test_out_{test_id}.rdbuf());
+        std::string error_msg_{test_id};
+        bool test_passed_{test_id} = true;
+        bool is_assertion_failure_{test_id} = false;
         try {{
 {indented_cpp_test_code}
+        }} catch (const std::exception& e) {{
+            test_passed_{test_id} = false;
+            std::string what = e.what();
+            // Check if this is a test assertion failure (expected) vs actual error
+            if (what.find("Assertion failed") == 0) {{
+                is_assertion_failure_{test_id} = true;
+            }} else {{
+                error_msg_{test_id} = what;
+            }}
         }} catch (...) {{
-            test_passed = false;
+            test_passed_{test_id} = false;
+            error_msg_{test_id} = "Unknown exception";
         }}
+        std::cout.rdbuf(saved_cout_{test_id});
+        std::string output_{test_id} = test_out_{test_id}.str();
+        
         TestResult r{test_id};
         r{test_id}.id = {test_id};
-        r{test_id}.passed = test_passed;
+        r{test_id}.passed = test_passed_{test_id};
         r{test_id}.points = {points};
+        r{test_id}.error_msg = error_msg_{test_id};
+        r{test_id}.output = output_{test_id};
         testResults.push_back(r{test_id});
-        if (test_passed) {{
+        
+        if (test_passed_{test_id}) {{
             std::cout << "PASSED: test_case_{test_id}:{points}" << std::endl;
         }} else {{
             std::cout << "FAILED: test_case_{test_id}:{points}" << std::endl;
+            if (!error_msg_{test_id}.empty()) {{
+                std::cout << "ERROR_{test_id}: " << error_msg_{test_id} << std::endl;
+            }}
+            if (!output_{test_id}.empty()) {{
+                std::cout << "OUTPUT_{test_id}: " << output_{test_id} << std::endl;
+            }}
         }}
     }}
 """)
@@ -968,21 +1129,53 @@ def _generate_rust_test_execution(test_cases: list[dict]) -> str:
         # Indent the Rust test code for inside the block
         indented_rust_test_code = textwrap.indent(rust_test_code, "            ")
 
+        # Note: assertion panics are expected (test failed) - don't show as error
+        # Only show error messages for actual runtime panics from student code
         code_parts.append(f"""    {{
-        let test_passed = std::panic::catch_unwind(|| {{
+        let result_{test_id} = std::panic::catch_unwind(|| {{
 {indented_rust_test_code}
-        }}).is_ok();
+        }});
+        
+        let (test_passed_{test_id}, error_msg_{test_id}) = match result_{test_id} {{
+            Ok(_) => (true, None),
+            Err(e) => {{
+                // Check if this is an assertion failure (expected) vs actual error
+                let msg = if let Some(s) = e.downcast_ref::<&str>() {{
+                    let msg_str = s.to_string();
+                    // Don't show assertion failures as errors
+                    if msg_str.contains("assertion") {{
+                        None
+                    }} else {{
+                        Some(msg_str)
+                    }}
+                }} else if let Some(s) = e.downcast_ref::<String>() {{
+                    if s.contains("assertion") {{
+                        None
+                    }} else {{
+                        Some(s.clone())
+                    }}
+                }} else {{
+                    None  // Unknown panic type, likely assertion
+                }};
+                (false, msg)
+            }}
+        }};
         
         test_results.push(TestResult {{
             id: {test_id},
-            passed: test_passed,
+            passed: test_passed_{test_id},
             points: {points},
+            error_msg: error_msg_{test_id}.clone(),
+            output: None,
         }});
         
-        if test_passed {{
+        if test_passed_{test_id} {{
             println!("PASSED: test_case_{test_id}:{points}");
         }} else {{
             println!("FAILED: test_case_{test_id}:{points}");
+            if let Some(ref msg) = error_msg_{test_id} {{
+                println!("ERROR_{test_id}: {{}}", msg);
+            }}
         }}
     }}
 """)
@@ -1034,10 +1227,21 @@ def generate_test_harness(language: str, student_code: str, test_cases: list[dic
     
     # Load template
     template_content = load_template(language)
-    template = Template(template_content)
     
     # Generate test execution code
     test_execution_code = generate_test_execution_code(language, test_cases)
+    
+    # For Python template: the $test_execution_code placeholder is inside an if block
+    # so we need to ensure proper indentation. The test execution code already has
+    # 4-space indentation, but we need to handle the template substitution properly.
+    # Use simple string replacement instead of Template to preserve indentation.
+    if language.lower() == "python":
+        rendered = template_content.replace("$student_code", student_code)
+        rendered = rendered.replace("$test_execution_code", test_execution_code)
+        return rendered
+    
+    # For other languages, use Template substitution
+    template = Template(template_content)
     
     # Render template
     try:

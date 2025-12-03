@@ -1,6 +1,10 @@
 // Suppress warnings for generated test code
 #![allow(dead_code)]
 #![allow(unused_variables)]
+#![allow(unused_imports)]
+
+use std::io::{self, Write};
+use std::panic;
 
 // Student code
 $student_code
@@ -10,9 +14,15 @@ struct TestResult {
     id: i32,
     passed: bool,
     points: i32,
+    error_msg: Option<String>,
+    output: Option<String>,
 }
 
 fn main() {
+    // Note: Rust doesn't easily support stdout capture at runtime like other languages
+    // Console output from student code will appear in the normal output
+    // We print a marker so the parser knows where console output might be
+    
     let mut test_results: Vec<TestResult> = Vec::new();
     
     // Test execution
@@ -30,6 +40,10 @@ fn main() {
             earned += r.points;
         } else {
             failed += 1;
+            // Print error info for failed tests
+            if let Some(ref err) = r.error_msg {
+                println!("ERROR_{}: {}", r.id, err);
+            }
         }
         total += r.points;
     }
@@ -41,4 +55,3 @@ fn main() {
     println!("Earned: {}", earned);
     println!("TotalPoints: {}", total);
 }
-

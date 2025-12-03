@@ -1,20 +1,109 @@
-# Generic test template - fallback for unknown languages
-# This template may require manual adjustment for specific languages
-
-# Student code
-$student_code
-
-# Test execution
-$test_execution_code
-
-# Output format (language-agnostic):
-# PASSED: test_case_{id}:{points}
-# FAILED: test_case_{id}:{points}
-# 
-# === Test Results ===
-# Passed: X
-# Failed: Y
-# Total: Z
-# Earned: A
-# TotalPoints: B
-
+# Generic Test Template - Documentation for Adding New Languages
+# ================================================================
+#
+# This file serves as documentation for creating new language templates.
+# When adding support for a new language, create a file named:
+#   {language}_test.{extension}
+#
+# Example: javascript_test.js, go_test.go, ruby_test.rb
+#
+# REQUIRED PLACEHOLDERS:
+# ----------------------
+# $student_code       - Will be replaced with the student's submitted code
+# $test_execution_code - Will be replaced with generated test case code
+#
+# REQUIRED OUTPUT FORMAT:
+# -----------------------
+# The test harness MUST output in this exact format for the parser to work:
+#
+# 1. CONSOLE OUTPUT (optional, for student code prints/output):
+#    === Console Output ===
+#    {any output from student code execution}
+#    === End Console Output ===
+#
+# 2. TEST CASE RESULTS (for each test case):
+#    PASSED: test_case_{id}:{points}
+#    or
+#    FAILED: test_case_{id}:{points}
+#
+# 3. PER-TEST ERROR/OUTPUT (for failed tests, optional):
+#    ERROR_{id}: {error message}
+#    OUTPUT_{id}: {stdout from test}
+#    STDERR_{id}: {stderr from test}
+#
+# 4. SUMMARY (required):
+#    === Test Results ===
+#    Passed: {number}
+#    Failed: {number}
+#    Total: {number}
+#    Earned: {points earned}
+#    TotalPoints: {total possible points}
+#
+# TEMPLATE STRUCTURE:
+# -------------------
+# 1. Import/include necessary libraries
+# 2. Set up stdout/stderr capture for console output
+# 3. Load/execute student code (capture any prints)
+# 4. Restore stdout/stderr
+# 5. Print console output with markers if any
+# 6. Initialize test results collection
+# 7. Execute test cases ($test_execution_code placeholder)
+# 8. Print summary
+#
+# TEST EXECUTION CODE GENERATION:
+# -------------------------------
+# The test execution code is generated in piston.py. For each language,
+# implement a function: _generate_{language}_test_execution(test_cases)
+#
+# Each test case should:
+# - Capture stdout/stderr for that specific test
+# - Catch exceptions and record error messages
+# - Print PASSED or FAILED with test_case_{id}:{points}
+# - Print ERROR_{id}, OUTPUT_{id}, STDERR_{id} for failed tests
+#
+# EXAMPLE MINIMAL TEMPLATE (Python-like pseudocode):
+# --------------------------------------------------
+#
+# import io, sys
+#
+# # Capture console output
+# console_buffer = io.StringIO()
+# sys.stdout = console_buffer
+#
+# # Student code
+# $student_code
+#
+# # Restore stdout
+# sys.stdout = original_stdout
+#
+# # Print console output
+# console_output = console_buffer.getvalue()
+# if console_output:
+#     print("=== Console Output ===")
+#     print(console_output)
+#     print("=== End Console Output ===")
+#
+# # Test execution
+# $test_execution_code
+#
+# # Summary
+# print("=== Test Results ===")
+# print(f"Passed: {passed}")
+# print(f"Failed: {failed}")
+# print(f"Total: {total}")
+# print(f"Earned: {earned}")
+# print(f"TotalPoints: {total_points}")
+#
+# ================================================================
+# SUPPORTED LANGUAGES (with templates):
+# - Python: python_test.py
+# - Java: java_test.java
+# - C++: cpp_test.cpp
+# - Rust: rust_test.rs
+#
+# TO ADD A NEW LANGUAGE:
+# 1. Create {language}_test.{ext} in this templates folder
+# 2. Add _generate_{language}_test_execution() in piston.py
+# 3. Add language to generate_test_execution_code() switch
+# 4. Add file extension mapping in get_file_extension()
+# ================================================================
