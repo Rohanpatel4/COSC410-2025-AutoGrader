@@ -19,15 +19,25 @@ def _course_by_input(db: Session, *, course_id: int | None, enrollment_key: str 
 @router.post("/registrations", response_model=dict, status_code=201)
 def register(payload: dict, db: Session = Depends(get_db)):
     student_id = payload.get("student_id")
+    faculty_id = payload.get("faculty_id")
     course_id = payload.get("course_id")
     enrollment_key = payload.get("enrollment_key")
 
-    if not isinstance(student_id, int):
-        raise HTTPException(400, "student_id must be an integer")
-
-    student = db.get(User, student_id)
-    if not student:
-        raise HTTPException(404, "Invalid student_id")
+    # Determine user type
+    if faculty_id:
+        user_id = faculty_id
+        user = db.get(User, user_id)
+        if not user or user.role != RoleEnum.faculty:
+            raise HTTPException(404, "Invalid faculty_id")
+        user_type = "faculty"
+    elif student_id:
+        user_id = student_id
+        user = db.get(User, user_id)
+        if not user or user.role != RoleEnum.student:
+            raise HTTPException(404, "Invalid student_id")
+        user_type = "student"
+    else:
+        raise HTTPException(400, "Either student_id or faculty_id must be provided")
 
     course = _course_by_input(db, course_id=course_id, enrollment_key=enrollment_key)
     if not course:
@@ -37,7 +47,7 @@ def register(payload: dict, db: Session = Depends(get_db)):
     exists = db.execute(
         select(user_course_association).where(
             and_(
-                user_course_association.c.user_id == student_id,
+                user_course_association.c.user_id == user_id,
                 user_course_association.c.course_id == course.id,
             )
         )
@@ -48,15 +58,14 @@ def register(payload: dict, db: Session = Depends(get_db)):
     # Insert into user_course_association
     result = db.execute(
         user_course_association.insert().values(
-            user_id=student_id, 
+            user_id=user_id, 
             course_id=course.id
         )
     )
     db.commit()
 
-    # Get the inserted id
     inserted_id = result.lastrowid
-    return {"id": inserted_id, "student_id": student_id, "course_id": course.id}
+    return {"id": inserted_id, f"{user_type}_id": user_id, "course_id": course.id}
 
 @router.get("/students/{student_id}/courses", response_model=list[dict])
 def student_courses(student_id: int, db: Session = Depends(get_db)):

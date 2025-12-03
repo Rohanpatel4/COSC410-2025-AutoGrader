@@ -5,7 +5,6 @@ import {
   GraduationCap,
   FileText,
   Home,
-  BarChart3,
   X,
   Menu,
   User,
@@ -19,7 +18,6 @@ const navigationItems = {
   faculty: [
     { name: "Dashboard", href: "/my", icon: Home },
     { name: "Courses", href: "/courses", icon: BookOpen },
-    { name: "Gradebook", href: "/gradebook", icon: BarChart3 },
   ],
   student: [
     { name: "Dashboard", href: "/my", icon: Home },
