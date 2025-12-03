@@ -8,7 +8,7 @@ import {
   GraduationCap, 
   Plus,
   ClipboardList,
-  BarChart3,
+  UserPlus,
   BookOpen,
   ArrowRight
 } from "lucide-react";
@@ -87,17 +87,17 @@ export default function FacultyDashboard() {
           </div>
         </div>
 
-        {/* Gradebook Action Card */}
+        {/* Join Course Action Card */}
         <div 
-          onClick={() => navigate("/gradebook")}
+          onClick={() => navigate("/courses/join")}
           className="bg-card border border-border rounded-xl shadow-sm flex items-center gap-5 p-5 cursor-pointer hover:shadow-md hover:border-primary/50 transition-all group"
         >
-          <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-            <BarChart3 className="w-6 h-6 text-emerald-500" />
+          <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+            <UserPlus className="w-6 h-6 text-primary" />
           </div>
           <div>
-            <div className="text-lg font-semibold text-foreground group-hover:text-primary transition-colors">Gradebook</div>
-            <div className="text-sm text-muted-foreground">View & manage grades</div>
+            <div className="text-lg font-semibold text-foreground group-hover:text-primary transition-colors">Join Course</div>
+            <div className="text-sm text-muted-foreground">Enroll in an existing course</div>
           </div>
         </div>
 
