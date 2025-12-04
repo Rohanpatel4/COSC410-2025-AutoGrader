@@ -538,10 +538,10 @@ export default function CoursePage() {
                   ) : (
                     <>
                       <div className="overflow-x-auto">
-                        <table className="w-full">
+                        <table className="w-full table-fixed">
                           <thead>
                             <tr className="border-b border-border">
-                              <th className="text-left p-3">
+                              <th className={`text-left p-3 ${isFaculty ? 'w-1/2' : 'w-3/4'}`}>
                   <button
                                   onClick={() => toggleSort("name")}
                                   className="flex items-center gap-2 font-semibold hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
@@ -561,14 +561,14 @@ export default function CoursePage() {
                                   }
                                 >
                                   Name
-                                  {sortField === "name" && (
-                                    <span aria-hidden="true">
+                                  <span className="inline-flex items-center justify-center w-4" aria-hidden="true">
+                                    <span className={sortField === "name" ? "" : "invisible"}>
                                       {sortDirection === "asc" ? "↑" : "↓"}
                                     </span>
-                                  )}
+                                  </span>
                   </button>
                               </th>
-                              <th className="text-left p-3">
+                              <th className="text-left p-3 w-32">
                                 <button
                                   onClick={() => toggleSort("role")}
                                   className="flex items-center gap-2 font-semibold hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
@@ -588,15 +588,15 @@ export default function CoursePage() {
                                   }
                                 >
                                   Role
-                                  {sortField === "role" && (
-                                    <span aria-hidden="true">
+                                  <span className="inline-flex items-center justify-center w-4" aria-hidden="true">
+                                    <span className={sortField === "role" ? "" : "invisible"}>
                                       {sortDirection === "asc" ? "↑" : "↓"}
                                     </span>
-                                  )}
+                                  </span>
                                 </button>
                               </th>
                               {isFaculty && (
-                                <th className="text-right p-3">
+                                <th className="text-right p-3 w-24">
                                   <span className="font-semibold">Actions</span>
                                 </th>
                               )}
@@ -613,13 +613,13 @@ export default function CoursePage() {
                                     <span className="font-medium">{p.name || `User ${p.id}`}</span>
                                   </div>
                                 </td>
-                                <td className="p-3">
+                                <td className="p-3 w-32">
                                   <Badge variant={p.role === "faculty" ? "default" : "info"}>
                                     {p.role === "faculty" ? "Faculty" : "Student"}
                                   </Badge>
                                 </td>
                                 {isFaculty && (
-                                  <td className="p-3 text-right">
+                                  <td className="p-3 text-right w-24">
                                     {p.role === "student" && (
                                       <button
                                         onClick={() => setStudentToDelete({ id: p.id, name: p.name || `User ${p.id}` })}
