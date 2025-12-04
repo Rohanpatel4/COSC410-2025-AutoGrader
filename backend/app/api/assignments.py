@@ -13,6 +13,7 @@ from app.models.models import (
     User, RoleEnum, user_course_association
 )
 from app.services.piston import execute_code, get_template_languages, check_piston_available
+from app.api.syntax import _validate_code_syntax
 
 router = APIRouter()
 
@@ -474,6 +475,30 @@ async def create_test_cases_batch(
         # Set default visibility if not provided
         if "visibility" not in test_case:
             test_case["visibility"] = True
+    
+    # Validate syntax for all test cases before saving
+    validation_errors = []
+    for i, test_case in enumerate(test_cases_data):
+        test_code = test_case["test_code"].strip()
+        if test_code:  # Only validate non-empty test cases
+            try:
+                validation_result = await _validate_code_syntax(test_code, language)
+                if not validation_result.valid:
+                    error_messages = [f"Line {err.line}: {err.message}" for err in validation_result.errors]
+                    validation_errors.append(f"Test case {i + 1}: {'; '.join(error_messages)}")
+            except HTTPException:
+                # Re-raise HTTPExceptions (timeout, Piston API errors) - these should block saving
+                raise
+            except Exception as e:
+                # If validation service has unexpected errors, log but allow saving
+                # (prevents blocking when there are transient issues)
+                print(f"[assignments] Warning: Could not validate test case {i + 1}: {str(e)}")
+    
+    if validation_errors:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Test case validation failed: {'; '.join(validation_errors)}"
+        )
     
     # Delete existing test cases for this assignment (replace all)
     existing_test_cases = db.execute(
