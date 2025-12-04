@@ -101,6 +101,13 @@ export default function CreateAssignmentPage() {
   const [validatingSyntax, setValidatingSyntax] = React.useState<Record<number, boolean>>({});
   const editorRefs = React.useRef<Record<number, editor.IStandaloneCodeEditor>>({});
   const monacoRef = React.useRef<Monaco | null>(null);
+  // Use a ref to always get the current language value, not the closure value
+  const languageRef = React.useRef(language);
+  
+  // Keep the ref in sync with the language state
+  React.useEffect(() => {
+    languageRef.current = language;
+  }, [language]);
 
   // Save form data to sessionStorage whenever it changes (with debouncing)
   React.useEffect(() => {
@@ -168,7 +175,12 @@ export default function CreateAssignmentPage() {
   };
 
   // Validate syntax for a test case
+  // Don't include language in dependencies - use ref instead to always get current value
   const validateSyntax = React.useCallback(async (testCaseId: number, code: string) => {
+    // Use the current language value from ref, not closure
+    const currentLanguage = languageRef.current;
+    console.log(`[CreateAssignment] validateSyntax called for test case ${testCaseId}, current language: ${currentLanguage}`);
+    
     if (!code.trim()) {
       // Clear errors for empty code
       setSyntaxErrors(prev => {
@@ -190,11 +202,13 @@ export default function CreateAssignmentPage() {
     setValidatingSyntax(prev => ({ ...prev, [testCaseId]: true }));
 
     try {
+      // Debug: log what we're sending
+      console.log(`[CreateAssignment] Validating test case ${testCaseId} with language: ${currentLanguage}`, code.substring(0, 50));
       const response = await fetchJson<{ valid: boolean; errors: SyntaxError[] }>(
         "/api/v1/syntax/validate",
         {
           method: "POST",
-          body: JSON.stringify({ code, language }),
+          body: JSON.stringify({ code, language: currentLanguage }),
         }
       );
 
@@ -219,14 +233,21 @@ export default function CreateAssignmentPage() {
         if (editor && monacoRef.current) {
           const model = editor.getModel();
           if (model) {
-            const markers = response.errors.map(err => ({
-              severity: monacoRef.current!.MarkerSeverity.Error,
-              message: err.message,
-              startLineNumber: err.line,
-              startColumn: err.column || 1,
-              endLineNumber: err.line,
-              endColumn: err.column ? err.column + 10 : model.getLineMaxColumn(err.line),
-            }));
+            const markers = response.errors
+              .filter(err => err.line > 0 && err.line <= model.getLineCount()) // Only valid line numbers
+              .map(err => {
+                const lineNumber = Math.max(1, Math.min(err.line, model.getLineCount()));
+                const column = err.column || 1;
+                const maxColumn = model.getLineMaxColumn(lineNumber);
+                return {
+                  severity: monacoRef.current!.MarkerSeverity.Error,
+                  message: err.message,
+                  startLineNumber: lineNumber,
+                  startColumn: Math.max(1, Math.min(column, maxColumn)),
+                  endLineNumber: lineNumber,
+                  endColumn: err.column ? Math.min(column + 10, maxColumn) : maxColumn,
+                };
+              });
             monacoRef.current.editor.setModelMarkers(model, 'syntax', markers);
           }
         }
@@ -242,7 +263,7 @@ export default function CreateAssignmentPage() {
     } finally {
       setValidatingSyntax(prev => ({ ...prev, [testCaseId]: false }));
     }
-  }, [language]);
+  }, []); // No dependencies - we use languageRef to get current language
 
   // Handle editor mount
   const handleEditorMount = (testCaseId: number, editor: editor.IStandaloneCodeEditor, monaco: Monaco) => {
@@ -619,7 +640,11 @@ export default function CreateAssignmentPage() {
               <select
                 id="language"
                 value={language}
-                onChange={(e) => setLanguage(e.target.value)}
+                onChange={(e) => {
+                  const newLang = e.target.value;
+                  console.log(`[CreateAssignment] Language changed from ${language} to ${newLang}`);
+                  setLanguage(newLang);
+                }}
                 disabled={submitting || languagesLoading}
                 className="flex h-10 w-full rounded-xl border border-border bg-background px-4 py-2.5 text-foreground shadow-sm transition-all duration-200 focus:border-primary focus:ring-4 focus:ring-ring/25 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
               >
