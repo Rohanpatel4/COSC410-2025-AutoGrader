@@ -1259,38 +1259,165 @@ def gradebook_for_course(course_key: str, db: Session = Depends(get_db)):
             "students": [],
         }
 
-    # best grade per (student, assignment)
-    best_rows = db.execute(
+    # best grade per (student, assignment) with submission ID
+    # First get all submissions for these students and assignments
+    all_submissions = db.execute(
         select(
+            StudentSubmission.id,
             StudentSubmission.student_id,
             StudentSubmission.assignment_id,
-            func.max(StudentSubmission.earned_points)
+            StudentSubmission.earned_points
         )
         .where(
             StudentSubmission.assignment_id.in_(a_ids),
             StudentSubmission.student_id.in_(s_ids),
         )
-        .group_by(StudentSubmission.student_id, StudentSubmission.assignment_id)
     ).all()
 
-    best_map: dict[tuple[int, int], int | None] = {}
-    for sid, aid, best in best_rows:
-        best_map[(sid, aid)] = best
+    # Build a map of best grade and best submission ID per (student, assignment)
+    best_map: dict[tuple[int, int], dict] = {}
+    for sub_id, sid, aid, earned in all_submissions:
+        key = (sid, aid)
+        if key not in best_map or (earned is not None and (best_map[key]["earned"] is None or earned > best_map[key]["earned"])):
+            best_map[key] = {"earned": earned, "submission_id": sub_id}
 
     out_students = []
     for s in students:
         sid = s["student_id"]
-        grades = {str(aid): best_map.get((sid, aid), None) for aid in a_ids}
+        grades = {}
+        best_submission_ids = {}
+        for aid in a_ids:
+            key = (sid, aid)
+            if key in best_map:
+                grades[str(aid)] = best_map[key]["earned"]
+                best_submission_ids[str(aid)] = best_map[key]["submission_id"]
+            else:
+                grades[str(aid)] = None
+                best_submission_ids[str(aid)] = None
         out_students.append({
             "student_id": sid,
             "username": s["username"],
             "grades": grades,
+            "best_submission_ids": best_submission_ids,
         })
 
     return {
         "course": {"id": c.id, "name": c.name, "course_code": c.course_code},
         "assignments": assignments,
         "students": out_students,
+    }
+
+
+@router.post("/{assignment_id}/rerun-all-students")
+async def rerun_all_students(
+    assignment_id: int,
+    user_id: int = Query(..., description="User ID of faculty member"),
+    db: Session = Depends(get_db),
+):
+    """
+    Faculty endpoint to rerun all attempts for ALL students on an assignment.
+    This re-executes each submission against the current test cases.
+    """
+    # Verify user is faculty
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(404, "User not found")
+    if user.role != RoleEnum.faculty:
+        raise HTTPException(403, "Only faculty members can rerun student attempts")
+
+    # Get assignment
+    assignment = db.get(Assignment, assignment_id)
+    if not assignment:
+        raise HTTPException(404, "Assignment not found")
+
+    # Get all submissions for this assignment (all students)
+    submissions = db.execute(
+        select(StudentSubmission).where(
+            StudentSubmission.assignment_id == assignment_id
+        ).order_by(StudentSubmission.id)
+    ).scalars().all()
+
+    if not submissions:
+        raise HTTPException(404, "No submissions found for this assignment")
+
+    # Get test cases for this assignment
+    test_cases = db.execute(
+        select(TestCase).where(TestCase.assignment_id == assignment_id)
+    ).scalars().all()
+
+    # Check if piston is available
+    piston_available, piston_message = await check_piston_available()
+    if not piston_available:
+        raise HTTPException(503, f"Grading service is currently unavailable: {piston_message}")
+
+    # Prepare test cases for execution
+    test_cases_for_execution = [
+        {
+            "id": tc.id,
+            "point_value": tc.point_value,
+            "test_code": tc.test_code
+        }
+        for tc in test_cases
+    ]
+
+    # Rerun each submission
+    rerun_results = []
+    for submission in submissions:
+        try:
+            # Re-execute the code
+            result = await execute_code(assignment.language, submission.code, test_cases_for_execution)
+
+            # Ensure grading structure exists
+            if "grading" not in result:
+                result["grading"] = {}
+
+            # Calculate grade from all test cases (visible + hidden)
+            total_points = result["grading"].get("total_points", 0)
+            earned_points = result["grading"].get("earned_points", 0)
+
+            # Handle division by zero
+            if total_points > 0:
+                grade = (earned_points / total_points) * 100
+            else:
+                grade = 0
+
+            # Get test case results mapping
+            test_case_results = result["grading"].get("test_case_results", {})
+
+            # Update the submission record
+            submission.earned_points = earned_points
+            submission.grade = grade
+            submission.test_case_results = test_case_results
+            submission.updated_at = datetime.utcnow()
+
+            rerun_results.append({
+                "submission_id": submission.id,
+                "student_id": submission.student_id,
+                "old_grade": submission.grade,
+                "new_grade": grade,
+                "earned_points": earned_points,
+                "success": True
+            })
+
+        except Exception as e:
+            rerun_results.append({
+                "submission_id": submission.id,
+                "student_id": submission.student_id,
+                "error": str(e),
+                "success": False
+            })
+
+    # Commit all changes
+    db.commit()
+
+    # Count unique students
+    unique_students = len(set(s.student_id for s in submissions))
+
+    return {
+        "message": f"Successfully reran {len(submissions)} attempts across {unique_students} students",
+        "total_submissions": len(submissions),
+        "total_students": unique_students,
+        "results": rerun_results
     }
 
 

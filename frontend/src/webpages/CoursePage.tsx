@@ -43,7 +43,12 @@ type CoursePayload = {
 type GradebookPayload = {
   course: { id: number; name: string; course_code: string };
   assignments: { id: number; title: string; total_points?: number }[];
-  students: { student_id: number; username: string; grades: Record<string, number | null> }[];
+  students: { 
+    student_id: number; 
+    username: string; 
+    grades: Record<string, number | null>;
+    best_submission_ids?: Record<string, number | null>;
+  }[];
 };
 
 type TabType = "course" | "participants" | "grades";
@@ -1172,15 +1177,17 @@ export default function CoursePage() {
                                         </td>
                                         {gradebook.assignments.map((a) => {
                                           const gradeValue = s.grades[String(a.id)];
+                                          const submissionId = s.best_submission_ids?.[String(a.id)];
                                           const totalPoints = a.total_points || 0;
                                           const isMissing = gradeValue === null || gradeValue === undefined;
 
                                           let displayGrade = "—";
+                                          let percentage: number | null = null;
                                           if (!isMissing) {
+                                            percentage = totalPoints > 0 ? Math.round((gradeValue / totalPoints) * 100) : 0;
                                             if (showPoints) {
                                               displayGrade = `${gradeValue}/${totalPoints}`;
                                             } else {
-                                              const percentage = totalPoints > 0 ? Math.round((gradeValue / totalPoints) * 100) : 0;
                                               displayGrade = `${percentage}%`;
                                             }
                                           }
@@ -1189,6 +1196,25 @@ export default function CoursePage() {
                                             <td key={a.id} className="p-3 text-center">
                                               {isMissing ? (
                                                 <span className="text-muted-foreground">—</span>
+                                              ) : submissionId ? (
+                                                <button
+                                                  onClick={() => navigate(`/assignments/${a.id}/submissions/${submissionId}`)}
+                                                  className={`
+                                                    px-3 py-1 rounded-lg font-medium transition-all duration-200
+                                                    hover:scale-105 cursor-pointer
+                                                    ${percentage !== null
+                                                      ? percentage >= 70
+                                                        ? "bg-accent/10 text-accent hover:bg-accent/20 border border-accent/20"
+                                                        : percentage >= 50
+                                                          ? "bg-warning/10 text-warning hover:bg-warning/20 border border-warning/20"
+                                                          : "bg-danger/10 text-danger hover:bg-danger/20 border border-danger/20"
+                                                      : "bg-muted text-muted-foreground hover:bg-muted/80"
+                                                    }
+                                                  `}
+                                                  title="Click to view best submission"
+                                                >
+                                                  {displayGrade}
+                                                </button>
                                               ) : (
                                                 <span className="font-medium">{displayGrade}</span>
                                               )}

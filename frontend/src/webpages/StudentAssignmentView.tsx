@@ -2,7 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import Editor from "@monaco-editor/react";
 import { Assignment } from "../types/assignments";
-import { Button, Badge } from "../components/ui";
+import { Button, Badge, RichTextEditor } from "../components/ui";
 import { formatGradeDisplay } from "../utils/formatGrade";
 import { Upload, X, FileCode, CheckCircle2, XCircle, ChevronLeft, PanelLeftClose, PanelLeftOpen, CheckCircle, BookOpen, AlertTriangle } from "lucide-react";
 import InstructionsManager from "../components/ui/InstructionsManager";
@@ -53,6 +53,22 @@ export default function StudentAssignmentView({
   const [lastResultId, setLastResultId] = React.useState<string | null>(null); // Track to avoid re-triggering
   const [showConfirmModal, setShowConfirmModal] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Parse description from backend (handles both JSON string and plain text)
+  const parsedDescription = React.useMemo(() => {
+    const desc = assignment.description;
+    if (!desc) return null;
+    try {
+      // Try to parse as JSON (new format)
+      const parsed = JSON.parse(desc);
+      if (parsed && typeof parsed === 'object' && parsed.type) {
+        return parsed; // Valid TipTap JSON
+      }
+      return null; // Not a valid TipTap structure
+    } catch {
+      return null; // Plain text (old format)
+    }
+  }, [assignment.description]);
 
   // Calculate attempts info
   const attemptsUsed = attempts.length;
@@ -231,8 +247,16 @@ export default function StudentAssignmentView({
           
           {/* Description */}
           {assignment.description && (
-            <div className="text-[15px] leading-relaxed text-muted-foreground">
-              <p className="whitespace-pre-wrap">{assignment.description}</p>
+            <div className="text-[15px] leading-relaxed">
+              {parsedDescription ? (
+                <RichTextEditor
+                  content={parsedDescription}
+                  onChange={() => {}}
+                  readOnly={true}
+                />
+              ) : (
+                <p className="whitespace-pre-wrap text-muted-foreground">{assignment.description}</p>
+              )}
             </div>
           )}
         </div>

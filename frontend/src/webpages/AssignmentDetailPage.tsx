@@ -4,7 +4,7 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { fetchJson, BASE } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import type { Assignment } from "../types/assignments";
-import { Button, Card, Alert, Badge } from "../components/ui";
+import { Button, Card, Alert, Badge, RichTextEditor } from "../components/ui";
 import { formatGradeDisplay } from "../utils/formatGrade";
 import {
   ExternalLink,
@@ -51,7 +51,20 @@ export default function AssignmentDetailPage() {
   const [facRows, setFacRows] = React.useState<FacRow[] | null>(null);
   const [facLoading, setFacLoading] = React.useState(false);
   const [facErr, setFacErr] = React.useState<string | null>(null);
-  const [rerunningStudent, setRerunningStudent] = React.useState<number | null>(null);
+  const [rerunningAll, setRerunningAll] = React.useState(() => {
+    // Check localStorage for ongoing rerun on this assignment
+    const stored = localStorage.getItem(`rerunning_${assignment_id}`);
+    return stored === 'true';
+  });
+
+  // Effect to persist and poll rerunning state
+  React.useEffect(() => {
+    if (rerunningAll) {
+      localStorage.setItem(`rerunning_${assignment_id}`, 'true');
+    } else {
+      localStorage.removeItem(`rerunning_${assignment_id}`);
+    }
+  }, [rerunningAll, assignment_id]);
 
   async function loadFacRows() {
     if (!assignment_id || isStudent) return;
@@ -71,27 +84,50 @@ export default function AssignmentDetailPage() {
     }
   }
 
-  async function rerunStudentAttempts(studentId: number) {
+  async function rerunAllStudents() {
     if (!assignment_id || !userId) return;
 
-    setRerunningStudent(studentId);
+    setRerunningAll(true);
+    setFacErr(null);
     try {
-      const res = await fetchJson(`/api/v1/assignments/${assignment_id}/rerun-student-attempts/${studentId}?user_id=${userId}`, {
+      const res = await fetchJson<{ message: string; total_submissions: number; total_students: number; results: any[] }>(`/api/v1/assignments/${assignment_id}/rerun-all-students?user_id=${userId}`, {
         method: 'POST'
       });
-      setSubmitMsg(`Successfully reran all attempts for student. ${res.results.length} attempts updated.`);
+      setSubmitMsg(`Successfully reran ${res.total_submissions} attempts across ${res.total_students} students.`);
 
       // Refresh the faculty data to show updated grades
       await loadFacRows();
     } catch (e: any) {
-      setFacErr(e?.message ?? "Failed to rerun student attempts");
+      setFacErr(e?.message ?? "Failed to rerun all student attempts");
     } finally {
-      setRerunningStudent(null);
+      setRerunningAll(false);
     }
   }
 
   // Expandable section state
   const [descriptionExpanded, setDescriptionExpanded] = React.useState(false);
+
+  // Helper to parse description from backend (handles both JSON string and plain text)
+  const parseDescription = React.useCallback((desc: string | null | undefined): any => {
+    if (!desc) return null;
+    try {
+      // Try to parse as JSON (new format)
+      const parsed = JSON.parse(desc);
+      if (parsed && typeof parsed === 'object' && parsed.type) {
+        return parsed; // Valid TipTap JSON
+      }
+      // Not a valid TipTap structure, treat as plain text
+      return null;
+    } catch {
+      // Plain text (old format)
+      return null;
+    }
+  }, []);
+
+  // Check if description has rich text content
+  const parsedDescription = React.useMemo(() => {
+    return a ? parseDescription(a.description) : null;
+  }, [a, parseDescription]);
 
   // Grades table expansion state
   const [gradesExpanded, setGradesExpanded] = React.useState(false);
@@ -388,8 +424,9 @@ export default function AssignmentDetailPage() {
                   const descriptionText = a.description || '';
                   const hasDescription = descriptionText.length > 0;
                   const hasInstructions = a.instructions && (Array.isArray(a.instructions) ? a.instructions.length > 0 : Object.keys(a.instructions).length > 0);
+                  const isRichDescription = parsedDescription !== null;
                   const isLongDescription = descriptionText.length > 200;
-                  const needsExpansion = isLongDescription || hasInstructions;
+                  const needsExpansion = isLongDescription || hasInstructions || isRichDescription;
                   
                   if (!hasDescription && !hasInstructions) return null;
                   
@@ -397,8 +434,16 @@ export default function AssignmentDetailPage() {
                     <div className="mb-6">
                       {/* Description */}
                       {hasDescription && (
-                        <div className={`text-muted-foreground leading-relaxed ${!descriptionExpanded && needsExpansion ? 'line-clamp-3' : ''}`}>
-                          {descriptionText}
+                        <div className={`leading-relaxed ${!descriptionExpanded && needsExpansion ? 'line-clamp-3' : ''}`}>
+                          {isRichDescription ? (
+                            <RichTextEditor
+                              content={parsedDescription}
+                              onChange={() => {}}
+                              readOnly={true}
+                            />
+                          ) : (
+                            <span className="text-muted-foreground">{descriptionText}</span>
+                          )}
                         </div>
                       )}
                       
@@ -502,14 +547,38 @@ export default function AssignmentDetailPage() {
             {/* Grades Section */}
             <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
               <div className="p-6 border-b border-border">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <Users className="w-5 h-5 text-primary" />
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <Users className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-semibold text-foreground">Student Grades</h2>
+                      <p className="text-sm text-muted-foreground">View and track student progress</p>
+                    </div>
                   </div>
-                  <div>
-                    <h2 className="text-xl font-semibold text-foreground">Student Grades</h2>
-                    <p className="text-sm text-muted-foreground">View and track student progress</p>
-                  </div>
+                  {/* Rerun All Students Button */}
+                  {!facLoading && !facErr && (facRows?.length ?? 0) > 0 && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={rerunAllStudents}
+                      disabled={rerunningAll}
+                      className="gap-2"
+                    >
+                      {rerunningAll ? (
+                        <>
+                          <div className="w-4 h-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                          Rerunning...
+                        </>
+                      ) : (
+                        <>
+                          <RotateCcw className="w-4 h-4" />
+                          Rerun All
+                        </>
+                      )}
+                    </Button>
+                  )}
                 </div>
               </div>
               
@@ -537,29 +606,6 @@ export default function AssignmentDetailPage() {
 
                   {!facLoading && !facErr && (facRows?.length ?? 0) > 0 && (
                     <div className="space-y-4">
-                      {/* Expand/Collapse Button */}
-                      {(() => {
-                        const maxAttempts = facRows?.reduce((m, r) => Math.max(m, r.attempts.length), 0) ?? 0;
-                        const showExpandButton = maxAttempts > 5;
-
-                        return showExpandButton && (
-                          <div className="flex justify-center">
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              onClick={() => setGradesExpanded(!gradesExpanded)}
-                              className="gap-2"
-                            >
-                              {gradesExpanded ? (
-                                <>Show Less Attempts <ChevronUp className="w-4 h-4" /></>
-                              ) : (
-                                <>Show All Attempts <ChevronDown className="w-4 h-4" /></>
-                              )}
-                            </Button>
-                          </div>
-                        );
-                      })()}
-
                       <div className="overflow-x-auto">
                         <table className="w-full border-collapse">
                         <thead>
@@ -567,14 +613,11 @@ export default function AssignmentDetailPage() {
                             <th className="text-left p-2 border-b border-border whitespace-nowrap sticky left-0 bg-card z-10 min-w-[150px]">
                               Student
                             </th>
-                            {/* Actions column */}
-                            <th className="text-center p-2 border-b border-border whitespace-nowrap min-w-[120px]">
-                              Actions
-                            </th>
                             {/* Best column first */}
                             <th className="text-center p-2 border-b border-border whitespace-nowrap min-w-[80px] bg-primary/5 font-semibold">
                               Best
                             </th>
+                            {/* Attempt columns */}
                             {(() => {
                               const maxAttempts =
                                 facRows?.reduce((m, r) => Math.max(m, r.attempts.length), 0) ?? 0;
@@ -590,13 +633,30 @@ export default function AssignmentDetailPage() {
                                   </th>
                                 );
                               }
+                              // When collapsed and there are more attempts, show header for +X column
                               if (!gradesExpanded && maxAttempts > 5) {
                                 headers.push(
                                   <th
                                     key="more"
                                     className="text-center p-2 border-b border-border whitespace-nowrap min-w-[80px] text-muted-foreground"
                                   >
-                                    +{maxAttempts - 5} more
+                                    More
+                                  </th>
+                                );
+                              }
+                              // When expanded, show collapse button in last header
+                              if (gradesExpanded && maxAttempts > 5) {
+                                headers.push(
+                                  <th
+                                    key="collapse"
+                                    className="text-center p-2 border-b border-border whitespace-nowrap min-w-[80px]"
+                                  >
+                                    <button
+                                      onClick={() => setGradesExpanded(false)}
+                                      className="px-2 py-1 rounded-md bg-muted text-muted-foreground text-xs font-medium hover:bg-muted/80 transition-colors"
+                                    >
+                                      Collapse
+                                    </button>
                                   </th>
                                 );
                               }
@@ -609,6 +669,9 @@ export default function AssignmentDetailPage() {
                             const maxAttempts =
                               facRows?.reduce((m, r) => Math.max(m, r.attempts.length), 0) ?? 0;
                             const displayAttempts = gradesExpanded ? maxAttempts : Math.min(maxAttempts, 5);
+                            
+                            // Per-student remaining attempts count
+                            const studentRemainingAttempts = row.attempts.length > 5 ? row.attempts.length - 5 : 0;
 
                             // Get first attempt for student name click
                             const firstAttempt = row.attempts[0];
@@ -633,25 +696,6 @@ export default function AssignmentDetailPage() {
                                       {row.username}
                                     </span>
                                   )}
-                                </td>
-                                {/* Actions column */}
-                                <td className="p-2 border-b border-border text-center whitespace-nowrap">
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => rerunStudentAttempts(row.student_id)}
-                                    disabled={rerunningStudent === row.student_id}
-                                    className="h-7 px-2 text-xs"
-                                  >
-                                    {rerunningStudent === row.student_id ? (
-                                      <div className="w-3 h-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                                    ) : (
-                                      <>
-                                        <RotateCcw className="w-3 h-3 mr-1" />
-                                        Rerun All
-                                      </>
-                                    )}
-                                  </Button>
                                 </td>
                                 {/* Best column first */}
                                 <td className="p-2 border-b border-border font-semibold text-center whitespace-nowrap bg-primary/5">
@@ -730,19 +774,25 @@ export default function AssignmentDetailPage() {
                                     </td>
                                   );
                                 })}
-                                {/* Empty cell for Actions column when collapsed */}
+                                {/* Per-student "More" cell when collapsed - clickable to expand */}
                                 {!gradesExpanded && maxAttempts > 5 && (
                                   <td className="p-2 border-b border-border text-center whitespace-nowrap">
-                                    {/* Empty cell */}
+                                    {studentRemainingAttempts > 0 ? (
+                                      <button
+                                        onClick={() => setGradesExpanded(true)}
+                                        className="px-2 py-1 rounded-md bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors cursor-pointer"
+                                        title="Click to show all attempts"
+                                      >
+                                        +{studentRemainingAttempts}
+                                      </button>
+                                    ) : (
+                                      <span className="text-muted-foreground">—</span>
+                                    )}
                                   </td>
                                 )}
-                                {/* "More" indicator when collapsed */}
-                                {!gradesExpanded && maxAttempts > 5 && (
-                                  <td className="p-2 border-b border-border text-center whitespace-nowrap text-muted-foreground">
-                                    <span className="px-3 py-1 rounded-lg bg-muted/50 text-sm">
-                                      +{maxAttempts - 5}
-                                    </span>
-                                  </td>
+                                {/* Empty cell to align with Collapse header when expanded */}
+                                {gradesExpanded && maxAttempts > 5 && (
+                                  <td className="p-2 border-b border-border"></td>
                                 )}
                               </tr>
                             );

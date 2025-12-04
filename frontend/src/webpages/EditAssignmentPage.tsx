@@ -4,7 +4,7 @@ import { useAuth } from "../auth/AuthContext";
 import { fetchJson } from "../api/client";
 import Editor, { Monaco } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
-import { Button, Input, Label, Card, Alert } from "../components/ui";
+import { Button, Input, Label, Card, Alert, RichTextEditor } from "../components/ui";
 import { ArrowLeft, Plus, Trash2, GripVertical, X, AlertTriangle, AlertCircle } from "lucide-react";
 import InstructionsManager from "../components/ui/InstructionsManager";
 import type { Assignment } from "../types/assignments";
@@ -66,7 +66,7 @@ export default function EditAssignmentPage() {
 
   // Form state - initialize from saved data if available, otherwise defaults
   const [title, setTitle] = React.useState(savedData?.title || "");
-  const [description, setDescription] = React.useState(savedData?.description || "");
+  const [description, setDescription] = React.useState<any>(savedData?.description || null); // TipTap JSON content
   const [language, setLanguage] = React.useState(savedData?.language || "python");
   const [languages, setLanguages] = React.useState<SupportedLanguage[]>([]);
   const [languagesLoading, setLanguagesLoading] = React.useState(true);
@@ -88,6 +88,29 @@ export default function EditAssignmentPage() {
   const [validatingSyntax, setValidatingSyntax] = React.useState<Record<number, boolean>>({});
   const editorRefs = React.useRef<Record<number, editor.IStandaloneCodeEditor>>({});
   const monacoRef = React.useRef<Monaco | null>(null);
+
+  // Helper to parse description from backend (handles both JSON string and plain text)
+  const parseDescription = (desc: string | null | undefined): any => {
+    if (!desc) return null;
+    try {
+      // Try to parse as JSON (new format)
+      const parsed = JSON.parse(desc);
+      if (parsed && typeof parsed === 'object' && parsed.type) {
+        return parsed; // Valid TipTap JSON
+      }
+      // Not a valid TipTap structure, wrap as plain text
+      return {
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: desc }] }]
+      };
+    } catch {
+      // Plain text (old format) - wrap in TipTap structure
+      return {
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: desc }] }]
+      };
+    }
+  };
 
   // Fetch supported languages on mount
   React.useEffect(() => {
@@ -127,7 +150,7 @@ export default function EditAssignmentPage() {
         // Populate form fields from server (only if no saved data from sessionStorage)
         if (!savedData) {
           setTitle(data.title || "");
-          setDescription(data.description || "");
+          setDescription(parseDescription(data.description));
           setLanguage(data.language || "python");
           setSubLimit(data.sub_limit?.toString() || "");
           setStart(data.start ? new Date(data.start).toISOString().slice(0, 16) : "");
@@ -350,8 +373,8 @@ export default function EditAssignmentPage() {
     return removeEmptyItems(json);
   };
 
-  // Helper function to check if instructions have actual content
-  const hasInstructionsContent = (json: any): boolean => {
+  // Helper function to check if TipTap content has actual text
+  const hasTipTapContent = (json: any): boolean => {
     if (!json || !json.content) return false;
     
     const checkContent = (node: any): boolean => {
@@ -365,6 +388,9 @@ export default function EditAssignmentPage() {
     return checkContent(json);
   };
 
+  // Alias for instructions (for clarity)
+  const hasInstructionsContent = hasTipTapContent;
+
   // Validate form before submission
   const validateForm = (): string[] => {
     const errors: string[] = [];
@@ -373,7 +399,8 @@ export default function EditAssignmentPage() {
       errors.push("Title is required");
     }
     
-    if (!description.trim()) {
+    // Check if description has actual content
+    if (!hasTipTapContent(description)) {
       errors.push("Description is required");
     }
     
@@ -439,8 +466,8 @@ export default function EditAssignmentPage() {
         title: title.trim(),
       };
 
-      // Description is required
-      payload.description = description.trim();
+      // Description is required - serialize as JSON string for backend storage
+      payload.description = description ? JSON.stringify(description) : "";
       if (language) payload.language = language;
       
       // Handle submission limit - include empty string to clear
@@ -737,13 +764,12 @@ export default function EditAssignmentPage() {
 
             <div>
               <Label htmlFor="description">Description <span className="text-red-500">*</span></Label>
-              <textarea
-                id="description"
-                placeholder="Enter assignment description and requirements..."
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className="min-h-[120px] resize-y w-full rounded-xl border border-border bg-background px-4 py-2.5 text-foreground shadow-sm placeholder:text-muted-foreground transition-all duration-200 focus:border-primary focus:ring-4 focus:ring-ring/25 focus:outline-none"
+              <RichTextEditor
+                content={description}
+                onChange={setDescription}
                 disabled={submitting}
+                placeholder="Enter assignment description and requirements..."
+                minHeight="120px"
               />
             </div>
 
