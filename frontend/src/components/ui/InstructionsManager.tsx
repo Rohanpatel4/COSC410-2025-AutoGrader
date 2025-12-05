@@ -27,12 +27,14 @@ type InstructionsManagerProps = {
   readOnly?: boolean;
 };
 
+// Compact color presets - vibrant colors for text
 const TEXT_COLORS = [
   "#ef4444", "#f97316", "#eab308", "#22c55e", "#06b6d4", "#3b82f6", "#8b5cf6", "#ec4899",
 ];
 
+// Darker highlight colors that work well with light/white text
 const HIGHLIGHT_COLORS = [
-  "#fef08a", "#bbf7d0", "#a5f3fc", "#bfdbfe", "#e9d5ff", "#fbcfe8",
+  "#7c2d12", "#713f12", "#166534", "#155e75", "#1e3a8a", "#581c87", "#831843",
 ];
 
 function ToolbarButton({
@@ -68,6 +70,7 @@ function ToolbarButton({
   );
 }
 
+// Compact Color Picker with circles matching icon size
 function TinyColorPicker({
   colors,
   currentColor,
@@ -86,6 +89,7 @@ function TinyColorPicker({
   allowCustom?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [customColor, setCustomColor] = useState("#886e4c");
   const containerRef = useRef<HTMLDivElement>(null);
   const colorInputRef = useRef<HTMLInputElement>(null);
 
@@ -98,6 +102,12 @@ function TinyColorPicker({
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  const handleCustomColorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newColor = e.target.value;
+    setCustomColor(newColor);
+    onSelect(newColor);
+  };
 
   return (
     <div className="relative" ref={containerRef}>
@@ -125,61 +135,104 @@ function TinyColorPicker({
 
       {isOpen && (
         <div className="absolute top-full mt-1 left-0 z-50">
-          <div className="bg-popover border border-border rounded-lg p-1.5 shadow-lg flex items-center gap-1">
-            {/* Default first */}
-            <button
-              type="button"
-              onClick={() => { onSelect(""); setIsOpen(false); }}
-              className={`
-                w-4 h-4 rounded-full border transition-all
-                ${!currentColor 
-                  ? "border-primary bg-background ring-1 ring-primary" 
-                  : "border-muted-foreground/30 bg-background hover:border-muted-foreground"
-                }
-              `}
-              title="Default"
-            />
-
-            <div className="w-px h-3 bg-border" />
-
-            {colors.map((color) => (
-              <button
-                key={color}
-                type="button"
-                onClick={() => { onSelect(color); setIsOpen(false); }}
-                className={`
-                  w-4 h-4 rounded-full transition-all
-                  ${currentColor === color 
-                    ? "ring-1 ring-primary ring-offset-1 ring-offset-background" 
-                    : "hover:scale-110"
-                  }
-                `}
-                style={{ backgroundColor: color }}
-                title={color}
-              />
-            ))}
-
-            {allowCustom && (
-              <>
-                <div className="w-px h-3 bg-border" />
+          <div className="bg-popover border border-border rounded-md p-1.5 shadow-lg">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+              {/* Color circles - fixed 14px size */}
+              {colors.map((color) => (
                 <button
+                  key={color}
                   type="button"
-                  onClick={() => colorInputRef.current?.click()}
-                  className="w-4 h-4 rounded-full border border-dashed border-muted-foreground/50 hover:border-muted-foreground transition-all"
+                  onClick={() => { onSelect(color); setIsOpen(false); }}
                   style={{ 
-                    background: currentColor && !colors.includes(currentColor) ? currentColor : 'conic-gradient(red, yellow, lime, aqua, blue, magenta, red)'
+                    width: '14px', 
+                    height: '14px', 
+                    minWidth: '14px',
+                    maxWidth: '14px',
+                    minHeight: '14px',
+                    maxHeight: '14px',
+                    padding: 0,
+                    margin: 0,
+                    borderRadius: '50%',
+                    backgroundColor: color,
+                    border: currentColor === color ? '2px solid var(--primary)' : 'none',
+                    boxSizing: 'border-box',
+                    cursor: 'pointer',
+                    flexShrink: 0,
                   }}
-                  title="Custom"
+                  title={color}
                 />
-                <input
-                  ref={colorInputRef}
-                  type="color"
-                  value={currentColor || "#000000"}
-                  onChange={(e) => onSelect(e.target.value)}
-                  className="sr-only"
-                />
-              </>
-            )}
+              ))}
+
+              {/* Custom color with native color picker */}
+              {allowCustom && (
+                <div style={{ position: 'relative', display: 'flex' }}>
+                  <button
+                    type="button"
+                    onClick={() => colorInputRef.current?.click()}
+                    style={{ 
+                      width: '14px', 
+                      height: '14px', 
+                      minWidth: '14px',
+                      maxWidth: '14px',
+                      minHeight: '14px',
+                      maxHeight: '14px',
+                      padding: 0,
+                      margin: 0,
+                      borderRadius: '50%',
+                      backgroundColor: customColor,
+                      border: (currentColor === customColor && !colors.includes(currentColor)) ? '2px solid var(--primary)' : '1.5px dashed rgba(156, 163, 175, 0.6)',
+                      boxSizing: 'border-box',
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                    }}
+                    title={`Custom: ${customColor}`}
+                  />
+                  <input
+                    ref={colorInputRef}
+                    type="color"
+                    value={customColor}
+                    onChange={handleCustomColorChange}
+                    style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }}
+                  />
+                </div>
+              )}
+
+              {/* Clear/No color button */}
+              <button
+                type="button"
+                onClick={() => { onSelect(""); setIsOpen(false); }}
+                style={{ 
+                  width: '14px', 
+                  height: '14px', 
+                  minWidth: '14px',
+                  maxWidth: '14px',
+                  minHeight: '14px',
+                  maxHeight: '14px',
+                  padding: 0,
+                  margin: 0,
+                  borderRadius: '50%',
+                  backgroundColor: 'transparent',
+                  border: !currentColor ? '2px solid var(--primary)' : '1.5px solid rgba(156, 163, 175, 0.5)',
+                  boxSizing: 'border-box',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  position: 'relative',
+                  flexShrink: 0,
+                }}
+                title="Clear"
+              >
+                <span style={{ 
+                  width: '8px', 
+                  height: '1.5px', 
+                  backgroundColor: 'rgba(156,163,175,0.8)', 
+                  transform: 'rotate(45deg)', 
+                  position: 'absolute',
+                  borderRadius: '1px',
+                }} />
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -378,7 +431,7 @@ export default function InstructionsManager({
             };
 
             if (event.key === 'Tab') {
-                event.preventDefault();
+                event.preventDefault(); 
                 if (event.shiftKey) {
                     if (checkForRootItems()) return true;
                     editor?.commands.liftListItem('listItem');
@@ -389,15 +442,15 @@ export default function InstructionsManager({
             }
 
             if ((event.ctrlKey || event.metaKey) && (event.key === '[' || event.key === ']')) {
-                if (isListItem) {
-                    event.preventDefault();
-                    if (event.key === '[') {
+                    if (isListItem) {
+                        event.preventDefault();
+                        if (event.key === '[') {
                         if (checkForRootItems()) return true;
-                        editor?.commands.liftListItem('listItem');
-                    } else {
-                        editor?.commands.sinkListItem('listItem');
-                    }
-                    return true;
+                            editor?.commands.liftListItem('listItem');
+                        } else {
+                            editor?.commands.sinkListItem('listItem');
+                        }
+                        return true;
                 }
             }
 
@@ -416,7 +469,7 @@ export default function InstructionsManager({
                     
                     if (!isRoot) {
                         editor?.commands.liftListItem('listItem');
-                        return true;
+                        return true; 
                     } else {
                         if (index > 0 || totalRootItems > 1) {
                             editor?.commands.deleteNode('listItem');
@@ -436,18 +489,18 @@ export default function InstructionsManager({
         
         const removeEmptyItems = (node: any): any => {
             if (node.type === 'bulletList' && node.content) {
-                const processedContent: any[] = [];
-                node.content.forEach((listItem: any) => {
-                    if (listItem.type === 'listItem') {
-                        const paragraph = listItem.content?.find((c: any) => c.type === 'paragraph');
-                        const hasText = paragraph?.content?.some((c: any) => c.type === 'text' && c.text?.trim());
-                        const nestedBulletList = listItem.content?.find((c: any) => c.type === 'bulletList');
+                    const processedContent: any[] = [];
+                    node.content.forEach((listItem: any) => {
+                        if (listItem.type === 'listItem') {
+                            const paragraph = listItem.content?.find((c: any) => c.type === 'paragraph');
+                            const hasText = paragraph?.content?.some((c: any) => c.type === 'text' && c.text?.trim());
+                            const nestedBulletList = listItem.content?.find((c: any) => c.type === 'bulletList');
                         const hasNestedChildren = nestedBulletList?.content?.length > 0;
-                        
-                        if (!hasText) {
-                            if (hasNestedChildren) {
-                                nestedBulletList.content.forEach((nestedItem: any) => {
-                                    const processed = removeEmptyItems(nestedItem);
+                            
+                            if (!hasText) {
+                                if (hasNestedChildren) {
+                                    nestedBulletList.content.forEach((nestedItem: any) => {
+                                        const processed = removeEmptyItems(nestedItem);
                                     if (processed) processedContent.push(processed);
                                 });
                             }
@@ -462,15 +515,15 @@ export default function InstructionsManager({
                 });
                 return { ...node, content: processedContent };
             } else if (node.type === 'listItem' && node.content) {
-                const processedContent: any[] = [];
-                node.content.forEach((child: any) => {
-                    if (child.type === 'bulletList') {
-                        const processed = removeEmptyItems(child);
+                    const processedContent: any[] = [];
+                    node.content.forEach((child: any) => {
+                        if (child.type === 'bulletList') {
+                            const processed = removeEmptyItems(child);
                         if (processed) processedContent.push(processed);
-                    } else {
-                        processedContent.push(child);
-                    }
-                });
+                        } else {
+                            processedContent.push(child);
+                        }
+                    });
                 return { ...node, content: processedContent };
             } else if (node.type === 'doc' && node.content) {
                 const processedContent = node.content.map((child: any) => removeEmptyItems(child)).filter(Boolean);
@@ -487,8 +540,8 @@ export default function InstructionsManager({
             editor.commands.setContent(placeholder);
             onChange(placeholder);
         } else if (JSON.stringify(cleaned) !== JSON.stringify(json)) {
-            editor.commands.setContent(cleaned);
-            onChange(cleaned);
+                editor.commands.setContent(cleaned);
+                onChange(cleaned);
         }
     }
   });
@@ -541,11 +594,11 @@ export default function InstructionsManager({
 
   return (
     <div className="space-y-2">
-      <Label>Instructions <span className="text-red-500">*</span></Label>
+        <Label>Instructions <span className="text-red-500">*</span></Label>
       <div className="instructions-editor rounded-xl border border-border bg-background shadow-sm transition-all duration-200 focus-within:border-primary focus-within:ring-4 focus-within:ring-ring/25 overflow-visible">
         <InstructionsToolbar editor={editor} disabled={disabled} />
         <div className="px-4 py-3 h-[186px] overflow-y-auto cursor-text" onClick={() => editor?.commands.focus()}>
-          <EditorContent editor={editor} className="h-full" />
+            <EditorContent editor={editor} className="h-full" />
         </div>
       </div>
     </div>

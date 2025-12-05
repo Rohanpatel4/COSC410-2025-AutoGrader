@@ -324,83 +324,33 @@ int main() {{
                             return SyntaxCheckResponse(valid=False, errors=errors)
                 elif language_lower in ["cpp", "c++", "c"]:
                     # C++: "was not declared" errors are expected for test cases
-                    # But we need to distinguish between:
-                    # - "was not declared" for user functions (undefined function/variable - OK)
-                    # - Syntax errors (should fail)
-                    # Note: "assert not declared" can happen if there's a syntax error preventing includes
+                    # (student code will define the variables/functions)
+                    # But actual syntax errors (like ===, missing semicolons, etc.) should fail
                     if compile_stderr:
                         print(f"[syntax] C++ compile stderr: {compile_stderr[:500]}", flush=True)
                         
-                        # First, check for syntax errors - these always fail
-                        # Include "unterminated" to catch macro/function call syntax errors
-                        syntax_keywords = ["expected", "unexpected", "missing", "syntax error", 
-                                          "parse error", "before", "after", "token", 
-                                          "expected ';'", "expected ')'", "expected '('",
-                                          "unterminated", "at end of input", "to match this",
-                                          "numeric constant", "before numeric"]
-                        has_syntax_error = any(keyword in compile_stderr_lower for keyword in syntax_keywords)
-                        
-                        print(f"[syntax] C++ has_syntax_error: {has_syntax_error}", flush=True)
-                        
-                        if has_syntax_error:
-                            # There's a syntax error - always fail, even if assert is mentioned
-                            print(f"[syntax] C++ syntax error detected - failing validation", flush=True)
-                            errors = parse_cpp_error(compile_stderr)
-                            if errors:
-                                return SyntaxCheckResponse(valid=False, errors=errors)
-                            else:
-                                return SyntaxCheckResponse(
-                                    valid=False,
-                                    errors=[CodeError(line=1, message=compile_stderr.strip()[:200])]
-                                )
-                        
-                        # No syntax errors - parse to see what we have
+                        # Parse all errors first
                         errors = parse_cpp_error(compile_stderr)
                         print(f"[syntax] C++ parsed {len(errors)} errors", flush=True)
                         
-                        if errors:
-                            # Check if ALL errors are "was not declared" for user-defined functions
-                            # Allow "assert not declared" ONLY if there are no syntax errors
-                            # (syntax errors can cause assert to appear undeclared)
-                            # Also check the raw stderr in case parsing missed something
-                            error_messages_combined = " ".join([err.message.lower() for err in errors])
-                            all_undeclared_in_parsed = all(
-                                "was not declared" in err.message.lower() or 
-                                "not declared" in err.message.lower()
-                                for err in errors
-                            )
-                            # Also check raw stderr to be sure
-                            all_undeclared_in_stderr = (
-                                ("was not declared" in compile_stderr_lower or "not declared" in compile_stderr_lower) and
-                                not any(keyword in compile_stderr_lower for keyword in ["expected", "unexpected", "missing", "unterminated", "numeric constant"])
-                            )
-                            all_undeclared = all_undeclared_in_parsed or (all_undeclared_in_stderr and len(errors) > 0)
-                            
-                            print(f"[syntax] C++ all_undeclared_in_parsed: {all_undeclared_in_parsed}, all_undeclared_in_stderr: {all_undeclared_in_stderr}, all_undeclared: {all_undeclared}", flush=True)
-                            print(f"[syntax] C++ error messages: {error_messages_combined[:200]}", flush=True)
-                            
-                            if all_undeclared:
-                                # All errors are "was not declared" - this is OK for user functions
-                                # (assert might appear undeclared if there were issues, but we checked for syntax errors above)
-                                print(f"[syntax] C++ all errors are 'not declared' - allowing", flush=True)
-                                is_expected_compile_error = True
-                            else:
-                                # Mixed errors or other types - fail validation
-                                print(f"[syntax] C++ mixed errors - failing validation", flush=True)
-                                return SyntaxCheckResponse(valid=False, errors=errors)
+                        # Filter out "not declared" errors - student will define these
+                        # Keep only actual syntax errors
+                        syntax_errors = [
+                            err for err in errors 
+                            if "was not declared" not in err.message.lower() 
+                            and "not declared" not in err.message.lower()
+                        ]
+                        
+                        print(f"[syntax] C++ after filtering 'not declared': {len(syntax_errors)} syntax errors remain", flush=True)
+                        
+                        if syntax_errors:
+                            # There are real syntax errors - fail validation with only those errors
+                            print(f"[syntax] C++ syntax errors found - failing validation", flush=True)
+                            return SyntaxCheckResponse(valid=False, errors=syntax_errors)
                         else:
-                            # Couldn't parse errors, but there's stderr and no syntax errors
-                            # If it's "was not declared", allow it
-                            if "was not declared" in compile_stderr_lower or "not declared" in compile_stderr_lower:
-                                print(f"[syntax] C++ unparsed but 'not declared' found - allowing", flush=True)
-                                is_expected_compile_error = True
-                            else:
-                                # Some other error - fail
-                                print(f"[syntax] C++ unparsed and not 'not declared' - failing", flush=True)
-                                return SyntaxCheckResponse(
-                                    valid=False,
-                                    errors=[CodeError(line=1, message=compile_stderr.strip()[:200])]
-                                )
+                            # All errors were "not declared" - this is expected for test cases
+                            print(f"[syntax] C++ all errors are 'not declared' - allowing", flush=True)
+                            is_expected_compile_error = True
                 elif language_lower in ["rust", "rs"]:
                     # Rust: "cannot find" errors are expected for test cases
                     # Common Rust error codes: E0425 (cannot find value), E0423 (cannot find function)
