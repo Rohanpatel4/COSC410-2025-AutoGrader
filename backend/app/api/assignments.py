@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Q
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func, and_
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from collections import defaultdict
 import re
 
@@ -374,9 +374,10 @@ def update_assignment(assignment_id: int, payload: dict, db: Session = Depends(g
     
     # Update description if provided
     if "description" in payload:
-        description = (payload.get("description") or "").strip()  # Use empty string, not None - DB requires non-null
-        if description is not None and not isinstance(description, str):
+        description_raw = payload.get("description")
+        if description_raw is not None and not isinstance(description_raw, str):
             raise HTTPException(400, "description must be a string")
+        description = (description_raw or "").strip() if isinstance(description_raw, str) else ""
         a.description = description
     
     # Update language if provided
@@ -1413,7 +1414,7 @@ async def rerun_all_students(
             submission.earned_points = earned_points
             submission.grade = grade
             submission.test_case_results = test_case_results
-            submission.updated_at = datetime.utcnow()
+            submission.updated_at = datetime.now(timezone.utc)
 
             rerun_results.append({
                 "submission_id": submission.id,
@@ -1542,7 +1543,7 @@ async def rerun_student_attempts(
             submission.earned_points = earned_points
             submission.grade = grade
             submission.test_case_results = test_case_results
-            submission.updated_at = datetime.utcnow()
+            submission.updated_at = datetime.now(timezone.utc)
 
             rerun_results.append({
                 "submission_id": submission.id,

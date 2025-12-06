@@ -28,11 +28,19 @@ norecursedirs = [".git", "__pycache__", "*.egg", "venv", "env", "app"]
 # Only collect tests from tests directory, ignore everything else
 
 [tool.coverage.run]
-# Exclude FileConverter.py from coverage (unused file)
+# Exclude low-priority files and test files
 omit = [
-    "*/FileConverter.py",
     "*/__pycache__/*",
     "*/tests/*",
     "*/venv/*",
     "*/env/*",
+    "*/scripts/*",
+    # Low priority files - mostly empty __init__.py or declarative code
+    "app/__init__.py",
+    "app/api/__init__.py",
+    "app/models/__init__.py",
+    "app/schemas/__init__.py",
+    "app/services/__init__.py",
+    "app/models/models.py",
+    "app/schemas/schemas.py",
 ]

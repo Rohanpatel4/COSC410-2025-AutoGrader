@@ -1,41 +1,7 @@
 # backend/app/api/attempt_submission_test.py
-import importlib, inspect
-
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from starlette import status
 from app.services.piston import execute_code
-
-# ----- converter import (robust) -----
-def _import_converter_module():
-    candidates = [
-        "app.services.file_converter",
-        "app.services.FileConverter",
-        "app.services.filecoverter",
-        "app.services.converter",
-    ]
-    last_err = None
-    for mod in candidates:
-        try:
-            return importlib.import_module(mod)
-        except (ModuleNotFoundError, ImportError) as e:
-            last_err = e
-    raise ImportError(
-        "Could not import your converter module. Tried: "
-        + ", ".join(candidates)
-        + ". Ensure backend/app/services/file_converter.py exists and exports file_to_text(UploadFile)."
-    ) from last_err
-
-def _get_callable(mod, name: str):
-    obj = getattr(mod, name, None)
-    return obj if callable(obj) else None
-
-async def _call_safely(fn, *args, **kwargs):
-    if inspect.iscoroutinefunction(fn):
-        return await fn(*args, **kwargs)
-    res = fn(*args, **kwargs)
-    if inspect.iscoroutine(res):
-        return await res
-    return res
 
 router = APIRouter(tags=["attempts"])
 

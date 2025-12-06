@@ -137,15 +137,22 @@ def parse_rust_error(error_text: str) -> list[CodeError]:
     errors = []
     lines = error_text.strip().split('\n')
     
-    for line in lines:
+    current_error_message = None
+    current_line_num = 1
+    
+    for i, line in enumerate(lines):
         # Rust error format: error[E0425]: cannot find value `x` in this scope
-        #    --> main.rs:5:10
+        #    --> src/main.rs:3:5 or --> main.rs:5:10
         # Look for the --> line with file:line:column
-        match = re.search(r'-->\s*main\.rs:(\d+):(\d+)', line)
+        match = re.search(r'-->\s*(?:src/)?main\.rs:(\d+):(\d+)', line)
         if match:
             line_num = int(match.group(1))
             col_num = int(match.group(2))
-            # Find the error message from previous lines
+            current_line_num = line_num
+            # If we have a pending error message, use this line number
+            if current_error_message:
+                errors.append(CodeError(line=line_num, message=current_error_message[:200]))
+                current_error_message = None
             continue
         
         # Rust error message line: error[E0425]: cannot find value...
@@ -153,30 +160,30 @@ def parse_rust_error(error_text: str) -> list[CodeError]:
         if match:
             error_code = match.group(1) or ""
             message = match.group(2).strip()
-            # Get line number from next --> line if available
-            errors.append(CodeError(line=1, message=f"error{error_code}: {message}"[:200]))
+            current_error_message = f"error{error_code}: {message}"
+            # Try to find line number in next few lines
+            # If not found, use line 1 as default
+            found_line = False
+            for j in range(i + 1, min(i + 5, len(lines))):
+                line_match = re.search(r'-->\s*(?:src/)?main\.rs:(\d+):(\d+)', lines[j])
+                if line_match:
+                    current_line_num = int(line_match.group(1))
+                    found_line = True
+                    break
+            if found_line:
+                errors.append(CodeError(line=current_line_num, message=current_error_message[:200]))
+                current_error_message = None
             continue
         
         # Also catch warnings that prevent compilation
         match = re.search(r'^warning(\[.*\])?: (.+)', line)
         if match and 'deny' in error_text:  # Only if warnings are errors
             message = match.group(2).strip()
-            errors.append(CodeError(line=1, message=f"warning: {message}"[:200]))
+            errors.append(CodeError(line=current_line_num, message=f"warning: {message}"[:200]))
     
-    # Try to associate line numbers with errors
-    # Re-scan to match error messages with their line numbers
-    current_error_idx = 0
-    for i, line in enumerate(lines):
-        match = re.search(r'-->\s*main\.rs:(\d+):(\d+)', line)
-        if match and current_error_idx < len(errors):
-            line_num = int(match.group(1))
-            col_num = int(match.group(2))
-            errors[current_error_idx] = CodeError(
-                line=line_num, 
-                column=col_num, 
-                message=errors[current_error_idx].message
-            )
-            current_error_idx += 1
+    # Add any remaining error message
+    if current_error_message:
+        errors.append(CodeError(line=current_line_num, message=current_error_message[:200]))
     
     if not errors and error_text.strip():
         errors.append(CodeError(line=1, message=error_text.strip()[:200]))
@@ -254,27 +261,43 @@ fn main() {{
                 check_code = code
         else:
             # For C++, wrap in main if needed
-            # Include cassert so assert() macro is available (faculty write assert statements)
+            # Convert assert to test_assert and define a simple macro for validation
+            # (matching the test harness behavior, but simpler since we only check syntax)
+            cpp_code = code
+            if "assert" in code and "test_assert" not in code:
+                # Convert assert to test_assert (same as test harness)
+                # Handle both assert(...) and assert ... patterns
+                # Replace assert( with test_assert(
+                cpp_code = re.sub(r'\bassert\s*\(', 'test_assert(', cpp_code)
+                # Replace assert  (with space) with test_assert 
+                cpp_code = re.sub(r'\bassert\s+', 'test_assert ', cpp_code)
+            
+            # Define simple test_assert macro for syntax checking (doesn't need to execute)
+            test_assert_macro = "#define test_assert(condition) ((void)(condition))"
+            
             if "int main" not in code and "void main" not in code:
                 check_code = f'''
 #include <iostream>
-#include <cassert>
+{test_assert_macro}
 using namespace std;
 
 int main() {{
-    {code}
+    {cpp_code}
     return 0;
 }}
 '''
             else:
-                # If main already exists, still need to include cassert if assert is used
-                if "assert" in code and "#include" not in code:
-                    check_code = f'''
-#include <cassert>
-{code}
+                # If main already exists, add macro definition if assert/test_assert is used
+                if "assert" in code or "test_assert" in code:
+                    if "#define test_assert" not in code:
+                        check_code = f'''
+{test_assert_macro}
+{cpp_code}
 '''
+                    else:
+                        check_code = cpp_code
                 else:
-                    check_code = code
+                    check_code = cpp_code
         
         # Build request body for Piston
         request_body = {
@@ -324,83 +347,35 @@ int main() {{
                             return SyntaxCheckResponse(valid=False, errors=errors)
                 elif language_lower in ["cpp", "c++", "c"]:
                     # C++: "was not declared" errors are expected for test cases
-                    # But we need to distinguish between:
-                    # - "was not declared" for user functions (undefined function/variable - OK)
-                    # - Syntax errors (should fail)
-                    # Note: "assert not declared" can happen if there's a syntax error preventing includes
+                    # (student code will define the variables/functions)
+                    # But actual syntax errors (like ===, missing semicolons, etc.) should fail
                     if compile_stderr:
                         print(f"[syntax] C++ compile stderr: {compile_stderr[:500]}", flush=True)
                         
-                        # First, check for syntax errors - these always fail
-                        # Include "unterminated" to catch macro/function call syntax errors
-                        syntax_keywords = ["expected", "unexpected", "missing", "syntax error", 
-                                          "parse error", "before", "after", "token", 
-                                          "expected ';'", "expected ')'", "expected '('",
-                                          "unterminated", "at end of input", "to match this",
-                                          "numeric constant", "before numeric"]
-                        has_syntax_error = any(keyword in compile_stderr_lower for keyword in syntax_keywords)
-                        
-                        print(f"[syntax] C++ has_syntax_error: {has_syntax_error}", flush=True)
-                        
-                        if has_syntax_error:
-                            # There's a syntax error - always fail, even if assert is mentioned
-                            print(f"[syntax] C++ syntax error detected - failing validation", flush=True)
-                            errors = parse_cpp_error(compile_stderr)
-                            if errors:
-                                return SyntaxCheckResponse(valid=False, errors=errors)
-                            else:
-                                return SyntaxCheckResponse(
-                                    valid=False,
-                                    errors=[CodeError(line=1, message=compile_stderr.strip()[:200])]
-                                )
-                        
-                        # No syntax errors - parse to see what we have
+                        # Parse all errors first
                         errors = parse_cpp_error(compile_stderr)
                         print(f"[syntax] C++ parsed {len(errors)} errors", flush=True)
                         
-                        if errors:
-                            # Check if ALL errors are "was not declared" for user-defined functions
-                            # Allow "assert not declared" ONLY if there are no syntax errors
-                            # (syntax errors can cause assert to appear undeclared)
-                            # Also check the raw stderr in case parsing missed something
-                            error_messages_combined = " ".join([err.message.lower() for err in errors])
-                            all_undeclared_in_parsed = all(
-                                "was not declared" in err.message.lower() or 
-                                "not declared" in err.message.lower()
-                                for err in errors
-                            )
-                            # Also check raw stderr to be sure
-                            all_undeclared_in_stderr = (
-                                ("was not declared" in compile_stderr_lower or "not declared" in compile_stderr_lower) and
-                                not any(keyword in compile_stderr_lower for keyword in ["expected", "unexpected", "missing", "unterminated", "numeric constant"])
-                            )
-                            all_undeclared = all_undeclared_in_parsed or (all_undeclared_in_stderr and len(errors) > 0)
-                            
-                            print(f"[syntax] C++ all_undeclared_in_parsed: {all_undeclared_in_parsed}, all_undeclared_in_stderr: {all_undeclared_in_stderr}, all_undeclared: {all_undeclared}", flush=True)
-                            print(f"[syntax] C++ error messages: {error_messages_combined[:200]}", flush=True)
-                            
-                            if all_undeclared:
-                                # All errors are "was not declared" - this is OK for user functions
-                                # (assert might appear undeclared if there were issues, but we checked for syntax errors above)
-                                print(f"[syntax] C++ all errors are 'not declared' - allowing", flush=True)
-                                is_expected_compile_error = True
-                            else:
-                                # Mixed errors or other types - fail validation
-                                print(f"[syntax] C++ mixed errors - failing validation", flush=True)
-                                return SyntaxCheckResponse(valid=False, errors=errors)
+                        # Filter out "not declared" errors - student will define these
+                        # Also filter out "test_assert not declared" (shouldn't happen with our macro, but just in case)
+                        # Keep only actual syntax errors
+                        syntax_errors = [
+                            err for err in errors 
+                            if "was not declared" not in err.message.lower() 
+                            and "not declared" not in err.message.lower()
+                            and "test_assert" not in err.message.lower()
+                        ]
+                        
+                        print(f"[syntax] C++ after filtering 'not declared': {len(syntax_errors)} syntax errors remain", flush=True)
+                        
+                        if syntax_errors:
+                            # There are real syntax errors - fail validation with only those errors
+                            print(f"[syntax] C++ syntax errors found - failing validation", flush=True)
+                            return SyntaxCheckResponse(valid=False, errors=syntax_errors)
                         else:
-                            # Couldn't parse errors, but there's stderr and no syntax errors
-                            # If it's "was not declared", allow it
-                            if "was not declared" in compile_stderr_lower or "not declared" in compile_stderr_lower:
-                                print(f"[syntax] C++ unparsed but 'not declared' found - allowing", flush=True)
-                                is_expected_compile_error = True
-                            else:
-                                # Some other error - fail
-                                print(f"[syntax] C++ unparsed and not 'not declared' - failing", flush=True)
-                                return SyntaxCheckResponse(
-                                    valid=False,
-                                    errors=[CodeError(line=1, message=compile_stderr.strip()[:200])]
-                                )
+                            # All errors were "not declared" - this is expected for test cases
+                            print(f"[syntax] C++ all errors are 'not declared' - allowing", flush=True)
+                            is_expected_compile_error = True
                 elif language_lower in ["rust", "rs"]:
                     # Rust: "cannot find" errors are expected for test cases
                     # Common Rust error codes: E0425 (cannot find value), E0423 (cannot find function)
@@ -473,8 +448,11 @@ int main() {{
                 is_expected_error = False
                 
                 if language_lower == "python":
-                    # Python: NameError for undefined names is expected (faculty write asserts on student functions)
-                    if "nameerror" in stderr_lower and ("is not defined" in stderr_lower or "name" in stderr_lower):
+                    # Python: All runtime errors are expected (faculty write test cases that may have runtime errors)
+                    # NameError, ZeroDivisionError, TypeError, etc. are all OK for test cases
+                    # Only syntax errors should fail validation
+                    if "syntaxerror" not in stderr_lower and "indentationerror" not in stderr_lower:
+                        # Any runtime error (not syntax) is expected
                         is_expected_error = True
                 elif language_lower == "java":
                     # Java: NoClassDefFoundError, NoSuchMethodError, etc. are expected
@@ -536,6 +514,22 @@ int main() {{
     except httpx.TimeoutException:
         raise HTTPException(status_code=504, detail="Code validation timed out")
     except httpx.HTTPStatusError as e:
+        # Check if it's a language/runtime not found error (400 or 404)
+        # Return 400 for unsupported languages instead of 502
+        if e.response.status_code in [400, 404]:
+            error_text = str(e).lower()
+            response_text = ""
+            try:
+                response_text = e.response.text.lower() if e.response.text else ""
+            except:
+                pass
+            # Check both error message and response text for language-related errors
+            if any(keyword in error_text or keyword in response_text 
+                   for keyword in ["runtime", "language", "not found", "unknown", "unsupported"]):
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Unsupported language or version: {language}"
+                )
         raise HTTPException(status_code=502, detail=f"Piston API error: {str(e)}")
     except httpx.ConnectError:
         # Piston is not running - inform the user

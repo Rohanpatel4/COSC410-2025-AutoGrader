@@ -6,7 +6,7 @@ Extracted from seed_db.py for use in conftest.py
 
 from sqlalchemy.orm import sessionmaker
 from passlib.hash import pbkdf2_sha256
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.models.models import User, RoleEnum
 
@@ -28,7 +28,7 @@ def reseed_users(session, users=USERS, overwrite=True):
         session.query(User).delete()
         session.commit()
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     for u in users:
         hashed = pbkdf2_sha256.hash(u["password"])
         user = User(

@@ -19,10 +19,6 @@ import CreateAssignmentPage from "./webpages/CreateAssignmentPage";
 import EditAssignmentPage from "./webpages/EditAssignmentPage";
 import JoinCoursePage from "./webpages/JoinCoursePage";
 
-// Upload pages
-import UploadTestFile from "./webpages/UploadTestFile";
-import UploadStudentFile from "./webpages/UploadStudentFile";
-
 import "./styles/index.css";
 import { AuthProvider, Protected, useAuth } from "./auth/AuthContext";
 import { Button } from "./components/ui/Button";
@@ -271,28 +267,6 @@ function AppRouter() {
           element={
             <Protected>
               <AssignmentDetailPageWrapper />
-            </Protected>
-          }
-        />
-
-        {/* Upload flows (protect if you want sign-in required) */}
-        <Route
-          path="/upload/test"
-          element={
-            <Protected>
-              <Layout title="Upload Test File">
-                <UploadTestFile />
-              </Layout>
-            </Protected>
-          }
-        />
-        <Route
-          path="/upload/student"
-          element={
-            <Protected>
-              <Layout title="Upload Student File">
-                <UploadStudentFile />
-              </Layout>
             </Protected>
           }
         />

@@ -20,7 +20,9 @@ import {
   Heading2,
   Heading3,
   Type,
-  Palette
+  Palette,
+  List,
+  ListOrdered
 } from "lucide-react";
 
 type RichTextEditorProps = {
@@ -142,60 +144,63 @@ function TinyColorPicker({
       {isOpen && (
         <div className="absolute top-full mt-1 left-0 z-50">
           <div className="bg-popover border border-border rounded-md p-1.5 shadow-lg">
-            <div className="flex items-center" style={{ gap: '3px' }}>
-              {/* Color circles - 16px to match w-4 h-4 icons */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+              {/* Color circles - fixed 14px size */}
               {colors.map((color) => (
                 <button
                   key={color}
                   type="button"
                   onClick={() => { onSelect(color); setIsOpen(false); }}
-                  className={currentColor === color ? "ring-2 ring-primary ring-offset-1 ring-offset-popover" : ""}
                   style={{ 
-                    width: '16px', 
-                    height: '16px', 
-                    minWidth: '16px',
+                    width: '14px', 
+                    height: '14px', 
+                    minWidth: '14px',
+                    maxWidth: '14px',
+                    minHeight: '14px',
+                    maxHeight: '14px',
                     padding: 0,
+                    margin: 0,
                     borderRadius: '50%',
                     backgroundColor: color,
-                    border: 'none',
+                    border: currentColor === color ? '2px solid var(--primary)' : 'none',
+                    boxSizing: 'border-box',
                     cursor: 'pointer',
-                    transition: 'transform 0.15s ease',
+                    flexShrink: 0,
                   }}
-                  onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.2)'}
-                  onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
                   title={color}
                 />
               ))}
 
               {/* Custom color with native color picker */}
               {allowCustom && (
-                <div className="relative">
+                <div style={{ position: 'relative', display: 'flex' }}>
                   <button
                     type="button"
                     onClick={() => colorInputRef.current?.click()}
-                    className={currentColor === customColor && !colors.includes(currentColor) ? "ring-2 ring-primary ring-offset-1 ring-offset-popover" : ""}
                     style={{ 
-                      width: '16px', 
-                      height: '16px', 
-                      minWidth: '16px',
+                      width: '14px', 
+                      height: '14px', 
+                      minWidth: '14px',
+                      maxWidth: '14px',
+                      minHeight: '14px',
+                      maxHeight: '14px',
                       padding: 0,
+                      margin: 0,
                       borderRadius: '50%',
                       backgroundColor: customColor,
-                      border: '1.5px dashed rgba(156, 163, 175, 0.6)',
+                      border: (currentColor === customColor && !colors.includes(currentColor)) ? '2px solid var(--primary)' : '1.5px dashed rgba(156, 163, 175, 0.6)',
+                      boxSizing: 'border-box',
                       cursor: 'pointer',
-                      transition: 'transform 0.15s ease',
+                      flexShrink: 0,
                     }}
-                    onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.2)'}
-                    onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                    title={`Custom: ${customColor} (click to change)`}
+                    title={`Custom: ${customColor}`}
                   />
                   <input
                     ref={colorInputRef}
                     type="color"
                     value={customColor}
                     onChange={handleCustomColorChange}
-                    className="absolute opacity-0 w-0 h-0"
-                    style={{ pointerEvents: 'none' }}
+                    style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }}
                   />
                 </div>
               )}
@@ -204,28 +209,30 @@ function TinyColorPicker({
               <button
                 type="button"
                 onClick={() => { onSelect(""); setIsOpen(false); }}
-                className={!currentColor ? "ring-2 ring-primary ring-offset-1 ring-offset-popover" : ""}
                 style={{ 
-                  width: '16px', 
-                  height: '16px', 
-                  minWidth: '16px',
+                  width: '14px', 
+                  height: '14px', 
+                  minWidth: '14px',
+                  maxWidth: '14px',
+                  minHeight: '14px',
+                  maxHeight: '14px',
                   padding: 0,
+                  margin: 0,
                   borderRadius: '50%',
                   backgroundColor: 'transparent',
-                  border: '1.5px solid rgba(156, 163, 175, 0.5)',
+                  border: !currentColor ? '2px solid var(--primary)' : '1.5px solid rgba(156, 163, 175, 0.5)',
+                  boxSizing: 'border-box',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   position: 'relative',
-                  transition: 'transform 0.15s ease',
+                  flexShrink: 0,
                 }}
-                onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.2)'}
-                onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
                 title="Clear"
               >
                 <span style={{ 
-                  width: '10px', 
+                  width: '8px', 
                   height: '1.5px', 
                   backgroundColor: 'rgba(156,163,175,0.8)', 
                   transform: 'rotate(45deg)', 
@@ -360,6 +367,25 @@ function EditorToolbar({ editor, disabled = false }: { editor: Editor | null; di
       <div className="w-px h-5 bg-border mx-1" />
 
       <ToolbarButton
+        onClick={() => editor.chain().focus().toggleBulletList().run()}
+        isActive={editor.isActive("bulletList")}
+        disabled={disabled}
+        title="Bullet List"
+      >
+        <List className="w-4 h-4" />
+      </ToolbarButton>
+      <ToolbarButton
+        onClick={() => editor.chain().focus().toggleOrderedList().run()}
+        isActive={editor.isActive("orderedList")}
+        disabled={disabled}
+        title="Numbered List"
+      >
+        <ListOrdered className="w-4 h-4" />
+      </ToolbarButton>
+
+      <div className="w-px h-5 bg-border mx-1" />
+
+      <ToolbarButton
         onClick={() => editor.chain().focus().toggleSubscript().run()}
         isActive={editor.isActive("subscript")}
         disabled={disabled}
@@ -422,9 +448,19 @@ export default function RichTextEditor({
         codeBlock: false,
         blockquote: false,
         horizontalRule: false,
-        bulletList: false,
-        orderedList: false,
-        listItem: false,
+        bulletList: {
+          HTMLAttributes: { class: 'list-disc pl-5 space-y-1' },
+          keepMarks: true,
+          keepAttributes: true,
+        },
+        orderedList: {
+          HTMLAttributes: { class: 'list-decimal pl-5 space-y-1' },
+          keepMarks: true,
+          keepAttributes: true,
+        },
+        listItem: {
+          HTMLAttributes: { class: '' },
+        },
       }),
       TextStyle,
       Color,
@@ -473,6 +509,10 @@ export default function RichTextEditor({
       .rich-text-editor .ProseMirror h2 { font-size: 1.5em; font-weight: 600; margin: 0.5em 0 0.25em 0; color: var(--foreground); }
       .rich-text-editor .ProseMirror h3 { font-size: 1.25em; font-weight: 600; margin: 0.5em 0 0.25em 0; color: var(--foreground); }
       .rich-text-editor .ProseMirror h1:first-child, .rich-text-editor .ProseMirror h2:first-child, .rich-text-editor .ProseMirror h3:first-child { margin-top: 0; }
+      .rich-text-editor .ProseMirror ul { list-style-type: disc; padding-left: 1.25rem; margin: 0.5em 0; }
+      .rich-text-editor .ProseMirror ol { list-style-type: decimal; padding-left: 1.25rem; margin: 0.5em 0; }
+      .rich-text-editor .ProseMirror li { margin-bottom: 0.25em; color: var(--foreground); }
+      .rich-text-editor .ProseMirror ul ul, .rich-text-editor .ProseMirror ol ol, .rich-text-editor .ProseMirror ul ol, .rich-text-editor .ProseMirror ol ul { padding-left: 1.25rem; margin-top: 0.25em; }
       .rich-text-editor-readonly .ProseMirror { padding: 0; color: var(--foreground); line-height: 1.6; }
       .rich-text-editor-readonly .ProseMirror p { margin: 0 0 0.5em 0; color: inherit; }
       .rich-text-editor-readonly .ProseMirror p:last-child { margin-bottom: 0; }
@@ -480,6 +520,9 @@ export default function RichTextEditor({
       .rich-text-editor-readonly .ProseMirror h1 { font-size: 1.75em; font-weight: 700; margin: 0.5em 0 0.25em 0; color: var(--foreground); }
       .rich-text-editor-readonly .ProseMirror h2 { font-size: 1.5em; font-weight: 600; margin: 0.5em 0 0.25em 0; color: var(--foreground); }
       .rich-text-editor-readonly .ProseMirror h3 { font-size: 1.25em; font-weight: 600; margin: 0.5em 0 0.25em 0; color: var(--foreground); }
+      .rich-text-editor-readonly .ProseMirror ul { list-style-type: disc; padding-left: 1.25rem; margin: 0.5em 0; }
+      .rich-text-editor-readonly .ProseMirror ol { list-style-type: decimal; padding-left: 1.25rem; margin: 0.5em 0; }
+      .rich-text-editor-readonly .ProseMirror li { margin-bottom: 0.25em; color: var(--foreground); }
     `;
     document.head.appendChild(style);
     return () => { document.head.removeChild(style); };

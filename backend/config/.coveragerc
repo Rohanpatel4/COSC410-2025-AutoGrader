@@ -4,9 +4,14 @@ omit =
     test_*
     debug_combined.py
     scripts/*
-    */FileConverter.py
-    **/FileConverter.py
-    app/services/FileConverter.py
+    # Low priority files - mostly empty __init__.py or declarative code
+    app/__init__.py
+    app/api/__init__.py
+    app/models/__init__.py
+    app/schemas/__init__.py
+    app/services/__init__.py
+    app/models/models.py
+    app/schemas/schemas.py
 
 [report]
 exclude_lines =
