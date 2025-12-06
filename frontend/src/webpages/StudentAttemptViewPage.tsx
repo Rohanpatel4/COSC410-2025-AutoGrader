@@ -376,10 +376,11 @@ export default function StudentAttemptViewPage() {
           {/* Assignment Selector */}
           <div className="flex items-center gap-3 flex-1">
             <BookOpen className="w-5 h-5 text-muted-foreground shrink-0" />
-            <label className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+            <label htmlFor="assignment-select" className="text-sm font-medium text-muted-foreground whitespace-nowrap">
               Assignment:
             </label>
             <select
+              id="assignment-select"
               value={assignment.id}
               onChange={(e) => navigateToAssignment(Number(e.target.value))}
               className="flex-1 min-w-0 p-2 rounded-lg border border-border bg-background text-foreground"
@@ -395,10 +396,11 @@ export default function StudentAttemptViewPage() {
           {/* Student Selector */}
           <div className="flex items-center gap-3 flex-1">
             <Users className="w-5 h-5 text-muted-foreground shrink-0" />
-            <label className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+            <label htmlFor="student-select" className="text-sm font-medium text-muted-foreground whitespace-nowrap">
               Student:
             </label>
             <select
+              id="student-select"
               value={selectedStudent || ""}
               onChange={(e) => navigateToStudent(Number(e.target.value))}
               className="flex-1 min-w-0 p-2 rounded-lg border border-border bg-background text-foreground"
@@ -414,10 +416,11 @@ export default function StudentAttemptViewPage() {
           {/* Attempt Selector */}
           <div className="flex items-center gap-3 flex-1">
             <FileCode className="w-5 h-5 text-muted-foreground shrink-0" />
-            <label className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+            <label htmlFor="attempt-select" className="text-sm font-medium text-muted-foreground whitespace-nowrap">
               Attempt:
             </label>
             <select
+              id="attempt-select"
               value={submission.id}
               onChange={(e) => navigateToAttempt(Number(e.target.value))}
               className="flex-1 min-w-0 p-2 rounded-lg border border-border bg-background text-foreground"

@@ -65,15 +65,18 @@ describe("CoursesPage", () => {
 
     renderCoursesPage();
 
-    expect(await screen.findByText(/no courses available/i)).toBeInTheDocument();
+    expect(await screen.findByText("No courses found")).toBeInTheDocument();
+    expect(screen.getByText("Get started by creating your first course")).toBeInTheDocument();
   });
 
   test("shows student empty state messaging", async () => {
+    __testDb.state.enrollmentsByStudent[201] = [];
+
     renderCoursesPage({ role: "student", userId: "201" });
 
-    const emptyHeading = await screen.findByRole("heading", { name: /no courses available/i });
-    expect(emptyHeading).toBeInTheDocument();
-    expect(screen.getByText(/There are no courses available for enrollment/i)).toBeInTheDocument();
+    // Wait for loading to complete and empty state to appear
+    expect(await screen.findByText("You haven't joined any courses yet")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Join Course/i })).toBeInTheDocument();
   });
 });
 

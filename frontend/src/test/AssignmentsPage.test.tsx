@@ -22,6 +22,17 @@ describe("AssignmentsPage (MSW)", () => {
   });
 
   test("loads assignments and navigates on click", async () => {
+    // Enroll student 201 in course 1 so they can see the assignment
+    __testDb.state.enrollmentsByStudent[201] = [
+      {
+        id: 1,
+        course_code: "COSC-410",
+        name: "FirstCourse",
+        description: "seed",
+        professor_id: 301,
+      },
+    ];
+
     renderWithProviders(
       <Routes>
         <Route path="/" element={<AssignmentsPage />} />
@@ -31,14 +42,14 @@ describe("AssignmentsPage (MSW)", () => {
     );
 
     // seeded item shows up
-    const btn = await screen.findByRole("button", { name: /seeded assignment/i });
-    expect(btn).toBeInTheDocument();
+    expect(await screen.findByText("Seeded Assignment")).toBeInTheDocument();
 
     // click navigates
-    await userEvent.click(btn);
+    const assignmentLink = screen.getByText("Seeded Assignment").closest('a');
+    await userEvent.click(assignmentLink);
     
     // use the seeded id so we don't hardcode it
-    const seeded = __testDb.getAssignments("500")[0]; // first seeded assignment for course tag "500"
+    const seeded = __testDb.getAssignments("1")[0]; // first seeded assignment for course "1"
     const expectedId = seeded.id;
 
     // assert using the real id
@@ -58,7 +69,7 @@ describe("AssignmentsPage (MSW)", () => {
       auth: { role: "student", userId: "201" },
     });
 
-    expect(await screen.findByText(/no assignments found/i)).toBeInTheDocument();
+    expect(await screen.findByText("No assignments yet")).toBeInTheDocument();
   });
 
   test("when GET fails, it falls back to empty state", async () => {
@@ -74,7 +85,7 @@ describe("AssignmentsPage (MSW)", () => {
       auth: { role: "student", userId: "201" },
     });
 
-    expect(await screen.findByText(/no assignments found/i)).toBeInTheDocument();
+    expect(await screen.findByText("No assignments yet")).toBeInTheDocument();
   });
 
   test("date inputs reflect and update correctly", async () => {
@@ -103,7 +114,7 @@ describe("AssignmentsPage (MSW)", () => {
 
     renderWithProviders(<AssignmentsPage />, {
       route: "/",
-      auth: { role: "student", userId: "201" },
+      auth: { role: "faculty", userId: "301" },
     });
 
     const li = await screen.findByRole("listitem");

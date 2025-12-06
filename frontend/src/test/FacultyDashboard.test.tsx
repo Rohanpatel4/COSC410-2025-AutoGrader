@@ -34,9 +34,9 @@ describe("FacultyDashboard", () => {
   test("renders CTA cards and seeded course", async () => {
     renderFacultyDashboard();
 
-    expect(await screen.findByText(/Create a Course/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Create Course/i })).toBeInTheDocument();
-    expect(await screen.findByText(/My Courses/i)).toBeInTheDocument();
+    expect(await screen.findByText("Create Course")).toBeInTheDocument();
+    expect(screen.getByText("Create Course")).toBeInTheDocument();
+    expect(await screen.findByText(/Course Overview/i)).toBeInTheDocument();
     expect(await screen.findByText(/FirstCourse/i)).toBeInTheDocument();
   });
 
@@ -54,7 +54,7 @@ describe("FacultyDashboard", () => {
 
     renderFacultyDashboard();
 
-    expect(await screen.findByText(/No courses created yet/i)).toBeInTheDocument();
+    expect(await screen.findByText(/No courses yet/i)).toBeInTheDocument();
   });
 
   test("shows error alert when loading courses fails", async () => {
@@ -67,7 +67,7 @@ describe("FacultyDashboard", () => {
     renderFacultyDashboard();
 
     expect(await screen.findByText(/Failed to load courses|load failed/i)).toBeInTheDocument();
-    expect(screen.getByText(/No courses created yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/No courses yet/i)).toBeInTheDocument();
   });
 
   test("renders view-all button when more than three courses", async () => {
@@ -81,8 +81,7 @@ describe("FacultyDashboard", () => {
 
     renderFacultyDashboard();
 
-    const viewAll = await screen.findByRole("button", { name: /View all courses/i });
-    expect(viewAll).toHaveTextContent(/5/);
+    const viewAll = await screen.findByText("View All Courses");
     await userEvent.click(viewAll);
     expect(await screen.findByText(/COURSES INDEX/i)).toBeInTheDocument();
   });

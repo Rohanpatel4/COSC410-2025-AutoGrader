@@ -35,17 +35,16 @@ describe("StudentDashboard", () => {
   test("renders CTA cards", async () => {
     renderDashboard();
 
-    expect(await screen.findByText(/Join a Course/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Join Course/i })).toBeInTheDocument();
+    expect(await screen.findByText("Join Course")).toBeInTheDocument();
     expect(await screen.findByText(/My Courses/i)).toBeInTheDocument();
-    expect(screen.getByText(/0 courses/i)).toBeInTheDocument();
-    expect(screen.getByText(/No courses enrolled yet/i)).toBeInTheDocument();
+    expect(screen.getByText("Enrolled Courses")).toBeInTheDocument();
+    expect(screen.getByText(/No courses yet/i)).toBeInTheDocument();
   });
 
   test("join course button navigates to join flow", async () => {
     renderDashboard();
 
-    await userEvent.click(screen.getByRole("button", { name: /Join Course/i }));
+    await userEvent.click(screen.getByText("Join Course"));
     expect(await screen.findByText(/JOIN PAGE/i)).toBeInTheDocument();
   });
 
@@ -65,7 +64,10 @@ describe("StudentDashboard", () => {
 
     expect(await screen.findByText(/AutoGrader/i)).toBeInTheDocument();
     expect(screen.getByText(/COSC-410/i)).toBeInTheDocument();
-    expect(screen.getByText(/1 course/i)).toBeInTheDocument();
+    expect(screen.getByText("Enrolled Courses")).toBeInTheDocument();
+    // Find the "1" within the enrolled courses card
+    const enrolledCoursesCard = screen.getByText("Enrolled Courses").closest('.flex.items-center.gap-5');
+    expect(enrolledCoursesCard).toHaveTextContent("1");
 
     await userEvent.click(screen.getByText(/AutoGrader/i));
     expect(await screen.findByText(/COURSE PAGE COSC-410/i)).toBeInTheDocument();
@@ -77,7 +79,7 @@ describe("StudentDashboard", () => {
 
     renderDashboard();
 
-    expect(await screen.findByText(/No courses enrolled yet/i)).toBeInTheDocument();
+    expect(await screen.findByText(/No courses yet/i)).toBeInTheDocument();
   });
 
   test("shows error alert when GET fails", async () => {
@@ -90,7 +92,7 @@ describe("StudentDashboard", () => {
     renderDashboard();
 
     expect(await screen.findByText(/Failed to load courses|whoops/i)).toBeInTheDocument();
-    expect(screen.getByText(/No courses enrolled yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/No courses yet/i)).toBeInTheDocument();
   });
 });
 

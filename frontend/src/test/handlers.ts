@@ -98,7 +98,7 @@ const seed: DB = {
     "500": [{ id: 201, name: "Student Sam" }],
   },
   assignmentsByCourseTag: {
-    "500": [
+    "1": [
       {
         id: 9001,
         course_id: 1, // tie back to Course.id
@@ -113,6 +113,16 @@ const seed: DB = {
   },
   nextAssignmentId: 9002,
   assignmentById: {
+    1: {
+      id: 1,
+      course_id: 1,
+      title: "Test Assignment",
+      description: "Test description",
+      sub_limit: 5,
+      start: null,
+      stop: null,
+      num_attempts: 0,
+    },
     9001: {
       id: 9001,
       course_id: 1,
@@ -197,8 +207,12 @@ const ASSIGNMENT_TESTFILE_URL = "**/api/v1/assignments/:id/test-file";
 
 // Assignment detail page
 const ASSIGNMENT_DETAIL_URL = "**/api/v1/assignments/:id";
+const ASSIGNMENT_SUBMISSION_DETAIL_URL = "**/api/v1/assignments/:assignment_id/submission-detail/:submission_id";
+const ASSIGNMENT_STUDENT_ATTEMPTS_URL = "**/api/v1/assignments/:assignment_id/students/:student_id/attempts";
 const ASSIGNMENT_ATTEMPTS_URL = "**/api/v1/assignments/:id/attempts";
 const ASSIGNMENT_SUBMIT_URL = "**/api/v1/assignments/:id/submit";
+const LANGUAGES_URL = "**/api/v1/languages";
+const ASSIGNMENT_TEST_CASES_URL = "**/api/v1/assignments/:id/test-cases";
 
 // Global assignments (AssignmentsPage)
 const ASSIGNMENTS_URL = "**/api/v1/assignments";
@@ -466,6 +480,91 @@ http.get("**/api/v1/assignments/:id/grades", ({ params }) => {
     const asg = __db.assignmentById[id];
     if (!asg) return HttpResponse.json({ message: "not found" }, { status: 404 });
     return HttpResponse.json(asg, { status: 200 });
+  }),
+
+  // GET /api/v1/languages
+  http.get(LANGUAGES_URL, () => {
+    const languages = [
+      { id: "python", name: "Python", piston_name: "python" },
+      { id: "javascript", name: "JavaScript", piston_name: "javascript" },
+      { id: "java", name: "Java", piston_name: "java" },
+    ];
+    return HttpResponse.json(languages, { status: 200 });
+  }),
+
+  // GET /api/v1/assignments/:id/test-cases
+  http.get(ASSIGNMENT_TEST_CASES_URL, ({ params }) => {
+    const id = Number(params.id);
+
+    // Return mock test cases
+    const testCases = [
+      {
+        id: 1,
+        code: "def test_example():\n    assert True",
+        point_value: 100,
+        visibility: true,
+      }
+    ];
+
+    return HttpResponse.json(testCases, { status: 200 });
+  }),
+
+  // GET /api/v1/assignments/:assignment_id/students/:student_id/attempts
+  http.get(ASSIGNMENT_STUDENT_ATTEMPTS_URL, ({ params }) => {
+    const assignmentId = Number(params.assignment_id);
+    const studentId = Number(params.student_id);
+
+    // Return mock attempts for the student
+    const attempts = [
+      { id: 2001, earned_points: 90, created_at: "2024-12-06T10:30:00Z" },
+    ];
+
+    return HttpResponse.json(attempts, { status: 200 });
+  }),
+
+  // GET /api/v1/assignments/:assignment_id/submission-detail/:submission_id
+  http.get(ASSIGNMENT_SUBMISSION_DETAIL_URL, ({ params }) => {
+    const assignmentId = Number(params.assignment_id);
+    const submissionId = Number(params.submission_id);
+
+    // Return mock submission detail data
+    const mockResponse = {
+      submission: {
+        id: submissionId,
+        earned_points: 85,
+        code: "# Sample Python code\nprint('Hello, World!')\n",
+        created_at: "2024-12-05T10:30:00Z",
+      },
+      student: {
+        id: 201,
+        username: "student1",
+      },
+      assignment: {
+        id: assignmentId,
+        title: "Python Assignment 1",
+        language: "python",
+        total_points: 100,
+      },
+      course: {
+        id: 1,
+        name: "Computer Science 101",
+        course_code: "CS101",
+      },
+      course_assignments: [
+        { id: assignmentId, title: "Python Assignment 1" },
+      ],
+      attempt_number: 1,
+      total_attempts: 2,
+      all_attempts: [
+        { id: submissionId, earned_points: 85 },
+      ],
+      students_with_attempts: [
+        { id: 201, username: "student1" },
+        { id: 202, username: "student2" },
+      ],
+    };
+
+    return HttpResponse.json(mockResponse, { status: 200 });
   }),
 
   // GET /api/v1/assignments/:id/attempts?student_id=201

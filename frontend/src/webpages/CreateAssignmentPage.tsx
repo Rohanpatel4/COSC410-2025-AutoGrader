@@ -614,16 +614,18 @@ export default function CreateAssignmentPage() {
           </div>
 
           <div>
-            <Label htmlFor="description">
+            <Label>
               Description <span className="text-red-500">*</span>
             </Label>
-            <RichTextEditor
-              content={description}
-              onChange={setDescription}
-              disabled={submitting}
-              placeholder="Enter assignment description and requirements..."
-              minHeight="120px"
-            />
+            <div aria-label="Assignment description">
+              <RichTextEditor
+                content={description}
+                onChange={setDescription}
+                disabled={submitting}
+                placeholder="Enter assignment description and requirements..."
+                minHeight="120px"
+              />
+            </div>
           </div>
 
           <InstructionsManager

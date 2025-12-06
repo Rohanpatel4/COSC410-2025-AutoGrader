@@ -97,30 +97,42 @@ describe("AssignmentDetailPage (MSW, updated)", () => {
     expect(await screen.findByText(/server broke|failed to load/i)).toBeInTheDocument();
   });
 
-  test("submit validation and failed POST displays correct error", async () => {
+  test("submit validation shows error for missing file", async () => {
     renderAsStudent();
 
     await screen.findByRole("heading", { name: /seeded assignment/i });
 
-    // Submit with no file → validation
-    const form = document.querySelector("form") as HTMLFormElement;
-    fireEvent.submit(form);
-    expect(await screen.findByText(/choose a \.py file/i)).toBeInTheDocument();
+    // Submit with no file → click submit button to open modal
+    await userEvent.click(screen.getByRole("button", { name: /submit/i }));
 
-    // Now simulate a failed submission
+    // Click confirm in modal to trigger validation
+    await userEvent.click(screen.getByRole("button", { name: /submit solution/i }));
+
+    // Should show validation error
+    expect(await screen.findByText(/either choose a \.py file or paste your code/i)).toBeInTheDocument();
+  });
+
+  test("failed POST displays correct error", async () => {
+    // Mock failed submission
     server.use(
       http.post("**/api/v1/assignments/:id/submit", () =>
         HttpResponse.text("Bad upload", { status: 500 })
       )
     );
 
-    const fileInput = screen.getByLabelText(/submit your code/i);
+    renderAsStudent();
+
+    await screen.findByRole("heading", { name: /seeded assignment/i });
+
+    const fileInput = screen.getByLabelText(/upload file/i);
     const badFile = new File(["print('oops')"], "fail.py", { type: "text/x-python" });
     await userEvent.upload(fileInput, badFile);
     await userEvent.click(screen.getByRole("button", { name: /submit/i }));
 
-    expect(await screen.findByText(/submit failed/i)).toBeInTheDocument();
-    expect(screen.getByText(/bad upload/i)).toBeInTheDocument();
+    // Confirm submission in modal
+    await userEvent.click(screen.getByRole("button", { name: /submit solution/i }));
+
+    expect(await screen.findByText(/bad upload/i)).toBeInTheDocument();
   });
 
   test("submits .py successfully and updates attempts + best grade", async () => {
@@ -128,7 +140,7 @@ describe("AssignmentDetailPage (MSW, updated)", () => {
 
     await screen.findByRole("heading", { name: /seeded assignment/i });
 
-    const fileInput = screen.getByLabelText(/submit your code/i);
+    const fileInput = screen.getByLabelText(/upload file/i);
     const file = new File(["print('hi')"], "sol.py", { type: "text/x-python" });
     await userEvent.upload(fileInput, file);
 
@@ -168,7 +180,7 @@ describe("AssignmentDetailPage (MSW, updated)", () => {
 
     renderAsFaculty();
 
-    expect(await screen.findByText(/grades \(this assignment\)/i)).toBeInTheDocument();
+    expect(await screen.findByText(/student grades/i)).toBeInTheDocument();
     expect(await screen.findByText(/grades unavailable|failed to load/i)).toBeInTheDocument();
   });
 });

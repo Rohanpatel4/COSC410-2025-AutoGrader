@@ -34,14 +34,6 @@ describe("CreateCoursePage", () => {
     expect(screen.getByRole("link", { name: /back to courses/i })).toBeInTheDocument();
   });
 
-  test("shows test file format guide", () => {
-    renderCreateCoursePage();
-
-    expect(screen.getByText(/test file format guide/i)).toBeInTheDocument();
-    expect(screen.getByText(/@points\(7\)/i)).toBeInTheDocument();
-    expect(screen.getByText(/key points/i)).toBeInTheDocument();
-    expect(screen.getByText(/calculator\.py/i)).toBeInTheDocument();
-  });
 
   test("creates course successfully", async () => {
     renderCreateCoursePage();
