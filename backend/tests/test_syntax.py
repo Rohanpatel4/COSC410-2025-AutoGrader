@@ -426,7 +426,8 @@ def test_validate_unsupported_language():
     
     response = client.post("/api/v1/syntax/validate", json=payload)
     # Should either handle gracefully or return an error
-    assert response.status_code in [200, 400, 422, 500]
+    # 502 is valid if Piston doesn't recognize the language
+    assert response.status_code in [200, 400, 422, 500, 502]
 
 
 @pytest.mark.asyncio
