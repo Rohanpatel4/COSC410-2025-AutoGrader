@@ -72,16 +72,8 @@ def test_attempt_submission_test_bridge_invalid_file_extension(mock_execute):
 @patch('app.api.attempt_submission_test.execute_code', new_callable=AsyncMock)
 def test_attempt_submission_test_bridge_read_error(mock_execute):
     """Test bridge endpoint with file read error."""
-    # Create a mock file that will fail to read
-    class BadFile:
-        filename = "solution.py"
-        async def read(self):
-            raise Exception("Read error")
-    
-    bad_file = BadFile()
-    
-    # We can't easily test this with TestClient, but we can test the error handling
-    # by using invalid encoding
+    # TestClient handles file reading, so we test with invalid encoding
+    # which should either be handled gracefully or return 400
     test_file = ("solution.py", BytesIO(b"\xff\xfe\x00\x00"), "text/x-python")
     
     response = client.post(
@@ -93,8 +85,11 @@ def test_attempt_submission_test_bridge_read_error(mock_execute):
         files={"submission": test_file}
     )
     
-    # Should either succeed (if it handles the encoding) or fail gracefully
+    # Should either succeed (if encoding is handled) or return 400 for invalid input
     assert response.status_code in [201, 400]
+    if response.status_code == 400:
+        # If it fails, should have a detail message
+        assert "detail" in response.json()
 
 
 @patch('app.api.attempt_submission_test.execute_code', new_callable=AsyncMock)
@@ -163,8 +158,11 @@ def test_attempt_submission_test_read_error(mock_execute):
         files={"submission": test_file}
     )
     
-    # Should either succeed (if it handles the encoding) or fail gracefully
+    # Should either succeed (if encoding is handled) or return 400 for invalid input
     assert response.status_code in [201, 400]
+    if response.status_code == 400:
+        # If it fails, should have a detail message
+        assert "detail" in response.json()
 
 
 @patch('app.api.attempt_submission_test.execute_code', new_callable=AsyncMock)

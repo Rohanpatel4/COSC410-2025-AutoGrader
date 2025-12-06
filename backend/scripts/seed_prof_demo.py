@@ -19,7 +19,7 @@ import os
 import random
 import secrets
 import string
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import and_, select
@@ -66,7 +66,7 @@ def _ensure_user(session, username: str, role: RoleEnum, password: str = "secret
         username=username,
         role=role,
         password_hash=pbkdf2_sha256.hash(password),
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
     )
     session.add(user)
     session.flush()

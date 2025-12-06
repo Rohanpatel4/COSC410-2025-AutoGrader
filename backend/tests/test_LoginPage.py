@@ -6,6 +6,7 @@ import json
 
 import pytest
 from fastapi.testclient import TestClient
+from unittest.mock import MagicMock
 
 # --- Helpers -----------------------------------------------------------------
 
@@ -205,10 +206,27 @@ def test_login_password_verification_exception(test_app):
 
 def test_login_unexpected_exception(test_app):
     """Test login when an unexpected exception occurs (tests lines 74-77)."""
-    # This is hard to test without mocking the database connection itself
-    # The exception handler catches non-HTTPException and returns 500
-    # We can test this by causing a database error, but it's complex to mock
-    # For now, we'll skip this test or test it differently
-    # The exception handler is there as a safety net, but testing it requires
-    # complex mocking of the database connection
-    pass
+    # Test the exception handler by overriding get_db dependency to raise an exception
+    from app.api.main import app
+    from app.core.db import get_db
+    from unittest.mock import MagicMock
+    
+    # Create a mock session that raises an exception when queried
+    def mock_get_db_raises():
+        mock_session = MagicMock()
+        mock_session.query.side_effect = Exception("Database connection error")
+        yield mock_session
+    
+    # Override the dependency
+    app.dependency_overrides[get_db] = mock_get_db_raises
+    
+    try:
+        payload = {"username": "alice@wofford.edu", "password": "secret", "role": "student"}
+        r = test_app.post("/api/v1/login", json=payload)
+        # Should catch the exception and return 500
+        assert r.status_code == 500
+        assert "detail" in r.json()
+        assert "Internal server error" in r.json()["detail"]
+    finally:
+        # Clean up - remove the override
+        app.dependency_overrides.clear()

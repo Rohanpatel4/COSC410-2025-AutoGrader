@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Q
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func, and_
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from collections import defaultdict
 import re
 
@@ -1414,7 +1414,7 @@ async def rerun_all_students(
             submission.earned_points = earned_points
             submission.grade = grade
             submission.test_case_results = test_case_results
-            submission.updated_at = datetime.utcnow()
+            submission.updated_at = datetime.now(timezone.utc)
 
             rerun_results.append({
                 "submission_id": submission.id,
@@ -1543,7 +1543,7 @@ async def rerun_student_attempts(
             submission.earned_points = earned_points
             submission.grade = grade
             submission.test_case_results = test_case_results
-            submission.updated_at = datetime.utcnow()
+            submission.updated_at = datetime.now(timezone.utc)
 
             rerun_results.append({
                 "submission_id": submission.id,

@@ -112,6 +112,9 @@ def test_attempt_submission_test_bridge_bridge_error(mock_execute):
     response = client.post("/api/v1/attempts/bridge", files=files, data=data)
 
     assert response.status_code == 500
+    error_data = response.json()
+    assert "detail" in error_data
+    assert "Execution error" in error_data["detail"]
 
 
 # Test the main submission endpoint
@@ -268,26 +271,23 @@ def test_attempt_submission_test_custom_language():
 
 def test_attempt_submission_test_file_read_error():
     """Test handling of file read errors."""
-    from unittest.mock import patch, MagicMock
+    # TestClient handles file reading, so we test with invalid encoding
+    # which should either be handled gracefully or return 400
+    from io import BytesIO
     
-    # Create a mock file that raises an error when read
-    mock_file = MagicMock()
-    mock_file.filename = "test.py"
-    mock_file.read.side_effect = Exception("File read error")
-    
-    # Note: This test may need adjustment based on how FastAPI handles file uploads
-    # The actual error handling depends on the implementation
-    file_content = b"def add(a, b):\n    return a + b\n"
+    file_content = BytesIO(b"\xff\xfe\x00\x00")  # Invalid encoding
     files = {"submission": ("test.py", file_content, "text/x-python")}
     data = {"test_case": "def test_add():\n    assert add(1, 2) == 3\n"}
     
-    # This should work normally, but we can test error handling if file reading fails
-    # For now, just verify the endpoint accepts the file
     response = client.post("/api/v1/attempts/bridge", files=files, data=data)
-    # Should either succeed (if mocked) or handle error gracefully
-    assert response.status_code in [201, 400, 500]
+    # Should either succeed (if encoding is handled) or return 400 for invalid input
+    assert response.status_code in [201, 400]
+    if response.status_code == 400:
+        # If it fails, should have a detail message
+        assert "detail" in response.json()
+    
+    # Test the test route separately
     response = client.get("/api/v1/attempts/test-route")
-
     assert response.status_code == 200
     assert response.json() == {"message": "Test route works"}
 
