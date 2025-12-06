@@ -329,69 +329,6 @@ export default function EditAssignmentPage() {
     });
   }, [language]);
 
-  // Helper function to clean up instructions - removes empty list items
-  // Same logic as InstructionsManager onBlur
-  const cleanupInstructions = (json: any): any => {
-    if (!json) return json;
-    
-    const removeEmptyItems = (node: any): any => {
-      if (node.type === 'bulletList') {
-        if (node.content && Array.isArray(node.content)) {
-          const processedContent: any[] = [];
-          
-          node.content.forEach((listItem: any) => {
-            if (listItem.type === 'listItem') {
-              const paragraph = listItem.content?.find((c: any) => c.type === 'paragraph');
-              const hasText = paragraph?.content?.some((c: any) => c.type === 'text' && c.text?.trim());
-              const nestedBulletList = listItem.content?.find((c: any) => c.type === 'bulletList');
-              const hasNestedChildren = nestedBulletList && nestedBulletList.content && nestedBulletList.content.length > 0;
-              
-              if (!hasText) {
-                if (hasNestedChildren) {
-                  nestedBulletList.content.forEach((nestedItem: any) => {
-                    const processed = removeEmptyItems(nestedItem);
-                    if (processed) processedContent.push(processed);
-                  });
-                }
-              } else {
-                const processed = removeEmptyItems(listItem);
-                if (processed) processedContent.push(processed);
-              }
-            } else {
-              const processed = removeEmptyItems(listItem);
-              if (processed) processedContent.push(processed);
-            }
-          });
-          
-          return { ...node, content: processedContent };
-        }
-      } else if (node.type === 'listItem') {
-        if (node.content && Array.isArray(node.content)) {
-          const processedContent: any[] = [];
-          node.content.forEach((child: any) => {
-            if (child.type === 'bulletList') {
-              const processed = removeEmptyItems(child);
-              if (processed) processedContent.push(processed);
-            } else {
-              processedContent.push(child);
-            }
-          });
-          return { ...node, content: processedContent };
-        }
-      } else if (node.type === 'doc') {
-        if (node.content && Array.isArray(node.content)) {
-          const processedContent = node.content
-            .map((child: any) => removeEmptyItems(child))
-            .filter((child: any) => child !== null);
-          return { ...node, content: processedContent };
-        }
-      }
-      return node;
-    };
-    
-    return removeEmptyItems(json);
-  };
-
   // Helper function to check if TipTap content has actual text
   const hasTipTapContent = (json: any): boolean => {
     if (!json || !json.content) return false;
@@ -424,8 +361,7 @@ export default function EditAssignmentPage() {
     }
     
     // Check if instructions have actual content
-    const cleanedInstructions = cleanupInstructions(instructions);
-    if (!hasInstructionsContent(cleanedInstructions)) {
+    if (!hasInstructionsContent(instructions)) {
       errors.push("At least one instruction is required");
     }
     
@@ -477,9 +413,6 @@ export default function EditAssignmentPage() {
 
     setSubmitting(true);
     try {
-      // Clean up instructions before submitting (remove empty bullet points)
-      const cleanedInstructions = cleanupInstructions(instructions);
-      
       // Update assignment details
       const payload: any = {
         title: title.trim(),
@@ -500,7 +433,7 @@ export default function EditAssignmentPage() {
       payload.start = start || null;
       payload.stop = stop || null;
       
-      payload.instructions = cleanedInstructions;
+      payload.instructions = instructions;
 
       await fetchJson(
         `/api/v1/assignments/${encodeURIComponent(assignment_id)}`,

@@ -9,41 +9,30 @@ vi.mock('@tiptap/react', () => ({
   useEditor: () => ({
     commands: {
       focus: vi.fn(),
-      liftListItem: vi.fn(),
-      sinkListItem: vi.fn(),
-      joinBackward: vi.fn(),
       setContent: vi.fn(),
     },
     getJSON: () => ({
       type: 'doc',
       content: [
         {
-          type: 'bulletList',
-          content: [
-            {
-              type: 'listItem',
-              content: [
-                {
-                  type: 'paragraph',
-                  content: [{ type: 'text', text: 'Test Instruction' }]
-                }
-              ]
-            }
-          ]
+          type: 'paragraph',
+          content: [{ type: 'text', text: 'Test Instruction' }]
         }
       ]
     }),
     isEmpty: false,
     isFocused: false,
     can: () => ({
-        liftListItem: () => true,
-        sinkListItem: () => true
-    })
+        undo: () => true,
+        redo: () => true
+    }),
+    isActive: () => false,
+    getAttributes: () => ({}),
+    chain: () => ({ focus: () => ({ toggleBold: () => ({ run: vi.fn() }) }) }),
+    on: vi.fn(),
+    off: vi.fn(),
   }),
   EditorContent: () => <div data-testid="tiptap-editor" contentEditable />,
-  Node: {
-    create: (config: any) => config
-  }
 }));
 
 describe('InstructionsManager', () => {

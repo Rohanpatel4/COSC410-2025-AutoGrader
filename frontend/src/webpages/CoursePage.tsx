@@ -16,17 +16,8 @@ import {
   ChevronRight,
   SortAsc,
   Filter,
-  Flame,
-  ToggleLeft,
-  ToggleRight
+  Flame
 } from "lucide-react";
-
-// ============================================================================
-// STYLE TOGGLE: Default style for assignment list
-// true  = New style with filters, sorting, and fancy cards
-// false = Old simple list style
-// ============================================================================
-const DEFAULT_NEW_STYLE = true;
 
 type Student = { id: number; name?: string; role: "student" };
 type Faculty = { id: number; name?: string; role: "faculty" };
@@ -102,9 +93,6 @@ export default function CoursePage() {
   type AssignmentSortType = "due-date" | "name" | "status";
   const [assignmentFilter, setAssignmentFilter] = React.useState<AssignmentFilterType>("all");
   const [assignmentSort, setAssignmentSort] = React.useState<AssignmentSortType>("due-date");
-  
-  // Style toggle state (for demo purposes)
-  const [useNewStyle, setUseNewStyle] = React.useState(DEFAULT_NEW_STYLE);
 
   // Load course, students, faculty, assignments
   async function loadAll() {
@@ -397,7 +385,17 @@ export default function CoursePage() {
     // Apply sort
     filtered.sort((a, b) => {
       if (assignmentSort === "due-date") {
-        // Assignments with no due date go to the end
+        // When sorting by due date, always put closed assignments last
+        const aStatus = getAssignmentStatus(a, true);
+        const bStatus = getAssignmentStatus(b, true);
+        const aClosed = aStatus === "closed";
+        const bClosed = bStatus === "closed";
+        
+        if (aClosed !== bClosed) {
+          return aClosed ? 1 : -1; // Closed goes to the end
+        }
+        
+        // Within same status group, sort by due date
         if (!a.stop && !b.stop) return 0;
         if (!a.stop) return 1;
         if (!b.stop) return -1;
@@ -807,8 +805,8 @@ export default function CoursePage() {
                       </div>
                     )}
                   </Card>
-                ) : useNewStyle ? (
-                  /* NEW STYLE: Student View - Redesigned with Sorting/Filtering */
+                ) : (
+                  /* Student View - with Sorting/Filtering */
                   <div className="space-y-6">
                     {/* Header with Filters and Sort */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -847,16 +845,6 @@ export default function CoursePage() {
                           <option value="status">Sort by Status</option>
                         </select>
                       </div>
-                      
-                      {/* Style Toggle Button (for demo) */}
-                      <button
-                        onClick={() => setUseNewStyle(!useNewStyle)}
-                        className="flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg border border-border bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                        title={useNewStyle ? "Switch to simple list view" : "Switch to card view"}
-                      >
-                        {useNewStyle ? <ToggleRight className="w-4 h-4 text-primary" /> : <ToggleLeft className="w-4 h-4" />}
-                        {useNewStyle ? "Card View" : "List View"}
-                      </button>
                     </div>
 
                     {/* Assignments Grid */}
@@ -1022,83 +1010,6 @@ export default function CoursePage() {
                       </div>
                     )}
                   </div>
-                ) : (
-                  /* OLD STYLE: Simple list view for students */
-                  <Card>
-                    <div className="flex items-center justify-between gap-3 mb-6">
-                      <h2 className="text-2xl font-semibold m-0">Assignments</h2>
-                      {/* Style Toggle Button (for demo) */}
-                      <button
-                        onClick={() => setUseNewStyle(!useNewStyle)}
-                        className="flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg border border-border bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                        title={useNewStyle ? "Switch to simple list view" : "Switch to card view"}
-                      >
-                        {useNewStyle ? <ToggleRight className="w-4 h-4 text-primary" /> : <ToggleLeft className="w-4 h-4" />}
-                        {useNewStyle ? "Card View" : "List View"}
-                      </button>
-                    </div>
-
-                    {visibleAssignments.length === 0 ? (
-                      <div className="text-center py-12">
-                        <p className="text-muted-foreground mb-4">No assignments yet.</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {visibleAssignments.map((a) => {
-                          const status = getAssignmentStatus(a, true);
-                          const statusColors = {
-                            closed: "border-l-danger",
-                            active: "border-l-accent",
-                            scheduled: "border-l-muted-foreground",
-                          };
-                          const statusLabels = {
-                            closed: "Closed",
-                            active: "Active",
-                            scheduled: "Scheduled",
-                          };
-                          const badgeVariants: Record<string, "default" | "info" | "success" | "warning" | "danger"> = {
-                            closed: "danger",
-                            active: "success",
-                            scheduled: "default",
-                          };
-
-                          return (
-                            <Link
-                              key={a.id}
-                              to={`/assignments/${a.id}`}
-                              className={`group block rounded-lg border-l-4 border border-border bg-card p-4 transition-all duration-200 hover:shadow-md hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${statusColors[status]}`}
-                            >
-                              <div className="flex items-center justify-between gap-4">
-                                <div className="flex items-center gap-3 min-w-0 flex-1">
-                                  <h3 className="text-base font-semibold text-foreground group-hover:text-primary transition-colors truncate">
-                                    {a.title}
-                                  </h3>
-                                  <Badge variant={badgeVariants[status]} className="text-xs whitespace-nowrap shrink-0">
-                                    {statusLabels[status]}
-                                  </Badge>
-                                </div>
-
-                                <div className="flex items-center gap-4 text-xs text-muted-foreground shrink-0">
-                                  {a.stop && (
-                                    <span className="hidden sm:inline">
-                                      <span className="font-medium">Due:</span>{" "}
-                                      {new Date(a.stop).toLocaleDateString()}
-                                    </span>
-                                  )}
-                                  {a.num_attempts !== undefined && (
-                                    <span>
-                                      <span className="font-medium">Attempts:</span> {a.num_attempts}
-                                    </span>
-                                  )}
-                                  <ChevronRight className="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary" />
-                                </div>
-                              </div>
-                            </Link>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </Card>
                 )}
               </div>
             )}

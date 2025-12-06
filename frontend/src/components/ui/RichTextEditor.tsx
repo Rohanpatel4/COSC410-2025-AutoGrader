@@ -20,7 +20,9 @@ import {
   Heading2,
   Heading3,
   Type,
-  Palette
+  Palette,
+  List,
+  ListOrdered
 } from "lucide-react";
 
 type RichTextEditorProps = {
@@ -365,6 +367,25 @@ function EditorToolbar({ editor, disabled = false }: { editor: Editor | null; di
       <div className="w-px h-5 bg-border mx-1" />
 
       <ToolbarButton
+        onClick={() => editor.chain().focus().toggleBulletList().run()}
+        isActive={editor.isActive("bulletList")}
+        disabled={disabled}
+        title="Bullet List"
+      >
+        <List className="w-4 h-4" />
+      </ToolbarButton>
+      <ToolbarButton
+        onClick={() => editor.chain().focus().toggleOrderedList().run()}
+        isActive={editor.isActive("orderedList")}
+        disabled={disabled}
+        title="Numbered List"
+      >
+        <ListOrdered className="w-4 h-4" />
+      </ToolbarButton>
+
+      <div className="w-px h-5 bg-border mx-1" />
+
+      <ToolbarButton
         onClick={() => editor.chain().focus().toggleSubscript().run()}
         isActive={editor.isActive("subscript")}
         disabled={disabled}
@@ -427,9 +448,19 @@ export default function RichTextEditor({
         codeBlock: false,
         blockquote: false,
         horizontalRule: false,
-        bulletList: false,
-        orderedList: false,
-        listItem: false,
+        bulletList: {
+          HTMLAttributes: { class: 'list-disc pl-5 space-y-1' },
+          keepMarks: true,
+          keepAttributes: true,
+        },
+        orderedList: {
+          HTMLAttributes: { class: 'list-decimal pl-5 space-y-1' },
+          keepMarks: true,
+          keepAttributes: true,
+        },
+        listItem: {
+          HTMLAttributes: { class: '' },
+        },
       }),
       TextStyle,
       Color,
@@ -478,6 +509,10 @@ export default function RichTextEditor({
       .rich-text-editor .ProseMirror h2 { font-size: 1.5em; font-weight: 600; margin: 0.5em 0 0.25em 0; color: var(--foreground); }
       .rich-text-editor .ProseMirror h3 { font-size: 1.25em; font-weight: 600; margin: 0.5em 0 0.25em 0; color: var(--foreground); }
       .rich-text-editor .ProseMirror h1:first-child, .rich-text-editor .ProseMirror h2:first-child, .rich-text-editor .ProseMirror h3:first-child { margin-top: 0; }
+      .rich-text-editor .ProseMirror ul { list-style-type: disc; padding-left: 1.25rem; margin: 0.5em 0; }
+      .rich-text-editor .ProseMirror ol { list-style-type: decimal; padding-left: 1.25rem; margin: 0.5em 0; }
+      .rich-text-editor .ProseMirror li { margin-bottom: 0.25em; color: var(--foreground); }
+      .rich-text-editor .ProseMirror ul ul, .rich-text-editor .ProseMirror ol ol, .rich-text-editor .ProseMirror ul ol, .rich-text-editor .ProseMirror ol ul { padding-left: 1.25rem; margin-top: 0.25em; }
       .rich-text-editor-readonly .ProseMirror { padding: 0; color: var(--foreground); line-height: 1.6; }
       .rich-text-editor-readonly .ProseMirror p { margin: 0 0 0.5em 0; color: inherit; }
       .rich-text-editor-readonly .ProseMirror p:last-child { margin-bottom: 0; }
@@ -485,6 +520,9 @@ export default function RichTextEditor({
       .rich-text-editor-readonly .ProseMirror h1 { font-size: 1.75em; font-weight: 700; margin: 0.5em 0 0.25em 0; color: var(--foreground); }
       .rich-text-editor-readonly .ProseMirror h2 { font-size: 1.5em; font-weight: 600; margin: 0.5em 0 0.25em 0; color: var(--foreground); }
       .rich-text-editor-readonly .ProseMirror h3 { font-size: 1.25em; font-weight: 600; margin: 0.5em 0 0.25em 0; color: var(--foreground); }
+      .rich-text-editor-readonly .ProseMirror ul { list-style-type: disc; padding-left: 1.25rem; margin: 0.5em 0; }
+      .rich-text-editor-readonly .ProseMirror ol { list-style-type: decimal; padding-left: 1.25rem; margin: 0.5em 0; }
+      .rich-text-editor-readonly .ProseMirror li { margin-bottom: 0.25em; color: var(--foreground); }
     `;
     document.head.appendChild(style);
     return () => { document.head.removeChild(style); };

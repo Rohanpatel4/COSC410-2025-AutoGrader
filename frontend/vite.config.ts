@@ -18,4 +18,13 @@ export default defineConfig({
     // Make sure Vite can see this environment variable
     'import.meta.env.VITE_API_URL': JSON.stringify(process.env.VITE_API_URL || 'http://localhost:8000'),
   },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './test_setup.ts',
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'text-summary', 'json', 'html'],
+    },
+  },
 })

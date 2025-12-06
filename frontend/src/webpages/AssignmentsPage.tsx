@@ -1,5 +1,5 @@
 import React from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { fetchJson } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import type { Assignment } from "../types/assignments";
@@ -16,17 +16,8 @@ import {
   Flame,
   BookOpen,
   Filter,
-  XCircle,
-  ToggleLeft,
-  ToggleRight
+  XCircle
 } from "lucide-react";
-
-// ============================================================================
-// STYLE TOGGLE: Default style for assignment list
-// true  = New style with filters, sorting, and fancy cards
-// false = Old simple list style
-// ============================================================================
-const DEFAULT_NEW_STYLE = true;
 
 // datetime-local helpers
 function toLocalInputValue(d: Date | null) {
@@ -58,6 +49,7 @@ type SortType = "due-date" | "name" | "course" | "status";
 
 export default function AssignmentsPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { role, userId } = useAuth();
   const isStudent = role === "student";
   const [assignments, setAssignments] = React.useState<AssignmentWithCourse[]>([]);
@@ -68,12 +60,26 @@ export default function AssignmentsPage() {
     { start: Date | null; stop: Date | null }
   >>({});
 
+  // Get initial filter from URL params
+  const getInitialFilter = (): FilterType => {
+    const param = searchParams.get("filter");
+    if (param === "active" || param === "due-soon" || param === "closed") {
+      return param;
+    }
+    return "all";
+  };
+
   // Filter and sort state for students
-  const [filter, setFilter] = React.useState<FilterType>("all");
+  const [filter, setFilter] = React.useState<FilterType>(getInitialFilter);
   const [sort, setSort] = React.useState<SortType>("due-date");
-  
-  // Style toggle state (for demo purposes)
-  const [useNewStyle, setUseNewStyle] = React.useState(DEFAULT_NEW_STYLE);
+
+  // Update filter when URL params change
+  React.useEffect(() => {
+    const paramFilter = searchParams.get("filter");
+    if (paramFilter === "active" || paramFilter === "due-soon" || paramFilter === "closed") {
+      setFilter(paramFilter);
+    }
+  }, [searchParams]);
 
   React.useEffect(() => {
     let alive = true;
@@ -237,6 +243,17 @@ export default function AssignmentsPage() {
     // Apply sort
     filtered.sort((a, b) => {
       if (sort === "due-date") {
+        // When sorting by due date, always put closed assignments last
+        const aStatus = getAssignmentStatus(a);
+        const bStatus = getAssignmentStatus(b);
+        const aClosed = aStatus === "closed";
+        const bClosed = bStatus === "closed";
+        
+        if (aClosed !== bClosed) {
+          return aClosed ? 1 : -1; // Closed goes to the end
+        }
+        
+        // Within same status group, sort by due date
         if (!a.stop && !b.stop) return 0;
         if (!a.stop) return 1;
         if (!b.stop) return -1;
@@ -276,15 +293,6 @@ export default function AssignmentsPage() {
             <h1 className="page-title">My Assignments</h1>
             <p className="page-subtitle">Track your progress across all courses</p>
           </div>
-          {/* Style Toggle Button (for demo) */}
-          <button
-            onClick={() => setUseNewStyle(!useNewStyle)}
-            className="flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg border border-border bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-            title={useNewStyle ? "Switch to simple list view" : "Switch to card view"}
-          >
-            {useNewStyle ? <ToggleRight className="w-4 h-4 text-primary" /> : <ToggleLeft className="w-4 h-4" />}
-            {useNewStyle ? "Card View" : "List View"}
-          </button>
         </div>
 
         {error ? (
@@ -310,8 +318,7 @@ export default function AssignmentsPage() {
               View My Courses
             </Button>
           </Card>
-        ) : useNewStyle ? (
-          /* NEW STYLE: Filters, sorting, and fancy cards */
+        ) : (
           <div className="space-y-6">
             {/* Filters and Sort */}
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -494,50 +501,6 @@ export default function AssignmentsPage() {
               </div>
             )}
           </div>
-        ) : (
-          /* OLD STYLE: Simple list view */
-          <Card>
-            <div className="flex items-center justify-between gap-3 mb-6">
-              <h2 className="text-2xl font-semibold m-0">Assignments</h2>
-              {/* Style Toggle Button (for demo) */}
-              <button
-                onClick={() => setUseNewStyle(!useNewStyle)}
-                className="flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg border border-border bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                title={useNewStyle ? "Switch to simple list view" : "Switch to card view"}
-              >
-                {useNewStyle ? <ToggleRight className="w-4 h-4 text-primary" /> : <ToggleLeft className="w-4 h-4" />}
-                {useNewStyle ? "Card View" : "List View"}
-              </button>
-            </div>
-            {assignments.map((a) => (
-              <div key={a.id} className="border-b border-border pb-6 last:border-0 last:pb-0 mb-6 last:mb-0">
-                <div className="flex items-center gap-3 mb-3">
-                  <Button
-                    size="sm"
-                    onClick={() => navigate(`/assignments/${a.id}`)}
-                  >
-                    {a.title}
-                  </Button>
-                  <Badge variant="info">
-                    Attempts: {a.num_attempts ?? 0}
-                  </Badge>
-                </div>
-                <div className="text-sm text-muted-foreground space-y-1">
-                  <div>
-                    Course: {a.course_name ? `${a.course_name} (${a.course_code ?? a.course_id})` : a.course_id}
-                  </div>
-                  {a.description && <div>Description: {a.description}</div>}
-                  <div>Submission Limit: {a.sub_limit == null ? "∞" : a.sub_limit}</div>
-                  <div className="flex gap-4 items-center flex-wrap mt-3">
-                    <span className="text-muted-foreground text-xs">
-                      ({a.start ? new Date(a.start).toLocaleString() : "No start"} →{" "}
-                      {a.stop ? new Date(a.stop).toLocaleString() : "No stop"})
-                    </span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </Card>
         )}
       </div>
     );
