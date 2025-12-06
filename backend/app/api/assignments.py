@@ -374,9 +374,10 @@ def update_assignment(assignment_id: int, payload: dict, db: Session = Depends(g
     
     # Update description if provided
     if "description" in payload:
-        description = (payload.get("description") or "").strip()  # Use empty string, not None - DB requires non-null
-        if description is not None and not isinstance(description, str):
+        description_raw = payload.get("description")
+        if description_raw is not None and not isinstance(description_raw, str):
             raise HTTPException(400, "description must be a string")
+        description = (description_raw or "").strip() if isinstance(description_raw, str) else ""
         a.description = description
     
     # Update language if provided

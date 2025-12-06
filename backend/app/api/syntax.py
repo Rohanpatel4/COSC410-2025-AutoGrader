@@ -137,15 +137,22 @@ def parse_rust_error(error_text: str) -> list[CodeError]:
     errors = []
     lines = error_text.strip().split('\n')
     
-    for line in lines:
+    current_error_message = None
+    current_line_num = 1
+    
+    for i, line in enumerate(lines):
         # Rust error format: error[E0425]: cannot find value `x` in this scope
-        #    --> main.rs:5:10
+        #    --> src/main.rs:3:5 or --> main.rs:5:10
         # Look for the --> line with file:line:column
-        match = re.search(r'-->\s*main\.rs:(\d+):(\d+)', line)
+        match = re.search(r'-->\s*(?:src/)?main\.rs:(\d+):(\d+)', line)
         if match:
             line_num = int(match.group(1))
             col_num = int(match.group(2))
-            # Find the error message from previous lines
+            current_line_num = line_num
+            # If we have a pending error message, use this line number
+            if current_error_message:
+                errors.append(CodeError(line=line_num, message=current_error_message[:200]))
+                current_error_message = None
             continue
         
         # Rust error message line: error[E0425]: cannot find value...
@@ -153,30 +160,30 @@ def parse_rust_error(error_text: str) -> list[CodeError]:
         if match:
             error_code = match.group(1) or ""
             message = match.group(2).strip()
-            # Get line number from next --> line if available
-            errors.append(CodeError(line=1, message=f"error{error_code}: {message}"[:200]))
+            current_error_message = f"error{error_code}: {message}"
+            # Try to find line number in next few lines
+            # If not found, use line 1 as default
+            found_line = False
+            for j in range(i + 1, min(i + 5, len(lines))):
+                line_match = re.search(r'-->\s*(?:src/)?main\.rs:(\d+):(\d+)', lines[j])
+                if line_match:
+                    current_line_num = int(line_match.group(1))
+                    found_line = True
+                    break
+            if found_line:
+                errors.append(CodeError(line=current_line_num, message=current_error_message[:200]))
+                current_error_message = None
             continue
         
         # Also catch warnings that prevent compilation
         match = re.search(r'^warning(\[.*\])?: (.+)', line)
         if match and 'deny' in error_text:  # Only if warnings are errors
             message = match.group(2).strip()
-            errors.append(CodeError(line=1, message=f"warning: {message}"[:200]))
+            errors.append(CodeError(line=current_line_num, message=f"warning: {message}"[:200]))
     
-    # Try to associate line numbers with errors
-    # Re-scan to match error messages with their line numbers
-    current_error_idx = 0
-    for i, line in enumerate(lines):
-        match = re.search(r'-->\s*main\.rs:(\d+):(\d+)', line)
-        if match and current_error_idx < len(errors):
-            line_num = int(match.group(1))
-            col_num = int(match.group(2))
-            errors[current_error_idx] = CodeError(
-                line=line_num, 
-                column=col_num, 
-                message=errors[current_error_idx].message
-            )
-            current_error_idx += 1
+    # Add any remaining error message
+    if current_error_message:
+        errors.append(CodeError(line=current_line_num, message=current_error_message[:200]))
     
     if not errors and error_text.strip():
         errors.append(CodeError(line=1, message=error_text.strip()[:200]))
@@ -423,8 +430,11 @@ int main() {{
                 is_expected_error = False
                 
                 if language_lower == "python":
-                    # Python: NameError for undefined names is expected (faculty write asserts on student functions)
-                    if "nameerror" in stderr_lower and ("is not defined" in stderr_lower or "name" in stderr_lower):
+                    # Python: All runtime errors are expected (faculty write test cases that may have runtime errors)
+                    # NameError, ZeroDivisionError, TypeError, etc. are all OK for test cases
+                    # Only syntax errors should fail validation
+                    if "syntaxerror" not in stderr_lower and "indentationerror" not in stderr_lower:
+                        # Any runtime error (not syntax) is expected
                         is_expected_error = True
                 elif language_lower == "java":
                     # Java: NoClassDefFoundError, NoSuchMethodError, etc. are expected

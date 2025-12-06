@@ -66,3 +66,15 @@ def test_isolated_db_and_storage():
     finally:
         # Cleanup temp directory
         shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+@pytest.fixture(autouse=True)
+def reset_piston_backoff():
+    """Reset Piston backoff state before each test to prevent 503 errors."""
+    from app.services import piston
+    piston._connection_failures = 0
+    piston._backoff_until = 0
+    yield
+    # Reset after test too
+    piston._connection_failures = 0
+    piston._backoff_until = 0

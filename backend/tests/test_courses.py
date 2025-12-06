@@ -45,6 +45,11 @@ def test_list_courses():
     assert "items" in data
     assert "nextCursor" in data
     assert isinstance(data["items"], list)
+    # Verify structure if items exist
+    if len(data["items"]) > 0:
+        assert "id" in data["items"][0]
+        assert "course_code" in data["items"][0]
+        assert isinstance(data["items"][0]["id"], int)
 
 def test_get_course_by_tag():
     """Test getting a course by tag."""
@@ -100,7 +105,19 @@ def test_get_course_faculty():
 
     response = client.get("/api/v1/courses/TESTFACULTY/faculty")
     assert response.status_code == 200
-    assert isinstance(response.json(), list)
+    faculty_list = response.json()
+    assert isinstance(faculty_list, list)
+    # Verify structure if faculty exist
+    if len(faculty_list) > 0:
+        assert "id" in faculty_list[0]
+        assert "name" in faculty_list[0]
+        assert isinstance(faculty_list[0]["id"], int)
+
+def test_get_course_faculty_not_found():
+    """Test getting faculty for non-existent course (tests line 284)."""
+    response = client.get("/api/v1/courses/NONEXISTENT/faculty")
+    assert response.status_code == 404
+    assert "Not found" in response.json()["detail"]
 
 def test_add_faculty_to_course():
     """Test adding faculty to a course."""
@@ -119,6 +136,39 @@ def test_add_faculty_to_course():
     # Now test adding faculty
     response = client.post(f"/api/v1/courses/{course_code}/faculty", json={"faculty_id": 301})
     assert response.status_code == 201
+    assert response.json()["ok"] is True
+
+def test_add_co_instructor_course_not_found():
+    """Test adding co-instructor to non-existent course (tests line 313)."""
+    payload = {"faculty_id": 301}
+    response = client.post("/api/v1/courses/NONEXISTENT/faculty", json=payload)
+    assert response.status_code == 404
+    assert "Course not found" in response.json()["detail"]
+
+def test_add_co_instructor_invalid_faculty_id_type():
+    """Test adding co-instructor with invalid faculty_id type (tests line 317)."""
+    import uuid
+    course_code = f"INVTYPE{uuid.uuid4().hex[:6]}"
+    
+    course_payload = {
+        "course_code": course_code,
+        "name": "Test Course",
+        "description": "Test"
+    }
+    course_response = client.post("/api/v1/courses?professor_id=301", json=course_payload)
+    assert course_response.status_code == 201
+    
+    # Try with string instead of int
+    payload = {"faculty_id": "not_an_int"}
+    response = client.post(f"/api/v1/courses/{course_code}/faculty", json=payload)
+    assert response.status_code == 400
+    assert "faculty_id must be an integer" in response.json()["detail"]
+
+def test_remove_co_instructor_course_not_found():
+    """Test removing co-instructor from non-existent course (tests line 351)."""
+    response = client.delete("/api/v1/courses/NONEXISTENT/faculty/301")
+    assert response.status_code == 404
+    assert "Course not found" in response.json()["detail"]
 
 def test_remove_faculty_from_course():
     """Test removing faculty from a course."""
@@ -189,15 +239,17 @@ def test_remove_student_from_course():
 def test_get_course_assignments():
     """Test getting assignments for a course."""
     # Create test course using API
+    import uuid
+    course_code = f"TESTASSIGN{uuid.uuid4().hex[:6]}"
     payload = {
-        "course_code": "TEST203",
-        "name": "Test Course 203",
-        "description": "Description for test course 203"
+        "course_code": course_code,
+        "name": "Test Course Assignments",
+        "description": "Description for test course assignments"
     }
     create_response = client.post("/api/v1/courses?professor_id=301", json=payload)
     assert create_response.status_code == 201
 
-    response = client.get("/api/v1/courses/TEST203/assignments")
+    response = client.get(f"/api/v1/courses/{course_code}/assignments")
     assert response.status_code == 200
     assert isinstance(response.json(), list)
 
@@ -422,8 +474,8 @@ def test_add_professor_to_course():
     professor_ids = [p["id"] for p in data]
     assert 301 in professor_ids
 
-def test_get_course_assignments():
-    """Test getting assignments for a course."""
+def test_get_course_assignments_existing_course():
+    """Test getting assignments for an existing course."""
     response = client.get("/api/v1/courses/CS101/assignments")
     assert response.status_code == 200
     data = response.json()
@@ -677,3 +729,562 @@ def test_list_courses_by_professor():
     assert "items" in data
     # Note: May return empty if professor enrollment isn't working as expected
     # Just test that the endpoint works and returns proper structure
+
+
+def test_update_course_not_implemented():
+    """Test that course update endpoint doesn't exist (not implemented)."""
+    # Course update is not implemented, so this should 404 or not exist
+    # This test documents the current state
+    response = client.put("/api/v1/courses/CS101", json={"name": "Updated Name"})
+    # Should return 404 or 405 (Method Not Allowed)
+    assert response.status_code in [404, 405]
+
+
+def test_delete_course_not_implemented():
+    """Test that course delete endpoint doesn't exist (not implemented)."""
+    # Course delete is not implemented, so this should 404 or not exist
+    # This test documents the current state
+    response = client.delete("/api/v1/courses/CS101")
+    # Should return 404 or 405 (Method Not Allowed)
+    assert response.status_code in [404, 405]
+
+
+def test_get_course_with_enrollment_key():
+    """Test getting a course using enrollment_key."""
+    import uuid
+    course_code = f"ENROLLKEY{uuid.uuid4().hex[:6]}"
+    
+    # Create test course
+    course_payload = {
+        "course_code": course_code,
+        "name": "Enrollment Key Course",
+        "description": "Testing enrollment key lookup"
+    }
+    create_response = client.post("/api/v1/courses?professor_id=301", json=course_payload)
+    assert create_response.status_code == 201
+    course_data = create_response.json()
+    enrollment_key = course_data["enrollment_key"]
+    
+    # Try to get course by enrollment_key (this may not be directly supported)
+    # The _course_by_key function supports numeric ID or course_code, not enrollment_key
+    # So this test documents current behavior
+    response = client.get(f"/api/v1/courses/{enrollment_key}")
+    # Should return 404 since enrollment_key is not course_code
+    assert response.status_code == 404
+
+
+def test_add_faculty_duplicate():
+    """Test adding faculty member who is already in the course."""
+    import uuid
+    course_code = f"FACDUP{uuid.uuid4().hex[:6]}"
+    
+    # Create test course
+    course_payload = {
+        "course_code": course_code,
+        "name": "Faculty Duplicate Test",
+        "description": "Testing duplicate faculty addition"
+    }
+    create_response = client.post("/api/v1/courses?professor_id=301", json=course_payload)
+    assert create_response.status_code == 201
+    
+    # Add faculty first time
+    response1 = client.post(f"/api/v1/courses/{course_code}/faculty", json={"faculty_id": 301})
+    assert response1.status_code == 201
+    
+    # Try to add same faculty again (should handle gracefully)
+    response2 = client.post(f"/api/v1/courses/{course_code}/faculty", json={"faculty_id": 301})
+    # Should either succeed (idempotent) or return error
+    assert response2.status_code in [201, 400, 409]
+
+
+def test_remove_faculty_not_in_course():
+    """Test removing faculty member who is not in the course."""
+    import uuid
+    course_code = f"FACREM{uuid.uuid4().hex[:6]}"
+    
+    # Create test course
+    course_payload = {
+        "course_code": course_code,
+        "name": "Faculty Remove Test",
+        "description": "Testing faculty removal"
+    }
+    create_response = client.post("/api/v1/courses?professor_id=301", json=course_payload)
+    assert create_response.status_code == 201
+    
+    # Try to remove faculty who is not in course
+    response = client.delete(f"/api/v1/courses/{course_code}/faculty/99999")
+    # Should handle gracefully (either 404 or 200 with no-op)
+    assert response.status_code in [200, 404]
+
+
+def test_remove_student_not_enrolled():
+    """Test removing student who is not enrolled in course."""
+    import uuid
+    course_code = f"STUREM{uuid.uuid4().hex[:6]}"
+    
+    # Create test course
+    course_payload = {
+        "course_code": course_code,
+        "name": "Student Remove Test",
+        "description": "Testing student removal"
+    }
+    create_response = client.post("/api/v1/courses?professor_id=301", json=course_payload)
+    assert create_response.status_code == 201
+    
+    # Try to remove student who is not enrolled
+    response = client.delete(f"/api/v1/courses/{course_code}/students/99999")
+    # Should handle gracefully (either 404 or 200 with no-op)
+    assert response.status_code in [200, 404]
+
+
+def test_list_courses_empty_search():
+    """Test listing courses with empty search query."""
+    response = client.get("/api/v1/courses?q=")
+    assert response.status_code == 200
+    data = response.json()
+    assert "items" in data
+    assert isinstance(data["items"], list)
+
+
+def test_list_courses_invalid_cursor():
+    """Test listing courses with invalid cursor."""
+    response = client.get("/api/v1/courses?cursor=invalid")
+    # Should handle gracefully - either return first page or error
+    assert response.status_code in [200, 400]
+
+
+def test_list_courses_negative_limit():
+    """Test listing courses with negative limit."""
+    response = client.get("/api/v1/courses?limit=-1")
+    # Should handle gracefully - either use default or return error
+    # FastAPI/Pydantic validation may return 422 for invalid query params
+    assert response.status_code in [200, 400, 422]
+
+
+def test_get_course_students_with_enrollments():
+    """Test getting students for a course with multiple enrollments."""
+    import uuid
+    course_code = f"MULTISTU{uuid.uuid4().hex[:6]}"
+    
+    # Create test course
+    course_payload = {
+        "course_code": course_code,
+        "name": "Multiple Students Test",
+        "description": "Testing multiple student enrollments"
+    }
+    create_response = client.post("/api/v1/courses?professor_id=301", json=course_payload)
+    assert create_response.status_code == 201
+    course_data = create_response.json()
+    
+    # Enroll multiple students
+    for student_id in [201, 202]:
+        reg_payload = {
+            "student_id": student_id,
+            "course_id": course_data["id"]
+        }
+        reg_response = client.post("/api/v1/registrations", json=reg_payload)
+        assert reg_response.status_code == 201
+    
+    # Get students
+    response = client.get(f"/api/v1/courses/{course_code}/students")
+    assert response.status_code == 200
+    students = response.json()
+    assert isinstance(students, list)
+    assert len(students) >= 2
+    student_ids = [s["id"] for s in students]
+    assert 201 in student_ids
+    assert 202 in student_ids
+
+
+# ============================================================================
+# Helper Function Tests
+# ============================================================================
+
+def test_generate_enrollment_key():
+    """Test _generate_enrollment_key helper function (indirectly through course creation)."""
+    # We test this indirectly by creating courses, which uses the function
+    import uuid
+    course_code = f"ENRKEY{uuid.uuid4().hex[:6]}"
+    
+    course_payload = {
+        "course_code": course_code,
+        "name": "Test Course",
+        "description": "Test"
+    }
+    response = client.post("/api/v1/courses?professor_id=301", json=course_payload)
+    assert response.status_code == 201
+    # If enrollment key generation failed, we'd get a 500 error
+    data = response.json()
+    assert "enrollment_key" in data or "id" in data  # Key might not be in response
+
+def test_generate_enrollment_key_failure():
+    """Test enrollment key generation failure after 20 attempts (tests line 33)."""
+    from unittest.mock import patch, MagicMock
+    from app.api.courses import _generate_enrollment_key
+    from app.core.db import SessionLocal
+    from fastapi import HTTPException
+    
+    db = SessionLocal()
+    try:
+        # Mock the query to always return a result (key exists)
+        with patch.object(db, 'execute') as mock_execute:
+            # Create a mock result that always returns a value (key exists)
+            mock_result = MagicMock()
+            mock_result.first.return_value = (1,)  # Simulate existing key
+            mock_execute.return_value = mock_result
+            
+            # Should raise HTTPException after 20 attempts
+            with pytest.raises(HTTPException) as exc_info:
+                _generate_enrollment_key(db)
+            assert exc_info.value.status_code == 500
+            assert "Failed to generate unique enrollment key" in str(exc_info.value.detail)
+    finally:
+        db.close()
+
+
+def test_course_by_key():
+    """Test _course_by_key helper function (indirectly through course endpoints)."""
+    # We test this indirectly by using course endpoints that use the function
+    import uuid
+    course_code = f"TESTKEY{uuid.uuid4().hex[:6]}"
+    
+    course_payload = {
+        "course_code": course_code,
+        "name": "Test Course",
+        "description": "Test"
+    }
+    create_response = client.post("/api/v1/courses?professor_id=301", json=course_payload)
+    assert create_response.status_code == 201
+    
+    # Test getting course by code (uses _course_by_key)
+    get_response = client.get(f"/api/v1/courses/{course_code}")
+    assert get_response.status_code == 200
+    assert get_response.json()["course_code"] == course_code
+    
+    # Test with non-existent course
+    get_response = client.get("/api/v1/courses/NONEXISTENT")
+    assert get_response.status_code == 404
+
+
+def test_get_identity():
+    """Test get_identity helper function."""
+    from app.api.courses import get_identity
+    from app.models.models import RoleEnum
+    
+    # Test with valid headers
+    user_id, role = get_identity(x_user_id=301, x_user_role="faculty")
+    assert user_id == 301
+    assert role == RoleEnum.faculty
+    
+    # Test with None headers
+    user_id, role = get_identity(x_user_id=None, x_user_role=None)
+    assert user_id is None
+    assert role is None
+    
+    # Test with invalid role
+    user_id, role = get_identity(x_user_id=301, x_user_role="invalid")
+    assert user_id is None
+    assert role is None
+
+
+# ============================================================================
+# Student Courses Error Paths
+# ============================================================================
+
+def test_student_courses_invalid_student():
+    """Test getting courses for non-existent student."""
+    response = client.get("/api/v1/courses/students/99999")
+    assert response.status_code == 404
+    assert "Student not found" in response.json()["detail"]
+
+
+def test_student_courses_non_student():
+    """Test getting courses for user who is not a student."""
+    # Try with faculty ID
+    response = client.get("/api/v1/courses/students/301")
+    assert response.status_code == 404
+    assert "Student not found" in response.json()["detail"]
+
+def test_student_courses_success():
+    """Test getting courses for a valid student (tests lines 242-254)."""
+    import uuid
+    course_code = f"STUCOURSES{uuid.uuid4().hex[:6]}"
+    
+    # Create course
+    course_payload = {
+        "course_code": course_code,
+        "name": "Student Courses Test",
+        "description": "Test"
+    }
+    course_response = client.post("/api/v1/courses?professor_id=301", json=course_payload)
+    assert course_response.status_code == 201
+    course_data = course_response.json()
+    
+    # Enroll student
+    reg_payload = {"student_id": 201, "course_id": course_data["id"]}
+    reg_response = client.post("/api/v1/registrations", json=reg_payload)
+    assert reg_response.status_code == 201
+    
+    # Get student courses
+    response = client.get("/api/v1/courses/students/201")
+    assert response.status_code == 200
+    courses = response.json()
+    assert isinstance(courses, list)
+    # Verify structure
+    if len(courses) > 0:
+        assert "id" in courses[0]
+        assert "course_code" in courses[0]
+        assert "name" in courses[0]
+        assert "description" in courses[0]
+        assert isinstance(courses[0]["id"], int)
+        # Check that our course is in the list
+        course_codes = [c["course_code"] for c in courses]
+        assert course_code in course_codes
+
+
+# ============================================================================
+# Co-Instructor Error Paths
+# ============================================================================
+
+def test_add_co_instructor_invalid_faculty():
+    """Test adding co-instructor with invalid faculty ID."""
+    import uuid
+    course_code = f"COINV{uuid.uuid4().hex[:6]}"
+    
+    course_payload = {
+        "course_code": course_code,
+        "name": "Test Course",
+        "description": "Test"
+    }
+    course_response = client.post("/api/v1/courses?professor_id=301", json=course_payload)
+    assert course_response.status_code == 201
+    
+    payload = {"faculty_id": 99999}  # Non-existent faculty
+    response = client.post(f"/api/v1/courses/{course_code}/faculty", json=payload)
+    assert response.status_code == 404
+    assert "Faculty user not found" in response.json()["detail"]
+
+
+def test_add_co_instructor_non_faculty():
+    """Test adding co-instructor with student ID (should fail)."""
+    import uuid
+    course_code = f"CONFAC{uuid.uuid4().hex[:6]}"
+    
+    course_payload = {
+        "course_code": course_code,
+        "name": "Test Course",
+        "description": "Test"
+    }
+    course_response = client.post("/api/v1/courses?professor_id=301", json=course_payload)
+    assert course_response.status_code == 201
+    
+    payload = {"faculty_id": 201}  # Student ID
+    response = client.post(f"/api/v1/courses/{course_code}/faculty", json=payload)
+    assert response.status_code == 404
+    assert "Faculty user not found" in response.json()["detail"]
+
+
+def test_remove_co_instructor_not_found():
+    """Test removing co-instructor who is not a co-instructor."""
+    import uuid
+    course_code = f"COREM{uuid.uuid4().hex[:6]}"
+    
+    course_payload = {
+        "course_code": course_code,
+        "name": "Test Course",
+        "description": "Test"
+    }
+    course_response = client.post("/api/v1/courses?professor_id=301", json=course_payload)
+    assert course_response.status_code == 201
+    
+    # Try to remove non-existent co-instructor
+    response = client.delete(f"/api/v1/courses/{course_code}/faculty/302")
+    assert response.status_code == 404
+    assert "Link not found" in response.json()["detail"]
+
+
+# ============================================================================
+# Remove Student Error Paths
+# ============================================================================
+
+def test_remove_student_not_enrolled():
+    """Test removing student who is not enrolled."""
+    import uuid
+    course_code = f"REMNOT{uuid.uuid4().hex[:6]}"
+    
+    course_payload = {
+        "course_code": course_code,
+        "name": "Test Course",
+        "description": "Test"
+    }
+    course_response = client.post("/api/v1/courses?professor_id=301", json=course_payload)
+    assert course_response.status_code == 201
+    
+    # Try to remove student who is not enrolled
+    response = client.delete(f"/api/v1/courses/{course_code}/students/201")
+    assert response.status_code == 404
+    assert "Enrollment not found" in response.json()["detail"]
+
+
+# ============================================================================
+# Assignment Listing Error Paths
+# ============================================================================
+
+def test_list_assignments_for_course_no_assignments():
+    """Test listing assignments for course with no assignments."""
+    import uuid
+    course_code = f"NOASS{uuid.uuid4().hex[:6]}"
+
+    course_payload = {
+        "course_code": course_code,
+        "name": "Test Course",
+        "description": "Test"
+    }
+    course_response = client.post("/api/v1/courses?professor_id=301", json=course_payload)
+    assert course_response.status_code == 201
+
+    # List assignments
+    response = client.get(f"/api/v1/courses/{course_code}/assignments")
+    assert response.status_code == 200
+    assignments = response.json()
+    assert isinstance(assignments, list)
+    assert len(assignments) == 0
+
+def test_list_assignments_for_course_not_found():
+    """Test listing assignments for non-existent course (tests line 455)."""
+    response = client.get("/api/v1/courses/NONEXISTENT/assignments")
+    assert response.status_code == 200
+    assignments = response.json()
+    assert isinstance(assignments, list)
+    assert len(assignments) == 0  # Should return empty list, not 404
+
+
+def test_list_assignments_for_course_with_student_id():
+    """Test listing assignments for course with student_id filter."""
+    import uuid
+    course_code = f"STUASS{uuid.uuid4().hex[:6]}"
+    
+    course_payload = {
+        "course_code": course_code,
+        "name": "Test Course",
+        "description": "Test"
+    }
+    course_response = client.post("/api/v1/courses?professor_id=301", json=course_payload)
+    assert course_response.status_code == 201
+    course_data = course_response.json()
+    
+    # Enroll student
+    reg_payload = {"student_id": 201, "course_id": course_data["id"]}
+    client.post("/api/v1/registrations", json=reg_payload)
+    
+    # Create assignment
+    assignment_payload = {
+        "title": "Test Assignment",
+        "description": "Test"
+    }
+    client.post(f"/api/v1/courses/{course_code}/assignments", json=assignment_payload)
+    
+    # List assignments with student_id
+    response = client.get(f"/api/v1/courses/{course_code}/assignments?student_id=201")
+    assert response.status_code == 200
+    assignments = response.json()
+    assert isinstance(assignments, list)
+
+
+# ============================================================================
+# Delete Assignment Error Paths
+# ============================================================================
+
+def test_delete_assignment_not_found():
+    """Test deleting non-existent assignment."""
+    import uuid
+    course_code = f"DELNF{uuid.uuid4().hex[:6]}"
+    
+    course_payload = {
+        "course_code": course_code,
+        "name": "Test Course",
+        "description": "Test"
+    }
+    course_response = client.post("/api/v1/courses?professor_id=301", json=course_payload)
+    assert course_response.status_code == 201
+    
+    # Try to delete non-existent assignment
+    response = client.delete(f"/api/v1/courses/{course_code}/assignments/99999")
+    assert response.status_code == 404
+    assert "Assignment not found" in response.json()["detail"]
+
+
+def test_delete_assignment_cascades():
+    """Test that deleting assignment cascades to submissions and test cases."""
+    import uuid
+    course_code = f"DELCASC{uuid.uuid4().hex[:6]}"
+    
+    course_payload = {
+        "course_code": course_code,
+        "name": "Test Course",
+        "description": "Test"
+    }
+    course_response = client.post("/api/v1/courses?professor_id=301", json=course_payload)
+    assert course_response.status_code == 201
+    course_data = course_response.json()
+    
+    # Create assignment
+    assignment_payload = {
+        "title": "Test Assignment",
+        "description": "Test",
+        "language": "python"
+    }
+    assignment_response = client.post(f"/api/v1/courses/{course_code}/assignments", json=assignment_payload)
+    assert assignment_response.status_code == 201
+    assignment_data = assignment_response.json()
+    
+    # Add test case
+    from unittest.mock import patch, AsyncMock
+    from app.api.syntax import SyntaxCheckResponse
+    
+    with patch('app.api.assignments._validate_code_syntax', new_callable=AsyncMock) as mock_validate:
+        mock_validate.return_value = SyntaxCheckResponse(valid=True, errors=[])
+        
+        batch_payload = {
+            "test_cases": [{
+                "point_value": 10,
+                "test_code": "def test(): assert True"
+            }]
+        }
+        batch_response = client.post(
+            f"/api/v1/assignments/{assignment_data['id']}/test-cases/batch",
+            json=batch_payload
+        )
+        assert batch_response.status_code == 201
+        test_case_id = batch_response.json()["test_cases"][0]["id"]
+    
+    # Enroll student and submit
+    reg_payload = {"student_id": 201, "course_id": course_data["id"]}
+    client.post("/api/v1/registrations", json=reg_payload)
+    
+    with patch('app.api.assignments.check_piston_available', new_callable=AsyncMock) as mock_piston_check, \
+         patch('app.api.assignments.execute_code', new_callable=AsyncMock) as mock_execute:
+        mock_piston_check.return_value = (True, "OK")
+        mock_execute.return_value = {
+            "stdout": "PASSED: test\n",
+            "stderr": "",
+            "returncode": 0,
+            "grading": {"total_tests": 1, "passed_tests": 1, "total_points": 10, "earned_points": 10}
+        }
+        
+        student_code = "def add(a, b): return a + b"
+        files = {"submission": ("solution.py", student_code.encode(), "text/x-python")}
+        submit_response = client.post(
+            f"/api/v1/assignments/{assignment_data['id']}/submit",
+            data={"student_id": 201},
+            files=files
+        )
+        assert submit_response.status_code == 201
+    
+    # Delete assignment
+    response = client.delete(f"/api/v1/courses/{course_code}/assignments/{assignment_data['id']}")
+    assert response.status_code == 200
+    
+    # Verify test case is gone
+    response = client.get(f"/api/v1/assignments/{assignment_data['id']}/test-cases/{test_case_id}")
+    assert response.status_code == 404
