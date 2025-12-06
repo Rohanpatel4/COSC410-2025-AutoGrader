@@ -514,6 +514,22 @@ int main() {{
     except httpx.TimeoutException:
         raise HTTPException(status_code=504, detail="Code validation timed out")
     except httpx.HTTPStatusError as e:
+        # Check if it's a language/runtime not found error (400 or 404)
+        # Return 400 for unsupported languages instead of 502
+        if e.response.status_code in [400, 404]:
+            error_text = str(e).lower()
+            response_text = ""
+            try:
+                response_text = e.response.text.lower() if e.response.text else ""
+            except:
+                pass
+            # Check both error message and response text for language-related errors
+            if any(keyword in error_text or keyword in response_text 
+                   for keyword in ["runtime", "language", "not found", "unknown", "unsupported"]):
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Unsupported language or version: {language}"
+                )
         raise HTTPException(status_code=502, detail=f"Piston API error: {str(e)}")
     except httpx.ConnectError:
         # Piston is not running - inform the user
