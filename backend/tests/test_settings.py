@@ -82,3 +82,33 @@ class TestSettings:
         """Test debug flag override."""
         settings = Settings(DEBUG=False)
         assert settings.DEBUG is False
+
+    def test_get_default_database_url(self):
+        """Test _get_default_database_url helper function."""
+        from app.core.settings import _get_default_database_url
+        
+        result = _get_default_database_url()
+        
+        assert isinstance(result, str)
+        assert result.startswith("sqlite:///")
+        assert "app.db" in result
+
+    def test_database_url_from_env(self):
+        """Test DATABASE_URL from environment variable."""
+        import os
+        from app.core.settings import Settings
+        
+        # Save original value
+        original = os.environ.get("DATABASE_URL")
+        
+        try:
+            os.environ["DATABASE_URL"] = "postgresql://test:test@localhost/testdb"
+            # Create new settings instance to pick up env var
+            settings = Settings()
+            assert settings.DATABASE_URL == "postgresql://test:test@localhost/testdb"
+        finally:
+            # Restore original
+            if original:
+                os.environ["DATABASE_URL"] = original
+            elif "DATABASE_URL" in os.environ:
+                del os.environ["DATABASE_URL"]
