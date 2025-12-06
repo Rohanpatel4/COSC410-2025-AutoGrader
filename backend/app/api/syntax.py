@@ -261,27 +261,43 @@ fn main() {{
                 check_code = code
         else:
             # For C++, wrap in main if needed
-            # Include cassert so assert() macro is available (faculty write assert statements)
+            # Convert assert to test_assert and define a simple macro for validation
+            # (matching the test harness behavior, but simpler since we only check syntax)
+            cpp_code = code
+            if "assert" in code and "test_assert" not in code:
+                # Convert assert to test_assert (same as test harness)
+                # Handle both assert(...) and assert ... patterns
+                # Replace assert( with test_assert(
+                cpp_code = re.sub(r'\bassert\s*\(', 'test_assert(', cpp_code)
+                # Replace assert  (with space) with test_assert 
+                cpp_code = re.sub(r'\bassert\s+', 'test_assert ', cpp_code)
+            
+            # Define simple test_assert macro for syntax checking (doesn't need to execute)
+            test_assert_macro = "#define test_assert(condition) ((void)(condition))"
+            
             if "int main" not in code and "void main" not in code:
                 check_code = f'''
 #include <iostream>
-#include <cassert>
+{test_assert_macro}
 using namespace std;
 
 int main() {{
-    {code}
+    {cpp_code}
     return 0;
 }}
 '''
             else:
-                # If main already exists, still need to include cassert if assert is used
-                if "assert" in code and "#include" not in code:
-                    check_code = f'''
-#include <cassert>
-{code}
+                # If main already exists, add macro definition if assert/test_assert is used
+                if "assert" in code or "test_assert" in code:
+                    if "#define test_assert" not in code:
+                        check_code = f'''
+{test_assert_macro}
+{cpp_code}
 '''
+                    else:
+                        check_code = cpp_code
                 else:
-                    check_code = code
+                    check_code = cpp_code
         
         # Build request body for Piston
         request_body = {
@@ -341,11 +357,13 @@ int main() {{
                         print(f"[syntax] C++ parsed {len(errors)} errors", flush=True)
                         
                         # Filter out "not declared" errors - student will define these
+                        # Also filter out "test_assert not declared" (shouldn't happen with our macro, but just in case)
                         # Keep only actual syntax errors
                         syntax_errors = [
                             err for err in errors 
                             if "was not declared" not in err.message.lower() 
                             and "not declared" not in err.message.lower()
+                            and "test_assert" not in err.message.lower()
                         ]
                         
                         print(f"[syntax] C++ after filtering 'not declared': {len(syntax_errors)} syntax errors remain", flush=True)
