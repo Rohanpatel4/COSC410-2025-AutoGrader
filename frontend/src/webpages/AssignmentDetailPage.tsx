@@ -51,20 +51,60 @@ export default function AssignmentDetailPage() {
   const [facRows, setFacRows] = React.useState<FacRow[] | null>(null);
   const [facLoading, setFacLoading] = React.useState(false);
   const [facErr, setFacErr] = React.useState<string | null>(null);
-  const [rerunningAll, setRerunningAll] = React.useState(() => {
-    // Check localStorage for ongoing rerun on this assignment
-    const stored = localStorage.getItem(`rerunning_${assignment_id}`);
-    return stored === 'true';
-  });
+  const [rerunningAll, setRerunningAll] = React.useState(false);
 
-  // Effect to persist and poll rerunning state
+  // Poll server to check if rerun is in progress
+  // This runs on mount and continuously polls
   React.useEffect(() => {
-    if (rerunningAll) {
-      localStorage.setItem(`rerunning_${assignment_id}`, 'true');
-    } else {
-      localStorage.removeItem(`rerunning_${assignment_id}`);
-    }
-  }, [rerunningAll, assignment_id]);
+    if (!assignment_id || isStudent) return;
+
+    let timeoutId: NodeJS.Timeout | null = null;
+    let isPolling = true;
+    let wasRerunning = false;
+
+    const pollRerunStatus = async () => {
+      if (!isPolling) return;
+      
+      try {
+        const status = await fetchJson<{ in_progress: boolean; started_at: string | null }>(
+          `/api/v1/assignments/${encodeURIComponent(assignment_id)}/rerun-status`
+        );
+        
+        // Update state based on server status
+        setRerunningAll(status.in_progress);
+        
+        if (status.in_progress) {
+          wasRerunning = true;
+          // Continue polling while rerun is in progress
+          timeoutId = setTimeout(pollRerunStatus, 5000); // Poll every 5 seconds
+        } else {
+          // Rerun completed - refresh grades if we were showing rerunning state
+          if (wasRerunning) {
+            await loadFacRows();
+            wasRerunning = false;
+          }
+          // Continue polling to detect new reruns (poll less frequently when idle)
+          timeoutId = setTimeout(pollRerunStatus, 10000); // Poll every 10 seconds when idle
+        }
+      } catch (e: any) {
+        console.error("Error polling rerun status:", e);
+        // Continue polling even on error (might be temporary)
+        if (isPolling) {
+          timeoutId = setTimeout(pollRerunStatus, 5000);
+        }
+      }
+    };
+
+    // Check immediately on mount - don't wait
+    pollRerunStatus();
+
+    return () => {
+      isPolling = false;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [assignment_id, isStudent]);
 
   async function loadFacRows() {
     if (!assignment_id || isStudent) return;
@@ -87,20 +127,41 @@ export default function AssignmentDetailPage() {
   async function rerunAllStudents() {
     if (!assignment_id || !userId) return;
 
+    // Optimistically set to true - server will confirm via polling
     setRerunningAll(true);
     setFacErr(null);
+    setSubmitMsg(null);
+    
     try {
       const res = await fetchJson<{ message: string; total_submissions: number; total_students: number; results: any[] }>(`/api/v1/assignments/${assignment_id}/rerun-all-students?user_id=${userId}`, {
         method: 'POST'
       });
-      setSubmitMsg(`Successfully reran ${res.total_submissions} attempts across ${res.total_students} students.`);
-
-      // Refresh the faculty data to show updated grades
-      await loadFacRows();
+      
+      // Check if ALL reruns succeeded
+      const allSucceeded = res.results && res.results.every((r: any) => r.success === true);
+      
+      if (!allSucceeded) {
+        // Some reruns failed - backend should have rolled back
+        const failedCount = res.results.filter((r: any) => r.success !== true).length;
+        // Don't set rerunningAll to false here - let polling detect the server cleared it
+        setFacErr(
+          `Rerun failed: ${failedCount} out of ${res.total_submissions} attempts failed. ` +
+          `Transaction was rolled back - no grades were updated.`
+        );
+        setSubmitMsg(null);
+        return;
+      }
+      
+      // All reruns succeeded - polling will detect completion and refresh grades
+      setSubmitMsg(`Reran ${res.total_submissions} attempts across ${res.total_students} students. Waiting for completion...`);
+      // Don't set rerunningAll to false here - let polling detect completion from server
     } catch (e: any) {
-      setFacErr(e?.message ?? "Failed to rerun all student attempts");
-    } finally {
+      // On error, the server should have cleared the rerun status
+      // But set it to false immediately for better UX
       setRerunningAll(false);
+      const errorMessage = e?.message ?? "Failed to rerun all student attempts";
+      setFacErr(errorMessage);
+      setSubmitMsg(null);
     }
   }
 

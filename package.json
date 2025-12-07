@@ -1,4 +1,7 @@
 {
+  "scripts": {
+    "test:coverage": "cd frontend && npm run test:coverage"
+  },
   "dependencies": {
     "react-calendar": "^6.0.0"
   }

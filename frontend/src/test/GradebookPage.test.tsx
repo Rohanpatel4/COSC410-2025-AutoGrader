@@ -50,7 +50,7 @@ describe("GradebookPage", () => {
       http.get("**/api/v1/assignments/gradebook/by-course/:course_id", () =>
         HttpResponse.json({
           course: { id: 1, name: "Test Course", course_code: "COSC-410" },
-          assignments: [{ id: 1, title: "Assignment 1" }],
+          assignments: [{ id: 1, title: "Assignment 1", total_points: 100 }],
           students: [
             {
               student_id: 201,
@@ -66,7 +66,8 @@ describe("GradebookPage", () => {
 
     expect(await screen.findByText(/student1/i)).toBeInTheDocument();
     expect(screen.getByText(/assignment 1/i)).toBeInTheDocument();
-    expect(screen.getByText(/85/i)).toBeInTheDocument();
+    // Grade is displayed as percentage by default (85%)
+    expect(screen.getByText(/85%/i)).toBeInTheDocument();
   });
 
   test("shows error message on API failure", async () => {

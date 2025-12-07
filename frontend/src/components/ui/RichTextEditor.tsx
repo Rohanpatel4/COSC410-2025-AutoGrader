@@ -448,6 +448,7 @@ export default function RichTextEditor({
         codeBlock: false,
         blockquote: false,
         horizontalRule: false,
+        underline: false, // Disable underline in StarterKit since we add it explicitly
         bulletList: {
           HTMLAttributes: { class: 'list-disc pl-5 space-y-1' },
           keepMarks: true,

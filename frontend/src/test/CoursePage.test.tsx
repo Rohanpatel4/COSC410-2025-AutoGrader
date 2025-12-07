@@ -54,7 +54,7 @@ describe("CoursePage", () => {
       http.get("**/api/v1/assignments/gradebook/by-course/:course_id", () =>
         HttpResponse.json({
           course: { id: 1, name: "FirstCourse", course_code: "COSC-410" },
-          assignments: [{ id: 9001, title: "Seeded Assignment" }],
+          assignments: [{ id: 9001, title: "Seeded Assignment", total_points: 100 }],
           students: [
             {
               student_id: 201,
@@ -74,7 +74,8 @@ describe("CoursePage", () => {
 
     expect(await screen.findByRole("columnheader", { name: /Seeded Assignment/i })).toBeInTheDocument();
     expect(screen.getByText(/Student Sam/i)).toBeInTheDocument();
-    expect(screen.getByText(/88/)).toBeInTheDocument();
+    // Grade is displayed as percentage (88%)
+    expect(screen.getByText(/88%/)).toBeInTheDocument();
   });
 
   test("student view hides faculty actions and shows attempts table", async () => {
@@ -85,6 +86,42 @@ describe("CoursePage", () => {
       ],
     };
 
+    // Update assignment to include total_points
+    __testDb.state.assignmentsByCourseTag["500"][0].total_points = 100;
+    __testDb.state.assignmentById[9001].total_points = 100;
+
+    // Mock the student attempts endpoint - CoursePage fetches attempts per assignment
+    server.use(
+      http.get("**/api/v1/assignments/:id/attempts", ({ request, params }) => {
+        const id = Number(params.id);
+        const url = new URL(request.url);
+        const studentId = Number(url.searchParams.get("student_id"));
+        if (id === 9001 && studentId === 201) {
+          return HttpResponse.json([
+            { id: 1, earned_points: 75, grade: 75, created_at: "2025-01-01T10:00:00Z" },
+            { id: 2, earned_points: 90, grade: 90, created_at: "2025-01-02T10:00:00Z" },
+          ]);
+        }
+        return HttpResponse.json([]);
+      }),
+      // Also update assignments endpoint to return total_points
+      http.get("**/api/v1/courses/:course_id/assignments", ({ request, params }) => {
+        const url = new URL(request.url);
+        const studentId = url.searchParams.get("student_id");
+        return HttpResponse.json([{
+          id: 9001,
+          course_id: 1,
+          title: "Seeded Assignment",
+          description: "Warm-up",
+          sub_limit: 3,
+          start: null,
+          stop: null,
+          num_attempts: 0,
+          total_points: 100,
+        }]);
+      })
+    );
+
     renderCoursePage({ role: "student", userId: "201" });
 
     expect(await screen.findByRole("heading", { name: /FirstCourse/i })).toBeInTheDocument();
@@ -92,8 +129,10 @@ describe("CoursePage", () => {
 
     await userEvent.click(screen.getByRole("tab", { name: /grades/i }));
 
-    expect(await screen.findByText(/Best Score/i)).toBeInTheDocument();
+    // Header is "BEST" not "Best Score"
+    expect(await screen.findByText(/BEST/i)).toBeInTheDocument();
     expect(screen.getByText(/Seeded Assignment/i)).toBeInTheDocument();
+    // Look for 90 in the grade display (could be "90/100" or "90%") - multiple instances exist
     expect(screen.getAllByText(/90/).length).toBeGreaterThanOrEqual(1);
   });
 });

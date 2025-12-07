@@ -174,7 +174,7 @@ export default function EditAssignmentPage() {
             );
             setTestCases(testCasesData.map((tc: any, index: number) => ({
               id: tc.id,
-              code: tc.test_code,
+              code: tc.test_code || tc.code || "",
               points: tc.point_value,
               visible: tc.visibility,
               order: index + 1
@@ -884,7 +884,7 @@ export default function EditAssignmentPage() {
             ) : (
               <div className="space-y-6">
                 {testCases.map((testCase, index) => {
-                  const hasEmptyCode = !testCase.code.trim();
+                  const hasEmptyCode = !testCase.code || !testCase.code.trim();
                   const hasSyntaxErrors = syntaxErrors[testCase.id]?.length > 0;
                   const isValidating = validatingSyntax[testCase.id];
                   

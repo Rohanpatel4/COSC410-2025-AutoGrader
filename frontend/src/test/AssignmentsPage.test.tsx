@@ -22,7 +22,7 @@ describe("AssignmentsPage (MSW)", () => {
   });
 
   test("loads assignments and navigates on click", async () => {
-    // Enroll student 201 in course 1 so they can see the assignment
+    // Enroll student 201 in course (tag "500" which maps to course id 1)
     __testDb.state.enrollmentsByStudent[201] = [
       {
         id: 1,
@@ -41,15 +41,22 @@ describe("AssignmentsPage (MSW)", () => {
       { route: "/", auth: { role: "student", userId: "201" } }
     );
 
-    // seeded item shows up
+    // seeded item shows up - wait for it to load
     expect(await screen.findByText("Seeded Assignment")).toBeInTheDocument();
 
-    // click navigates
-    const assignmentLink = screen.getByText("Seeded Assignment").closest('a');
-    await userEvent.click(assignmentLink);
+    // click navigates - find the link or clickable element containing the text
+    const assignmentText = screen.getByText("Seeded Assignment");
+    const assignmentLink = assignmentText.closest('a') || assignmentText.closest('button') || assignmentText;
+    
+    if (assignmentLink && assignmentLink.tagName === 'A') {
+      await userEvent.click(assignmentLink as HTMLElement);
+    } else {
+      // If not a direct link, try clicking the text element itself
+      await userEvent.click(assignmentText);
+    }
     
     // use the seeded id so we don't hardcode it
-    const seeded = __testDb.getAssignments("1")[0]; // first seeded assignment for course "1"
+    const seeded = __testDb.getAssignments("500")[0]; // first seeded assignment for course tag "500"
     const expectedId = seeded.id;
 
     // assert using the real id

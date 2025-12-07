@@ -98,7 +98,7 @@ const seed: DB = {
     "500": [{ id: 201, name: "Student Sam" }],
   },
   assignmentsByCourseTag: {
-    "1": [
+    "500": [
       {
         id: 9001,
         course_id: 1, // tie back to Course.id
@@ -299,6 +299,17 @@ export const handlers = [
     return HttpResponse.json(list, { status: 200 });
   }),
 
+  // GET /api/v1/courses/students/:id (alternative endpoint used by CalendarWidget)
+  http.get("**/api/v1/courses/students/:id", ({ params }) => {
+    const raw = params.id as string;
+    const sid = Number(raw);
+    if (!sid || Number.isNaN(sid)) {
+      return HttpResponse.json({ message: "bad student id" }, { status: 400 });
+    }
+    const list = __db.enrollmentsByStudent[sid] ?? [];
+    return HttpResponse.json(list, { status: 200 });
+  }),
+
   // POST /api/v1/registrations
   // body can be: { student_id, enrollment_key } (preferred)
   // OR legacy:   { student_id, course_id } or { student_id, course_tag }
@@ -379,10 +390,34 @@ export const handlers = [
   }),
 
   // GET /api/v1/courses/:course_id/assignments(?student_id=…)
+  // Supports both course_id (tag), course_code, and numeric course.id
   http.get(COURSE_ASSIGNMENTS_URL, ({ request, params }) => {
-    const tag = String(params.course_id ?? "");
+    const courseIdentifier = String(params.course_id ?? "");
     const url = new URL(request.url);
     const studentId = url.searchParams.get("student_id");
+    
+    // Check if it's a course_code, tag (numeric tag like "500"), or course.id (number like "1")
+    let tag = courseIdentifier;
+    if (!__db.assignmentsByCourseTag[courseIdentifier]) {
+      // Try to find by course_code
+      for (const [t, course] of Object.entries(__db.courseByTag)) {
+        if (course.course_code === courseIdentifier) {
+          tag = t;
+          break;
+        }
+      }
+      // If still not found, try to find by course.id (numeric)
+      if (!__db.assignmentsByCourseTag[tag] && !Number.isNaN(Number(courseIdentifier))) {
+        const courseIdNum = Number(courseIdentifier);
+        for (const [t, course] of Object.entries(__db.courseByTag)) {
+          if (course.id === courseIdNum) {
+            tag = t;
+            break;
+          }
+        }
+      }
+    }
+    
     let list = (__db.assignmentsByCourseTag[tag] ?? []).map((a) => ({ ...a }));
 
     // student-specific view: ensure num_attempts present
@@ -576,6 +611,11 @@ http.get("**/api/v1/assignments/:id/grades", ({ params }) => {
 
     const list = __db.attemptsByAsgStudent[id]?.[sid] ?? [];
     return HttpResponse.json(list, { status: 200 });
+  }),
+
+  // GET /api/v1/assignments/:id/rerun-status
+  http.get("**/api/v1/assignments/:id/rerun-status", () => {
+    return HttpResponse.json({ rerun_active: false }, { status: 200 });
   }),
 
   // POST /api/v1/assignments/:id/submit  (multipart)

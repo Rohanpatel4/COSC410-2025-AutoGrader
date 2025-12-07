@@ -398,6 +398,7 @@ export default function InstructionsManager({
     editable: !readOnly && !disabled,
     extensions: [
       StarterKit.configure({
+        underline: false, // Disable underline in StarterKit since we add it explicitly
         bulletList: {
           HTMLAttributes: { class: readOnly ? 'list-disc pl-5 space-y-1.5 marker:text-primary' : 'list-disc pl-5 space-y-1' },
           keepMarks: true,
