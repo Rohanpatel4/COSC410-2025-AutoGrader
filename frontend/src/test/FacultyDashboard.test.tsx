@@ -85,4 +85,209 @@ describe("FacultyDashboard", () => {
     await userEvent.click(viewAll);
     expect(await screen.findByText(/COURSES INDEX/i)).toBeInTheDocument();
   });
+
+  test("displays course statistics and enrollment", async () => {
+    server.use(
+      http.get("**/api/v1/faculty/301/courses", () =>
+        HttpResponse.json([
+          {
+            id: 1,
+            course_code: "COSC-410",
+            name: "FirstCourse",
+            description: "seed",
+            professor_id: 301,
+            enrollment_key: "ABC123XYZ789",
+          },
+          {
+            id: 2,
+            course_code: "MATH-201",
+            name: "Advanced Mathematics",
+            description: "Linear Algebra",
+            professor_id: 301,
+            enrollment_key: "XYZ789ABC123",
+          }
+        ])
+      )
+    );
+
+    renderFacultyDashboard();
+
+    expect(await screen.findByText("COSC-410")).toBeInTheDocument();
+    expect(screen.getByText("FirstCourse")).toBeInTheDocument();
+    expect(screen.getByText("MATH-201")).toBeInTheDocument();
+    expect(screen.getByText("Advanced Mathematics")).toBeInTheDocument();
+  });
+
+  test("handles course navigation correctly", async () => {
+    server.use(
+      http.get("**/api/v1/faculty/301/courses", () =>
+        HttpResponse.json([
+          {
+            id: 1,
+            course_code: "COSC-410",
+            name: "FirstCourse",
+            description: "seed",
+            professor_id: 301,
+          }
+        ])
+      )
+    );
+
+    renderFacultyDashboard();
+
+    await screen.findByText("COSC-410");
+
+    const courseTile = screen.getByText("COSC-410").closest('div');
+    await userEvent.click(courseTile!);
+
+    expect(await screen.findByText(/COURSE PAGE COSC-410/i)).toBeInTheDocument();
+  });
+
+  test("shows course creation navigation", async () => {
+    renderFacultyDashboard();
+
+    await screen.findByText("Create Course");
+
+    const createButton = screen.getByText("Create Course");
+    expect(createButton).toBeInTheDocument();
+
+    // Should be clickable (though we don't test navigation in this test)
+    expect(createButton.tagName.toLowerCase()).toBe('button');
+  });
+
+  test("handles empty course list", async () => {
+    server.use(
+      http.get("**/api/v1/faculty/301/courses", () =>
+        HttpResponse.json([])
+      )
+    );
+
+    renderFacultyDashboard();
+
+    await screen.findByText(/Course Overview/i);
+
+    // Should show empty state or no courses message
+    expect(screen.getByText(/Course Overview/i)).toBeInTheDocument();
+  });
+
+  test("handles course loading errors gracefully", async () => {
+    server.use(
+      http.get("**/api/v1/faculty/301/courses", () =>
+        HttpResponse.json({ detail: "Database connection failed" }, { status: 500 })
+      )
+    );
+
+    renderFacultyDashboard();
+
+    // Should handle error gracefully
+    expect(await screen.findByText(/Course Overview/i)).toBeInTheDocument();
+  });
+
+  test("displays multiple courses with different enrollment keys", async () => {
+    server.use(
+      http.get("**/api/v1/faculty/301/courses", () =>
+        HttpResponse.json([
+          {
+            id: 1,
+            course_code: "COSC-410",
+            name: "Computer Science 410",
+            description: "Advanced programming",
+            professor_id: 301,
+            enrollment_key: "ABC123XYZ789",
+          },
+          {
+            id: 2,
+            course_code: "COSC-411",
+            name: "Computer Science 411",
+            description: "Software engineering",
+            professor_id: 301,
+            enrollment_key: "XYZ789ABC123",
+          }
+        ])
+      )
+    );
+
+    renderFacultyDashboard();
+
+    await screen.findByText("COSC-410");
+
+    expect(screen.getByText("Computer Science 410")).toBeInTheDocument();
+    expect(screen.getByText("COSC-411")).toBeInTheDocument();
+    expect(screen.getByText("Computer Science 411")).toBeInTheDocument();
+  });
+
+  test("maintains dashboard layout and navigation", async () => {
+    server.use(
+      http.get("**/api/v1/faculty/301/courses", () =>
+        HttpResponse.json([
+          {
+            id: 1,
+            course_code: "COSC-410",
+            name: "FirstCourse",
+            description: "seed",
+            professor_id: 301,
+          }
+        ])
+      )
+    );
+
+    renderFacultyDashboard();
+
+    await screen.findByText("COSC-410");
+
+    // Dashboard should maintain its structure
+    expect(screen.getByText("Create Course")).toBeInTheDocument();
+    expect(screen.getByText(/Course Overview/i)).toBeInTheDocument();
+  });
+
+  test("handles course click navigation errors", async () => {
+    server.use(
+      http.get("**/api/v1/faculty/301/courses", () =>
+        HttpResponse.json([
+          {
+            id: 1,
+            course_code: "COSC-410",
+            name: "FirstCourse",
+            description: "seed",
+            professor_id: 301,
+          }
+        ])
+      )
+    );
+
+    renderFacultyDashboard();
+
+    await screen.findByText("COSC-410");
+
+    // Navigation should work
+    const courseTile = screen.getByText("COSC-410").closest('div');
+    await userEvent.click(courseTile!);
+
+    expect(await screen.findByText(/COURSE PAGE COSC-410/i)).toBeInTheDocument();
+  });
+
+  test("shows course enrollment information", async () => {
+    server.use(
+      http.get("**/api/v1/faculty/301/courses", () =>
+        HttpResponse.json([
+          {
+            id: 1,
+            course_code: "COSC-410",
+            name: "Computer Science 410",
+            description: "Advanced programming course",
+            professor_id: 301,
+            enrollment_key: "SECURE123KEY",
+          }
+        ])
+      )
+    );
+
+    renderFacultyDashboard();
+
+    await screen.findByText("COSC-410");
+
+    // Should display course details
+    expect(screen.getByText("Computer Science 410")).toBeInTheDocument();
+    expect(screen.getByText("Advanced programming course")).toBeInTheDocument();
+  });
 });

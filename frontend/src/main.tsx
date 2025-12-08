@@ -25,7 +25,7 @@ import { Button } from "./components/ui/Button";
 import { useNavigate } from "react-router-dom";
 import { Plus, BookOpen } from "lucide-react";
 
-function AssignmentDetailPageWrapper() {
+export function AssignmentDetailPageWrapper() {
   const { role } = useAuth();
   const isStudent = role === "student";
 
@@ -46,7 +46,7 @@ function AssignmentDetailPageWrapper() {
   );
 }
 
-function CoursesLayoutWrapper() {
+export function CoursesLayoutWrapper() {
   const navigate = useNavigate();
   const { role } = useAuth();
   const isFaculty = role === "faculty";
@@ -83,7 +83,7 @@ function CoursesLayoutWrapper() {
   );
 }
 
-function RoleRouter() {
+export function RoleRouter() {
   const location = useLocation();
   const { role } = useAuth();
   const stateRole = (location.state as { role?: "faculty" | "student" } | undefined)?.role;
@@ -107,7 +107,7 @@ function RoleRouter() {
 }
 
 // Root route that redirects based on auth state
-function RootRoute() {
+export function RootRoute() {
   const { role } = useAuth();
   const location = useLocation();
   
@@ -127,7 +127,7 @@ function RootRoute() {
   return null;
 }
 
-function AppRouter() {
+export function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
@@ -278,7 +278,7 @@ function AppRouter() {
 }
 
 // Catch-all route that redirects based on auth state
-function CatchAllRoute() {
+export function CatchAllRoute() {
   const { role } = useAuth();
   
   // If authenticated, redirect to dashboard

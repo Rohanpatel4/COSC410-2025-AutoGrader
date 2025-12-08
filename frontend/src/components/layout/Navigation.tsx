@@ -46,6 +46,7 @@ export function Navigation() {
         <div
           className="fixed inset-0 z-30 bg-foreground/40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
+          data-testid="mobile-backdrop"
         ></div>
       )}
 
@@ -102,6 +103,7 @@ export function Navigation() {
               size="sm"
               className="lg:hidden"
               onClick={() => setSidebarOpen(true)}
+              aria-label="Open sidebar"
             >
               <Menu className="h-5 w-5" />
             </Button>
@@ -119,6 +121,7 @@ export function Navigation() {
               size="sm"
               onClick={handleLogout}
               className="text-muted-foreground hover:text-foreground"
+              aria-label="Logout"
             >
               <LogOut className="h-4 w-4" />
             </Button>

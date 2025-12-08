@@ -1,5 +1,5 @@
 export function formatGradeDisplay(value: number | string | null | undefined): string {
-  if (value === null || value === undefined) {
+  if (value === null || value === undefined || value === "") {
     return "—";
   }
 

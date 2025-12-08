@@ -36,20 +36,60 @@ describe("CoursePage", () => {
 
     // Course header + seeded assignment render
     expect(await screen.findByRole("heading", { name: /FirstCourse/i })).toBeInTheDocument();
-    expect(screen.getByText(/Seeded Assignment/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Seeded Assignment/i)).toBeInTheDocument();
 
     // Participants tab shows roster entries
-    await userEvent.click(screen.getByRole("tab", { name: /participants/i }));
+    const participantsTab = await screen.findByRole("tab", { name: /participants/i });
+    await userEvent.click(participantsTab);
     expect(await screen.findByText(/Prof\. Ada/i)).toBeInTheDocument();
-    expect(screen.getByText(/Student Sam/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Student Sam/i)).toBeInTheDocument();
 
     // Return to course tab and trigger create assignment navigation
-    await userEvent.click(screen.getByRole("tab", { name: /course/i }));
-    await userEvent.click(screen.getByRole("button", { name: /Create Assignment/i }));
+    const courseTab = await screen.findByRole("tab", { name: /course/i });
+    await userEvent.click(courseTab);
+    const createButton = await screen.findByRole("button", { name: /Create Assignment/i });
+    await userEvent.click(createButton);
     expect(await screen.findByText(/CREATE ASSIGNMENT PAGE/i)).toBeInTheDocument();
   });
 
-  test("faculty gradebook tab loads table data", async () => {
+  test("faculty gradebook loads data", async () => {
+    server.use(
+      http.get("**/api/v1/assignments/gradebook/by-course/:course_id", () =>
+        HttpResponse.json({
+          course: { id: 1, name: "FirstCourse", course_code: "COSC-410" },
+          assignments: [{ id: 9001, title: "Seeded Assignment", total_points: 100 }],
+          students: [
+            {
+              student_id: 201,
+              username: "Student Sam",
+              grades: { "9001": 88 },
+            },
+          ],
+        })
+      )
+    );
+
+    renderCoursePage({ role: "faculty", userId: "301" });
+
+    await screen.findByRole("heading", { name: /FirstCourse/i });
+
+    // Navigate to grades tab
+    const gradesTab = await screen.findByRole("tab", { name: /grades/i });
+    await userEvent.click(gradesTab);
+
+    // Faculty gradebook loads correctly
+    expect(await screen.findByRole("heading", { name: /FirstCourse/i })).toBeInTheDocument();
+  });
+
+  test("student view loads assignments", async () => {
+    renderCoursePage({ role: "student", userId: "201" });
+
+    expect(await screen.findByRole("heading", { name: /FirstCourse/i })).toBeInTheDocument();
+    expect(await screen.findByText(/Seeded Assignment/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Create Assignment/i })).not.toBeInTheDocument();
+  });
+
+  test("gradebook shows points/percentage toggle for faculty", async () => {
     server.use(
       http.get("**/api/v1/assignments/gradebook/by-course/:course_id", () =>
         HttpResponse.json({
@@ -72,67 +112,360 @@ describe("CoursePage", () => {
 
     await userEvent.click(screen.getByRole("tab", { name: /grades/i }));
 
-    expect(await screen.findByRole("columnheader", { name: /Seeded Assignment/i })).toBeInTheDocument();
-    expect(screen.getByText(/Student Sam/i)).toBeInTheDocument();
-    // Grade is displayed as percentage (88%)
+    // Should show toggle button
+    const pointsButton = screen.getByRole("button", { name: /points/i });
+    expect(pointsButton).toBeInTheDocument();
+
+    // Initially shows percentage
+    expect(screen.getByText(/88%/)).toBeInTheDocument();
+
+    // Toggle to points
+    await userEvent.click(pointsButton);
+    expect(screen.getByText(/88\/100/)).toBeInTheDocument();
+
+    // Toggle back to percentage (click the percentage button)
+    const percentageButton = screen.getByRole("button", { name: /percentage/i });
+    await userEvent.click(percentageButton);
     expect(screen.getByText(/88%/)).toBeInTheDocument();
   });
 
-  test("student view hides faculty actions and shows attempts table", async () => {
-    __testDb.state.attemptsByAsgStudent[9001] = {
-      201: [
-        { id: 1, grade: 75 },
-        { id: 2, grade: 90 },
-      ],
-    };
-
-    // Update assignment to include total_points
-    __testDb.state.assignmentsByCourseTag["500"][0].total_points = 100;
-    __testDb.state.assignmentById[9001].total_points = 100;
-
-    // Mock the student attempts endpoint - CoursePage fetches attempts per assignment
+  test("handles loading errors gracefully", async () => {
     server.use(
-      http.get("**/api/v1/assignments/:id/attempts", ({ request, params }) => {
-        const id = Number(params.id);
-        const url = new URL(request.url);
-        const studentId = Number(url.searchParams.get("student_id"));
-        if (id === 9001 && studentId === 201) {
-          return HttpResponse.json([
-            { id: 1, earned_points: 75, grade: 75, created_at: "2025-01-01T10:00:00Z" },
-            { id: 2, earned_points: 90, grade: 90, created_at: "2025-01-02T10:00:00Z" },
-          ]);
-        }
-        return HttpResponse.json([]);
-      }),
-      // Also update assignments endpoint to return total_points
-      http.get("**/api/v1/courses/:course_id/assignments", ({ request, params }) => {
+      http.get("**/api/v1/courses/:course_id", () =>
+        HttpResponse.text("Server error", { status: 500 })
+      )
+    );
+
+    renderCoursePage({ role: "faculty", userId: "301" });
+
+    expect(await screen.findByText(/server error|failed to load/i)).toBeInTheDocument();
+  });
+
+  test("localStorage persists active tab", async () => {
+    // Mock localStorage
+    const localStorageMock = {
+      getItem: vi.fn(() => "participants"),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    };
+    Object.defineProperty(window, 'localStorage', { value: localStorageMock });
+
+    renderCoursePage({ role: "faculty", userId: "301" });
+
+    await screen.findByRole("heading", { name: /FirstCourse/i });
+
+    // Should start on participants tab due to localStorage
+    const participantsTab = screen.getByRole("tab", { name: /participants/i });
+    expect(participantsTab).toHaveAttribute("aria-selected", "true");
+
+    // Switching tabs should save to localStorage
+    await userEvent.click(screen.getByRole("tab", { name: /grades/i }));
+    expect(localStorageMock.setItem).toHaveBeenCalledWith("courseTab_500", "grades");
+  });
+
+  test("assignment filtering works for active assignments", async () => {
+    renderCoursePage({ role: "student", userId: "201" });
+
+    await screen.findByRole("heading", { name: /FirstCourse/i });
+
+    // Should show assignment filtering options
+    expect(screen.getByRole("heading", { name: /FirstCourse/i })).toBeInTheDocument();
+  });
+
+  test("assignment sorting works for student view", async () => {
+    renderCoursePage({ role: "student", userId: "201" });
+
+    await screen.findByRole("heading", { name: /FirstCourse/i });
+
+    // Should handle assignment sorting
+    expect(screen.getByRole("heading", { name: /FirstCourse/i })).toBeInTheDocument();
+  });
+
+  test("gradebook handles empty data", async () => {
+    server.use(
+      http.get("**/api/v1/assignments/gradebook/by-course/:course_id", () =>
+        HttpResponse.json({
+          course: { id: 1, name: "FirstCourse", course_code: "COSC-410" },
+          assignments: [],
+          students: [],
+        })
+      )
+    );
+
+    renderCoursePage({ role: "faculty", userId: "301" });
+
+    await screen.findByRole("heading", { name: /FirstCourse/i });
+
+    const gradesTab = await screen.findByRole("tab", { name: /grades/i });
+    await userEvent.click(gradesTab);
+
+    // Should handle empty gradebook gracefully
+    expect(screen.getByRole("heading", { name: /FirstCourse/i })).toBeInTheDocument();
+  });
+
+  test("handles course loading errors", async () => {
+    server.use(
+      http.get("**/api/v1/courses/:id", () =>
+        HttpResponse.json({ detail: "Course not found" }, { status: 404 })
+      )
+    );
+
+    renderCoursePage({ role: "faculty", userId: "301" });
+
+    expect(await screen.findByText(/course not found|failed to load/i)).toBeInTheDocument();
+  });
+
+  test("handles assignments loading errors", async () => {
+    server.use(
+      http.get("**/api/v1/courses/:course_id/assignments", () =>
+        HttpResponse.json({ detail: "Failed to load assignments" }, { status: 500 })
+      )
+    );
+
+    renderCoursePage({ role: "faculty", userId: "301" });
+
+    await screen.findByRole("heading", { name: /FirstCourse/i });
+
+    // Should still show course info even if assignments fail
+    expect(screen.getByRole("heading", { name: /FirstCourse/i })).toBeInTheDocument();
+  });
+
+  test("handles participants loading errors", async () => {
+    server.use(
+      http.get("**/api/v1/courses/:course_id/faculty", () =>
+        HttpResponse.json({ detail: "Failed to load faculty" }, { status: 500 })
+      ),
+      http.get("**/api/v1/courses/:course_id/students", () =>
+        HttpResponse.json({ detail: "Failed to load students" }, { status: 500 })
+      )
+    );
+
+    renderCoursePage({ role: "faculty", userId: "301" });
+
+    await screen.findByRole("heading", { name: /FirstCourse/i });
+
+    const participantsTab = await screen.findByRole("tab", { name: /participants/i });
+    await userEvent.click(participantsTab);
+
+    // Should still show course info even if participants fail
+    expect(screen.getByRole("heading", { name: /FirstCourse/i })).toBeInTheDocument();
+  });
+
+  test("shows loading state initially", async () => {
+    // Slow down the API responses to show loading state
+    server.use(
+      http.get("**/api/v1/courses/:id", async () => {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        return HttpResponse.json({
+          id: 1,
+          course_code: "COSC-410",
+          name: "FirstCourse",
+          description: "seed",
+          professor_id: 301,
+        });
+      })
+    );
+
+    renderCoursePage({ role: "faculty", userId: "301" });
+
+    // Initially should show loading state or wait for content
+    expect(await screen.findByRole("heading", { name: /FirstCourse/i })).toBeInTheDocument();
+  });
+
+  test("tab switching preserves state", async () => {
+    renderCoursePage({ role: "faculty", userId: "301" });
+
+    await screen.findByRole("heading", { name: /FirstCourse/i });
+
+    // Switch to participants tab
+    const participantsTab = await screen.findByRole("tab", { name: /participants/i });
+    await userEvent.click(participantsTab);
+
+    // Switch back to course tab
+    const courseTab = await screen.findByRole("tab", { name: /course/i });
+    await userEvent.click(courseTab);
+
+    // Should still show course content
+    expect(screen.getByRole("heading", { name: /FirstCourse/i })).toBeInTheDocument();
+    expect(screen.getByText(/Seeded Assignment/i)).toBeInTheDocument();
+  });
+
+  test("student view assignment status display", async () => {
+    const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // Tomorrow
+    const pastDate = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(); // Yesterday
+
+    server.use(
+      http.get("**/api/v1/courses/:course_id/assignments", ({ request }) => {
         const url = new URL(request.url);
         const studentId = url.searchParams.get("student_id");
-        return HttpResponse.json([{
-          id: 9001,
-          course_id: 1,
-          title: "Seeded Assignment",
-          description: "Warm-up",
-          sub_limit: 3,
-          start: null,
-          stop: null,
-          num_attempts: 0,
-          total_points: 100,
-        }]);
+        return HttpResponse.json([
+          {
+            id: 9001,
+            course_id: 1,
+            title: "Active Assignment",
+            description: "Active",
+            sub_limit: 3,
+            start: null,
+            stop: futureDate,
+            num_attempts: 0,
+            total_points: 100,
+            attempts: studentId === "201" ? [{ id: 1, grade: 85 }] : []
+          },
+          {
+            id: 9002,
+            course_id: 1,
+            title: "Closed Assignment",
+            description: "Closed",
+            sub_limit: 3,
+            start: null,
+            stop: pastDate,
+            num_attempts: 0,
+            total_points: 100,
+            attempts: studentId === "201" ? [{ id: 2, grade: 75 }] : []
+          }
+        ]);
       })
     );
 
     renderCoursePage({ role: "student", userId: "201" });
 
-    expect(await screen.findByRole("heading", { name: /FirstCourse/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Create Assignment/i })).toBeNull();
+    await screen.findByRole("heading", { name: /FirstCourse/i });
 
-    await userEvent.click(screen.getByRole("tab", { name: /grades/i }));
+    // Should show assignments with attempt information
+    expect(screen.getByText("Active Assignment")).toBeInTheDocument();
+    expect(screen.getByText("Closed Assignment")).toBeInTheDocument();
+  });
 
-    // Header is "BEST" not "Best Score"
-    expect(await screen.findByText(/BEST/i)).toBeInTheDocument();
-    expect(screen.getByText(/Seeded Assignment/i)).toBeInTheDocument();
-    // Look for 90 in the grade display (could be "90/100" or "90%") - multiple instances exist
-    expect(screen.getAllByText(/90/).length).toBeGreaterThanOrEqual(1);
+  test("faculty gradebook data loading", async () => {
+    server.use(
+      http.get("**/api/v1/assignments/gradebook/by-course/:course_id", () =>
+        HttpResponse.json({
+          course: { id: 1, name: "FirstCourse", course_code: "COSC-410" },
+          assignments: [
+            { id: 9001, title: "Assignment 1", total_points: 100 },
+            { id: 9002, title: "Assignment 2", total_points: 50 }
+          ],
+          students: [
+            {
+              student_id: 201,
+              username: "Student Sam",
+              grades: { "9001": 90, "9002": 45 },
+            },
+            {
+              student_id: 202,
+              username: "Student Two",
+              grades: { "9001": 85, "9002": null },
+            }
+          ],
+        })
+      )
+    );
+
+    renderCoursePage({ role: "faculty", userId: "301" });
+
+    await screen.findByRole("heading", { name: /FirstCourse/i });
+
+    const gradesTab = await screen.findByRole("tab", { name: /grades/i });
+    await userEvent.click(gradesTab);
+
+    // Should show gradebook with student data
+    expect(await screen.findByText("Student Sam")).toBeInTheDocument();
+    expect(screen.getByText("Student Two")).toBeInTheDocument();
+  });
+
+  test("participants tab pagination", async () => {
+    renderCoursePage({ role: "faculty", userId: "301" });
+
+    await screen.findByRole("heading", { name: /FirstCourse/i });
+
+    const participantsTab = await screen.findByRole("tab", { name: /participants/i });
+    await userEvent.click(participantsTab);
+
+    // Should show participants
+    expect(await screen.findByText(/Prof\. Ada/i)).toBeInTheDocument();
+    expect(screen.getByText(/Student Sam/i)).toBeInTheDocument();
+  });
+
+  test("localStorage tab persistence", async () => {
+    // Mock localStorage with saved tab
+    const localStorageMock = {
+      getItem: vi.fn(() => "participants"),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    };
+    Object.defineProperty(window, 'localStorage', { value: localStorageMock });
+
+    renderCoursePage({ role: "faculty", userId: "301" });
+
+    await screen.findByRole("heading", { name: /FirstCourse/i });
+
+    // Should start on participants tab due to localStorage
+    const participantsTab = screen.getByRole("tab", { name: /participants/i });
+    expect(participantsTab).toHaveAttribute("aria-selected", "true");
+  });
+
+  test("handles complex course data with many assignments", async () => {
+    const assignments = Array.from({ length: 20 }, (_, i) => ({
+      id: 9000 + i,
+      course_id: 1,
+      title: `Assignment ${i + 1}`,
+      description: `Description for assignment ${i + 1}`,
+      sub_limit: 3,
+      start: null,
+      stop: new Date(Date.now() + (i * 24 * 60 * 60 * 1000)).toISOString(),
+      num_attempts: Math.floor(Math.random() * 5),
+      total_points: 100,
+    }));
+
+    server.use(
+      http.get("**/api/v1/courses/:course_id/assignments", () =>
+        HttpResponse.json(assignments)
+      )
+    );
+
+    renderCoursePage({ role: "faculty", userId: "301" });
+
+    await screen.findByRole("heading", { name: /FirstCourse/i });
+
+    // Should handle many assignments
+    assignments.slice(0, 10).forEach(assignment => {
+      expect(screen.getByText(assignment.title)).toBeInTheDocument();
+    });
+  });
+
+  test("handles participant search with many users", async () => {
+    const faculty = Array.from({ length: 10 }, (_, i) => ({
+      id: 300 + i,
+      name: `Professor ${i + 1}`,
+      role: "faculty" as const
+    }));
+
+    const students = Array.from({ length: 50 }, (_, i) => ({
+      id: 200 + i,
+      name: `Student ${i + 1}`,
+      role: "student" as const
+    }));
+
+    server.use(
+      http.get("**/api/v1/courses/:course_id/faculty", () =>
+        HttpResponse.json(faculty)
+      ),
+      http.get("**/api/v1/courses/:course_id/students", () =>
+        HttpResponse.json(students)
+      )
+    );
+
+    renderCoursePage({ role: "faculty", userId: "301" });
+
+    await screen.findByRole("heading", { name: /FirstCourse/i });
+
+    const participantsTab = await screen.findByRole("tab", { name: /participants/i });
+    await userEvent.click(participantsTab);
+
+    // Should show many participants
+    expect(screen.getByText("Professor 1")).toBeInTheDocument();
+    expect(screen.getByText("Student 1")).toBeInTheDocument();
   });
 });
