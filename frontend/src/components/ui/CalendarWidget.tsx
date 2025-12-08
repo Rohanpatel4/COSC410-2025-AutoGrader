@@ -289,7 +289,7 @@ export default function CalendarWidget({ studentId }: CalendarWidgetProps) {
         </div>
 
         {/* Calendar Days - Fixed height grid */}
-        <div className="grid grid-cols-7 gap-1">
+        <div className="grid grid-cols-7 gap-2 relative" style={{ isolation: 'isolate' }}>
           {getTwoWeeksDays().map((date) => {
             const isToday = date.toDateString() === new Date().toDateString();
             const isSelected = date.toDateString() === selectedDate.toDateString();
@@ -302,27 +302,51 @@ export default function CalendarWidget({ studentId }: CalendarWidgetProps) {
             const allAssignments = getAllAssignmentsForDate(date);
             const hadPastAssignments = isPast && allAssignments.length > 0;
 
+            let baseClasses = 'h-8 flex items-center justify-center rounded text-[11px] relative overflow-hidden';
+            let conditionalClasses = '';
+            let zIndexClass = 'z-0 hover:z-[10]';
+            // Different transition speeds: faster for deselection, normal for selection
+            let transitionClass = isSelected 
+              ? 'transition-[background-color,color] duration-250 ease-out'
+              : 'transition-[background-color,color] duration-150 ease-in';
+
+            if (isSelected) {
+              conditionalClasses = 'bg-primary text-primary-foreground hover:bg-primary/90 font-medium';
+              zIndexClass = 'z-[20]';
+            } else if (isToday) {
+              conditionalClasses = 'text-accent font-bold hover:bg-muted';
+            } else if (hasFutureAssignments) {
+              conditionalClasses = hasIncomplete
+                ? 'text-amber-400 hover:bg-muted font-medium'
+                : 'text-emerald-400 hover:bg-muted font-medium';
+            } else if (hadPastAssignments) {
+              conditionalClasses = 'text-muted-foreground hover:bg-muted font-medium';
+            } else if (isPast) {
+              conditionalClasses = 'text-muted-foreground/50 hover:bg-muted/50 font-medium';
+            } else {
+              conditionalClasses = 'text-foreground hover:bg-muted font-medium';
+            }
+
             return (
               <button
                 key={date.toISOString()}
                 onClick={() => setSelectedDate(date)}
-                className={`
-                  w-full h-8 flex items-center justify-center rounded text-[11px] transition-colors relative
-                  ${isSelected
-                    ? 'bg-primary text-primary-foreground hover:bg-primary/90 font-medium'
-                    : isToday
-                      ? 'text-accent font-bold hover:bg-muted'
-                      : hasFutureAssignments
-                        ? hasIncomplete
-                          ? 'text-amber-400 hover:bg-muted font-medium'
-                          : 'text-emerald-400 hover:bg-muted font-medium'
-                        : hadPastAssignments
-                          ? 'text-muted-foreground hover:bg-muted font-medium'
-                          : isPast
-                            ? 'text-muted-foreground/50 hover:bg-muted/50 font-medium'
-                            : 'text-foreground hover:bg-muted font-medium'
-                  }
-                `}
+                className={`${baseClasses} ${transitionClass} ${conditionalClasses} ${zIndexClass}`}
+                style={{
+                  // Force immediate z-index update to prevent visual overlap
+                  zIndex: isSelected ? 20 : 0,
+                  position: 'relative',
+                  // Ensure no border or outline that could cause visual width increase
+                  border: 'none',
+                  outline: 'none',
+                  // Set width explicitly to prevent overlap - use fixed smaller width (28px)
+                  width: '28px',
+                  maxWidth: '28px',
+                  minWidth: '28px',
+                  margin: '0 auto',
+                  padding: '0',
+                  boxSizing: 'border-box',
+                } as React.CSSProperties}
               >
                 {date.getDate()}
               </button>
