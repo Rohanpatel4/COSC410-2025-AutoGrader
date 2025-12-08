@@ -427,6 +427,95 @@ export const handlers = [
     return HttpResponse.json(list, { status: 200 });
   }),
 
+  // GET /api/v1/assignments/gradebook/by-course/:course_id
+  http.get("**/api/v1/assignments/gradebook/by-course/:course_id", ({ params }) => {
+    const courseId = String(params.course_id ?? "");
+    
+    // Find course by tag, course_code, or course.id
+    let course = __db.courseByTag[courseId];
+    if (!course) {
+      // Try to find by course_code
+      for (const [tag, c] of Object.entries(__db.courseByTag)) {
+        if (c.course_code === courseId) {
+          course = c;
+          break;
+        }
+      }
+      // Try to find by numeric course.id
+      if (!course && !Number.isNaN(Number(courseId))) {
+        const courseIdNum = Number(courseId);
+        for (const [tag, c] of Object.entries(__db.courseByTag)) {
+          if (c.id === courseIdNum) {
+            course = c;
+            break;
+          }
+        }
+      }
+    }
+    
+    if (!course) {
+      return HttpResponse.json({ message: "course not found" }, { status: 404 });
+    }
+    
+    // Find the tag for this course
+    let tag = courseId;
+    for (const [t, c] of Object.entries(__db.courseByTag)) {
+      if (c.id === course.id) {
+        tag = t;
+        break;
+      }
+    }
+    
+    // Get assignments for this course
+    const assignments = (__db.assignmentsByCourseTag[tag] ?? []).map(a => ({
+      id: a.id,
+      title: a.title,
+      total_points: 100, // Default total points
+    }));
+    
+    // Get students for this course
+    const roster = __db.studentsByCourseTag[tag] ?? [];
+    
+    // Build students with grades
+    const students = roster.map(student => {
+      const grades: Record<string, number | null> = {};
+      
+      // For each assignment, find the best grade for this student
+      assignments.forEach(assignment => {
+        const attempts = __db.attemptsByAsgStudent[assignment.id]?.[student.id] ?? [];
+        if (attempts.length > 0) {
+          // Get the best grade (highest non-null grade)
+          const bestAttempt = attempts
+            .filter(a => a.grade != null)
+            .reduce((best, current) => {
+              return (current.grade ?? 0) > (best.grade ?? 0) ? current : best;
+            }, attempts[0]);
+          grades[String(assignment.id)] = bestAttempt?.grade ?? null;
+        } else {
+          grades[String(assignment.id)] = null;
+        }
+      });
+      
+      return {
+        student_id: student.id,
+        username: student.name ?? String(student.id),
+        grades,
+      };
+    });
+    
+    const payload = {
+      course: {
+        id: course.id,
+        name: course.name,
+        course_code: course.course_code,
+      },
+      assignments,
+      students,
+    };
+    
+    return HttpResponse.json(payload, { status: 200 });
+  }),
+
   // GET /api/v1/assignments/:id/grades  (faculty view)
 http.get("**/api/v1/assignments/:id/grades", ({ params }) => {
   const id = Number(params.id);

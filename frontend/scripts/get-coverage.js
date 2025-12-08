@@ -25,19 +25,42 @@ function getTotalLinesInFile(filePath) {
 }
 
 function calculateFileCoverage(fileData, fullPath = null) {
+  // Handle both object and array formats for coverage data
+  const getCoveredCount = (coverageData) => {
+    if (!coverageData) return 0;
+    if (Array.isArray(coverageData)) {
+      return coverageData.filter(count => count > 0).length;
+    }
+    if (typeof coverageData === 'object') {
+      return Object.values(coverageData).filter(count => count > 0).length;
+    }
+    return 0;
+  };
+  
+  const getTotalCount = (mapData) => {
+    if (!mapData) return 0;
+    if (Array.isArray(mapData)) {
+      return mapData.length;
+    }
+    if (typeof mapData === 'object') {
+      return Object.keys(mapData).length;
+    }
+    return 0;
+  };
+  
   const statements = {
-    covered: fileData.s ? Object.values(fileData.s).filter(count => count > 0).length : 0,
-    total: fileData.statementMap ? Object.keys(fileData.statementMap).length : 0
+    covered: getCoveredCount(fileData.s),
+    total: getTotalCount(fileData.statementMap)
   };
   
   const branches = {
-    covered: fileData.b ? Object.values(fileData.b).filter(count => count > 0).length : 0,
-    total: fileData.branchMap ? Object.keys(fileData.branchMap).length : 0
+    covered: getCoveredCount(fileData.b),
+    total: getTotalCount(fileData.branchMap)
   };
   
   const functions = {
-    covered: fileData.f ? Object.values(fileData.f).filter(count => count > 0).length : 0,
-    total: fileData.fnMap ? Object.keys(fileData.fnMap).length : 0
+    covered: getCoveredCount(fileData.f),
+    total: getTotalCount(fileData.fnMap)
   };
   
   // Calculate actual line coverage from statementMap
@@ -46,22 +69,40 @@ function calculateFileCoverage(fileData, fullPath = null) {
   const statementMap = fileData.statementMap || {};
   const statementCounts = fileData.s || {};
   
+  // Handle both object and array formats
+  const getStatementCount = (stmtId) => {
+    if (Array.isArray(statementCounts)) {
+      return statementCounts[parseInt(stmtId) - 1] || 0;
+    }
+    if (typeof statementCounts === 'object') {
+      return statementCounts[stmtId] || 0;
+    }
+    return 0;
+  };
+  
   // Collect all unique line numbers that have executable statements
   const lineCoverage = new Map(); // line number -> has coverage
   
-  Object.keys(statementMap).forEach(stmtId => {
-    const stmt = statementMap[stmtId];
-    const count = statementCounts[stmtId] || 0;
+  const stmtMapKeys = Array.isArray(statementMap) 
+    ? statementMap.map((_, i) => String(i + 1))
+    : Object.keys(statementMap);
+  
+  stmtMapKeys.forEach(stmtId => {
+    const stmt = Array.isArray(statementMap) 
+      ? statementMap[parseInt(stmtId) - 1]
+      : statementMap[stmtId];
+    const count = getStatementCount(stmtId);
     const isCovered = count > 0;
     
     if (stmt && typeof stmt === 'object') {
       // Get all line numbers this statement spans
       const startLine = stmt.start?.line;
-      const endLine = stmt.end?.line || startLine;
+      const endLine = (stmt.end && stmt.end.line !== undefined) ? stmt.end.line : startLine;
       
-      if (startLine) {
+      if (startLine !== undefined && startLine !== null) {
+        const end = (endLine !== undefined && endLine !== null) ? endLine : startLine;
         // Mark all lines from start to end
-        for (let line = startLine; line <= endLine; line++) {
+        for (let line = startLine; line <= end; line++) {
           if (!lineCoverage.has(line)) {
             lineCoverage.set(line, false);
           }

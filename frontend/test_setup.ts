@@ -1,5 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 import { afterAll, afterEach, beforeAll, vi } from "vitest";
+import { cleanup } from "@testing-library/react";
 import { server } from "./src/test/server"; // <- POINT TO server.ts (single source)
 import { resetDb } from "./src/test/handlers";
 
@@ -33,10 +34,14 @@ beforeAll(() => {
   resetDb();
 });
 
-afterEach(() => {
+afterEach(async () => {
+  // Wait a bit for any pending async operations to complete
+  await new Promise(resolve => setTimeout(resolve, 0));
+  cleanup(); // Clean up React Testing Library renders
   server.resetHandlers();
   resetDb(); // reset our in-memory DB to seed after every test
   vi.clearAllMocks();
+  // Don't clear all timers - let React cleanup handle it
 });
 
 afterAll(() => server.close());

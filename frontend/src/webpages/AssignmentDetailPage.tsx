@@ -142,7 +142,7 @@ export default function AssignmentDetailPage() {
       
       if (!allSucceeded) {
         // Some reruns failed - backend should have rolled back
-        const failedCount = res.results.filter((r: any) => r.success !== true).length;
+        const failedCount = res.results ? res.results.filter((r: any) => r.success !== true).length : 0;
         // Don't set rerunningAll to false here - let polling detect the server cleared it
         setFacErr(
           `Rerun failed: ${failedCount} out of ${res.total_submissions} attempts failed. ` +
@@ -218,35 +218,6 @@ export default function AssignmentDetailPage() {
   const totalPoints = React.useMemo(() => {
     return testCases.reduce((sum, tc) => sum + (tc.point_value || 0), 0);
   }, [testCases]);
-
-  const downloadSubmissionCode = async (submissionId: number) => {
-    if (!assignment_id) return;
-
-    try {
-      const response = await fetch(
-        `${BASE}/api/v1/assignments/${encodeURIComponent(assignment_id)}/submissions/${submissionId}/code?user_id=${encodeURIComponent(String(userId))}`
-      );
-
-      if (!response.ok) {
-        throw new Error(`Failed to download code: ${response.status}`);
-      }
-
-      const code = await response.text();
-      const blob = new Blob([code], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `submission_${submissionId}.txt`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      alert(`Failed to download submission code: ${error}`);
-    }
-  };
 
   async function loadAll() {
     if (!assignment_id) return; // guard
