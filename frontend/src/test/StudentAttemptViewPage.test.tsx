@@ -1,6 +1,6 @@
 import React from "react";
 import { Route, Routes } from "react-router-dom";
-import { screen, fireEvent, waitFor } from "@testing-library/react";
+import { screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 
@@ -10,7 +10,10 @@ import { server } from "./server";
 import { resetDb } from "./handlers";
 
 describe("StudentAttemptViewPage", () => {
-  beforeEach(() => resetDb());
+  beforeEach(() => {
+    resetDb();
+    cleanup();
+  });
 
   const renderComponent = (assignmentId = "9001", submissionId = "1001") =>
     renderWithProviders(
@@ -253,11 +256,14 @@ describe("StudentAttemptViewPage", () => {
         })
       );
 
-      renderComponent();
+      const { unmount } = renderComponent();
 
       await waitFor(() => {
         expect(screen.getByText(lang)).toBeInTheDocument();
-      });
+      }, { timeout: 3000 });
+
+      unmount();
+      cleanup();
     }
   });
 

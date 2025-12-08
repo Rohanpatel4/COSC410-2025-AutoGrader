@@ -59,6 +59,8 @@ export const Celebration: React.FC<CelebrationProps> = ({
       }, 4000);
 
       return () => clearTimeout(timer);
+    } else {
+      setIsVisible(false);
     }
   }, [show, onComplete]);
 
@@ -67,9 +69,15 @@ export const Celebration: React.FC<CelebrationProps> = ({
   return (
     <div 
       className="fixed inset-0 z-50 pointer-events-none celebration-overlay"
-      onClick={() => {
-        setIsVisible(false);
-        onComplete?.();
+      onClick={(e) => {
+        // Only dismiss if clicking directly on overlay, not on children
+        const target = e.target as HTMLElement;
+        const currentTarget = e.currentTarget as HTMLElement;
+        // Check if click is on overlay itself or on a child that's not the card
+        if (target === currentTarget || !target.closest('.celebration-card')) {
+          setIsVisible(false);
+          onComplete?.();
+        }
       }}
     >
       {/* Particle container */}

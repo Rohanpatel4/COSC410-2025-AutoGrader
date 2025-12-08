@@ -561,23 +561,25 @@ describe('InstructionsManager', () => {
     });
 
     it('handles custom color picker', async () => {
-      const user = userEvent.setup();
       const onSelect = vi.fn();
 
       render(
         <div>
           <div>
             <button title="Text Color">🎨</button>
-            <input type="color" onChange={(e) => onSelect(e.target.value)} />
+            <input 
+              type="color" 
+              defaultValue="#886e4c"
+              onChange={(e) => onSelect(e.target.value)} 
+            />
           </div>
         </div>
       );
 
-      const colorInput = screen.getByDisplayValue('');
-      await user.clear(colorInput);
-      await user.type(colorInput, '#ff0000');
-
-      // The onChange should be called
+      const colorInput = document.querySelector('input[type="color"]') as HTMLInputElement;
+      expect(colorInput).toBeInTheDocument();
+      
+      fireEvent.change(colorInput, { target: { value: '#ff0000' } });
       expect(onSelect).toHaveBeenCalledWith('#ff0000');
     });
   });

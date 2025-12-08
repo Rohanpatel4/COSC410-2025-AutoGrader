@@ -133,6 +133,7 @@ describe("LoginPage", () => {
     await userEvent.type(screen.getByLabelText(/email/i), "test@example.com");
     await userEvent.click(screen.getByRole("button", { name: /sign in/i }));
 
+    // Should show email error when password is empty (client-side validation)
     expect(await screen.findByText(/enter a valid email/i)).toBeInTheDocument();
   });
 

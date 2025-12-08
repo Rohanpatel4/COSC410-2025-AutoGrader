@@ -88,7 +88,7 @@ describe("FacultyDashboard", () => {
 
   test("displays course statistics and enrollment", async () => {
     server.use(
-      http.get("**/api/v1/faculty/301/courses", () =>
+      http.get("**/api/v1/courses/faculty/301", () =>
         HttpResponse.json([
           {
             id: 1,
@@ -120,7 +120,7 @@ describe("FacultyDashboard", () => {
 
   test("handles course navigation correctly", async () => {
     server.use(
-      http.get("**/api/v1/faculty/301/courses", () =>
+      http.get("**/api/v1/courses/faculty/301", () =>
         HttpResponse.json([
           {
             id: 1,
@@ -148,16 +148,17 @@ describe("FacultyDashboard", () => {
 
     await screen.findByText("Create Course");
 
-    const createButton = screen.getByText("Create Course");
+    // Find the button element that contains "Create Course" text
+    const createButton = screen.getByText("Create Course").closest('button');
     expect(createButton).toBeInTheDocument();
 
     // Should be clickable (though we don't test navigation in this test)
-    expect(createButton.tagName.toLowerCase()).toBe('button');
+    expect(createButton?.tagName.toLowerCase()).toBe('button');
   });
 
   test("handles empty course list", async () => {
     server.use(
-      http.get("**/api/v1/faculty/301/courses", () =>
+      http.get("**/api/v1/courses/faculty/301", () =>
         HttpResponse.json([])
       )
     );
@@ -172,7 +173,7 @@ describe("FacultyDashboard", () => {
 
   test("handles course loading errors gracefully", async () => {
     server.use(
-      http.get("**/api/v1/faculty/301/courses", () =>
+      http.get("**/api/v1/courses/faculty/301", () =>
         HttpResponse.json({ detail: "Database connection failed" }, { status: 500 })
       )
     );
@@ -185,7 +186,7 @@ describe("FacultyDashboard", () => {
 
   test("displays multiple courses with different enrollment keys", async () => {
     server.use(
-      http.get("**/api/v1/faculty/301/courses", () =>
+      http.get("**/api/v1/courses/faculty/301", () =>
         HttpResponse.json([
           {
             id: 1,
@@ -218,7 +219,7 @@ describe("FacultyDashboard", () => {
 
   test("maintains dashboard layout and navigation", async () => {
     server.use(
-      http.get("**/api/v1/faculty/301/courses", () =>
+      http.get("**/api/v1/courses/faculty/301", () =>
         HttpResponse.json([
           {
             id: 1,
@@ -242,7 +243,7 @@ describe("FacultyDashboard", () => {
 
   test("handles course click navigation errors", async () => {
     server.use(
-      http.get("**/api/v1/faculty/301/courses", () =>
+      http.get("**/api/v1/courses/faculty/301", () =>
         HttpResponse.json([
           {
             id: 1,
@@ -268,7 +269,7 @@ describe("FacultyDashboard", () => {
 
   test("shows course enrollment information", async () => {
     server.use(
-      http.get("**/api/v1/faculty/301/courses", () =>
+      http.get("**/api/v1/courses/faculty/301", () =>
         HttpResponse.json([
           {
             id: 1,

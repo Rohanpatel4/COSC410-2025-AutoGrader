@@ -71,6 +71,11 @@ function CourseCard({ course, navigate }: { course: Course; navigate: (path: str
           >
             {course.name}
           </h3>
+          {course.description && (
+            <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
+              {course.description}
+            </p>
+          )}
         </div>
       </div>
         

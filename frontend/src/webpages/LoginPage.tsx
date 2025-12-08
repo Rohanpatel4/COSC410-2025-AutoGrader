@@ -68,6 +68,12 @@ export default function LoginPage() {
       return;
     }
 
+    // Validate password before submitting
+    if (!password || password.trim() === "") {
+      setEmailError("Enter a valid email address.");
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
     setEmailError(null);

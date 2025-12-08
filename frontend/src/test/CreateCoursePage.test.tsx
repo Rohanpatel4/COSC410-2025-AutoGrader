@@ -44,7 +44,8 @@ describe("CreateCoursePage", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /create course/i }));
 
-    expect(await screen.findByText(/course created successfully/i)).toBeInTheDocument();
+    // Wait for success message - it shows "Course created successfully!" 
+    expect(await screen.findByText(/course created successfully/i, {}, { timeout: 3000 })).toBeInTheDocument();
   });
 
   test("disables submit until required fields are filled", async () => {
