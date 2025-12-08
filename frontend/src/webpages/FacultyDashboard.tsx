@@ -102,9 +102,9 @@ export default function FacultyDashboard() {
         </div>
 
         {/* Create Course Action Card */}
-        <div 
+        <button
           onClick={() => navigate("/courses/new")}
-          className="bg-card border border-border rounded-xl shadow-sm flex items-center gap-5 p-5 cursor-pointer hover:shadow-md hover:border-primary/50 transition-all group"
+          className="bg-card border border-border rounded-xl shadow-sm flex items-center gap-5 p-5 cursor-pointer hover:shadow-md hover:border-primary/50 transition-all group w-full text-left"
         >
           <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
             <Plus className="w-6 h-6 text-primary" />
@@ -113,7 +113,7 @@ export default function FacultyDashboard() {
             <div className="text-lg font-semibold text-foreground group-hover:text-primary transition-colors">Create Course</div>
             <div className="text-sm text-muted-foreground">Add a new course</div>
           </div>
-        </div>
+        </button>
       </div>
 
       {/* Course Overview Section */}
@@ -174,6 +174,11 @@ export default function FacultyDashboard() {
                     >
                       {course.name}
                     </h3>
+                    {course.description && (
+                      <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
+                        {course.description}
+                      </p>
+                    )}
                   </div>
                 </div>
                   

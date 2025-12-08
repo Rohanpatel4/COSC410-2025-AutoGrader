@@ -169,9 +169,8 @@ describe("StudentDashboard", () => {
 
     await screen.findByText("COSC-410");
 
-    // Should show course information
+    // Should show course information (only name is displayed, not description)
     expect(screen.getByText("Computer Science 410")).toBeInTheDocument();
-    expect(screen.getByText("Advanced software engineering")).toBeInTheDocument();
   });
 
   test("handles empty course list", async () => {

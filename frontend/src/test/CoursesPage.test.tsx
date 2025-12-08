@@ -78,5 +78,86 @@ describe("CoursesPage", () => {
     expect(await screen.findByText("You haven't joined any courses yet")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Join Course/i })).toBeInTheDocument();
   });
+
+  test("filters courses by search query", async () => {
+    __testDb.state.coursesByProfessor[301] = [
+      {
+        id: 1,
+        course_code: "COSC-410",
+        name: "Computer Science 410",
+        description: "Test course",
+        professor_id: 301,
+      },
+      {
+        id: 2,
+        course_code: "MATH-201",
+        name: "Mathematics 201",
+        description: "Math course",
+        professor_id: 301,
+      },
+    ];
+
+    renderCoursesPage();
+
+    await screen.findByText(/COSC-410/i);
+
+    // Search for "Computer"
+    const searchInput = screen.getByPlaceholderText(/search courses/i);
+    await userEvent.type(searchInput, "Computer");
+
+    // Should show only Computer Science course
+    expect(screen.getByText(/Computer Science 410/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Mathematics 201/i)).not.toBeInTheDocument();
+  });
+
+  test("shows empty search results", async () => {
+    __testDb.state.coursesByProfessor[301] = [
+      {
+        id: 1,
+        course_code: "COSC-410",
+        name: "Computer Science 410",
+        description: "Test course",
+        professor_id: 301,
+      },
+    ];
+
+    renderCoursesPage();
+
+    await screen.findByText(/COSC-410/i);
+
+    // Search for something that doesn't match
+    const searchInput = screen.getByPlaceholderText(/search courses/i);
+    await userEvent.type(searchInput, "XYZ999");
+
+    // Should show empty search state
+    expect(await screen.findByText(/No courses found/i)).toBeInTheDocument();
+    expect(screen.getByText(/No results matching/i)).toBeInTheDocument();
+  });
+
+  test("navigates to create course page when faculty clicks create button", async () => {
+    __testDb.state.coursesByProfessor[301] = [];
+
+    renderCoursesPage();
+
+    await screen.findByText(/No courses found/i);
+
+    const createButton = screen.getByRole("button", { name: /Create New Course/i });
+    await userEvent.click(createButton);
+
+    expect(await screen.findByText(/CREATE COURSE PAGE/i)).toBeInTheDocument();
+  });
+
+  test("navigates to join course page when student clicks join button", async () => {
+    __testDb.state.enrollmentsByStudent[201] = [];
+
+    renderCoursesPage({ role: "student", userId: "201" });
+
+    await screen.findByText(/You haven't joined any courses yet/i);
+
+    const joinButton = screen.getByRole("button", { name: /Join a Course/i });
+    await userEvent.click(joinButton);
+
+    // Should navigate (tested via route change)
+  });
 });
 

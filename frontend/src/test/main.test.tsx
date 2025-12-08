@@ -2,6 +2,31 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { AuthProvider } from "../auth/AuthContext";
+
+// Mock ReactDOM.createRoot to prevent actual rendering
+vi.mock("react-dom/client", async () => {
+  const actual = await vi.importActual("react-dom/client");
+  return {
+    ...actual,
+    createRoot: vi.fn(() => ({
+      render: vi.fn(),
+    })),
+  };
+});
+
+// Create mock root element and mock getElementById BEFORE importing main
+const mockRoot = document.createElement("div");
+mockRoot.id = "root";
+document.body.appendChild(mockRoot);
+
+const originalGetElementById = document.getElementById.bind(document);
+vi.spyOn(document, "getElementById").mockImplementation((id: string) => {
+  if (id === "root") {
+    return mockRoot;
+  }
+  return originalGetElementById(id);
+});
+
 import {
   AssignmentDetailPageWrapper,
   CoursesLayoutWrapper,

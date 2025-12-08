@@ -290,13 +290,16 @@ export function CatchAllRoute() {
   return <Navigate to="/login" replace />;
 }
 
-const root = document.getElementById("root");
-if (!root) throw new Error("#root not found");
+// Only run the app initialization if not in test environment
+if (typeof process === "undefined" || process.env.NODE_ENV !== "test") {
+  const root = document.getElementById("root");
+  if (!root) throw new Error("#root not found");
 
-createRoot(root).render(
-  <AuthProvider>
-    <AppRouter />
-  </AuthProvider>
-);
+  createRoot(root).render(
+    <AuthProvider>
+      <AppRouter />
+    </AuthProvider>
+  );
+}
 
 
