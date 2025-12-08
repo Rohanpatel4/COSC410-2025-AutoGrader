@@ -307,20 +307,20 @@ export default function CalendarWidget({ studentId }: CalendarWidgetProps) {
                 key={date.toISOString()}
                 onClick={() => setSelectedDate(date)}
                 className={`
-                  w-full h-8 flex items-center justify-center rounded text-[11px] font-medium transition-colors relative
-                  ${isSelected 
-                    ? 'bg-primary text-primary-foreground' 
-                    : isToday 
-                      ? 'bg-accent/30 text-accent font-bold' 
+                  w-full h-8 flex items-center justify-center rounded text-[11px] transition-colors relative
+                  ${isSelected
+                    ? 'bg-primary text-primary-foreground hover:bg-primary/90 font-medium'
+                    : isToday
+                      ? 'text-accent font-bold hover:bg-muted'
                       : hasFutureAssignments
                         ? hasIncomplete
-                          ? 'bg-amber-500/15 text-amber-400 hover:bg-amber-500/25'
-                          : 'bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25'
+                          ? 'text-amber-400 hover:bg-muted font-medium'
+                          : 'text-emerald-400 hover:bg-muted font-medium'
                         : hadPastAssignments
-                          ? 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                          ? 'text-muted-foreground hover:bg-muted font-medium'
                           : isPast
-                            ? 'text-muted-foreground/50 hover:bg-muted/50'
-                            : 'hover:bg-muted text-foreground'
+                            ? 'text-muted-foreground/50 hover:bg-muted/50 font-medium'
+                            : 'text-foreground hover:bg-muted font-medium'
                   }
                 `}
               >
@@ -366,8 +366,8 @@ export default function CalendarWidget({ studentId }: CalendarWidgetProps) {
                 )}
                 {selectedDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
               </span>
-              <Badge 
-                variant={isSelectedDatePast ? "default" : "warning"} 
+              <Badge
+                variant={isSelectedDatePast ? "default" : "warning"}
                 className="text-[9px] px-1.5 py-0"
               >
                 {selectedDateAssignments.length}
@@ -379,7 +379,7 @@ export default function CalendarWidget({ studentId }: CalendarWidgetProps) {
                 const colors = getCourseColor(assignment.course_code || '');
                 const status = getAssignmentStatus(assignment);
                 const isPast = status === 'past';
-                
+
                 return (
                   <div
                     key={assignment.id}
