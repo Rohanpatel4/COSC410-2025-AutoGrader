@@ -47,6 +47,14 @@ export default function StudentAssignmentView({
   const [code, setCode] = React.useState(initialCode);
   const [uploadedFile, setUploadedFile] = React.useState<File | null>(null);
   const [activeTab, setActiveTab] = React.useState<"visible" | "hidden">("visible");
+
+  // Sync with initialCode when it changes from parent (e.g., loaded from sessionStorage)
+  // Only update if local code is empty and initialCode has content
+  React.useEffect(() => {
+    if (initialCode && !code) {
+      setCode(initialCode);
+    }
+  }, [initialCode]); // eslint-disable-line react-hooks/exhaustive-deps
   const [isLeftPanelOpen, setIsLeftPanelOpen] = React.useState(true);
   const [verticalSplit, setVerticalSplit] = React.useState(60); // Track vertical split for code/test cases
   const [showCelebration, setShowCelebration] = React.useState(false);

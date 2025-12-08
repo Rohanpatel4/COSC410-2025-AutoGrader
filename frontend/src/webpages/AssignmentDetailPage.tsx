@@ -45,8 +45,15 @@ export default function AssignmentDetailPage() {
   const [attempts, setAttempts] = React.useState<Attempt[]>([]);
   const [file, setFile] = React.useState<File | null>(null);
   const [code, setCode] = React.useState<string>("");
+  const [codeLoaded, setCodeLoaded] = React.useState(false); // Track if we've loaded saved code
   const [submitMsg, setSubmitMsg] = React.useState<string | null>(null);
   const [lastResult, setLastResult] = React.useState<any>(null);
+
+  // Get sessionStorage key for student code caching
+  const getCodeStorageKey = React.useCallback(() => {
+    if (!assignment_id || !userId) return null;
+    return `student_code_${assignment_id}_${userId}`;
+  }, [assignment_id, userId]);
 
   const [facRows, setFacRows] = React.useState<FacRow[] | null>(null);
   const [facLoading, setFacLoading] = React.useState(false);
@@ -267,6 +274,42 @@ export default function AssignmentDetailPage() {
     loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignment_id]);
+
+  // Load saved code from sessionStorage when student returns to assignment
+  React.useEffect(() => {
+    if (!isStudent || !assignment_id || !userId || codeLoaded) return;
+    
+    const key = getCodeStorageKey();
+    if (!key) return;
+    
+    try {
+      const savedCode = sessionStorage.getItem(key);
+      if (savedCode) {
+        setCode(savedCode);
+      }
+    } catch {
+      // Ignore errors
+    }
+    setCodeLoaded(true);
+  }, [isStudent, assignment_id, userId, codeLoaded, getCodeStorageKey]);
+
+  // Save code to sessionStorage whenever student types (debounced)
+  React.useEffect(() => {
+    if (!isStudent || !codeLoaded) return;
+    
+    const key = getCodeStorageKey();
+    if (!key) return;
+
+    const timeoutId = setTimeout(() => {
+      try {
+        sessionStorage.setItem(key, code);
+      } catch (e) {
+        console.warn("Failed to save code to sessionStorage:", e);
+      }
+    }, 500); // Debounce saves
+
+    return () => clearTimeout(timeoutId);
+  }, [code, isStudent, codeLoaded, getCodeStorageKey]);
 
   const bestGrade = React.useMemo(() => {
     if (!attempts.length) return null;

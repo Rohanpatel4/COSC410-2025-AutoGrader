@@ -95,6 +95,7 @@ export default function CreateAssignmentPage() {
   const [msg, setMsg] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [validationErrors, setValidationErrors] = React.useState<string[]>([]);
+  const [createdSuccessfully, setCreatedSuccessfully] = React.useState(false); // Prevent re-saving after success
   
   // Syntax validation state
   const [syntaxErrors, setSyntaxErrors] = React.useState<Record<number, SyntaxError[]>>({});
@@ -110,7 +111,10 @@ export default function CreateAssignmentPage() {
   }, [language]);
 
   // Save form data to sessionStorage whenever it changes (with debouncing)
+  // Skip saving if assignment was just created successfully (prevents re-saving when navigating away)
   React.useEffect(() => {
+    if (createdSuccessfully) return; // Don't save after successful creation
+    
     const key = getStorageKey();
     if (!key) return;
 
@@ -133,7 +137,7 @@ export default function CreateAssignmentPage() {
     }, 500); // Debounce saves
 
     return () => clearTimeout(timeoutId);
-  }, [title, description, language, instructions, subLimit, start, stop, testCases, getStorageKey]);
+  }, [title, description, language, instructions, subLimit, start, stop, testCases, getStorageKey, createdSuccessfully]);
 
   // Fetch supported languages on mount
   React.useEffect(() => {
@@ -433,6 +437,9 @@ export default function CreateAssignmentPage() {
         );
       }
 
+      // Mark as created successfully to prevent re-saving to sessionStorage
+      setCreatedSuccessfully(true);
+      
       // Clear saved form data from sessionStorage after successful creation
       const key = getStorageKey();
       if (key) {
