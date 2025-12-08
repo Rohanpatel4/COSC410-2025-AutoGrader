@@ -2,11 +2,22 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 #![allow(unused_imports)]
+#![allow(unused_macros)]
 
 use std::io::{self, Write};
 use std::panic;
 
-// Student code
+// Default stub module - provides fallback implementations
+// Student code can override these by defining functions with the same name
+mod _stubs {
+$stub_functions
+}
+
+// Re-export stubs (will be shadowed by student definitions)
+#[allow(unused_imports)]
+use _stubs::*;
+
+// Student code (can override stub functions)
 $student_code
 
 // Test results structure

@@ -1191,6 +1191,120 @@ def generate_test_execution_code(language: str, test_cases: list[dict]) -> str:
         return _generate_generic_test_execution(language, test_cases)
 
 
+def _extract_rust_function_calls_from_tests(test_cases: list[dict]) -> list[dict]:
+    """
+    Parse Rust test cases to extract function signatures for stub generation.
+    Returns list of dicts with: {name, return_type, params}
+    """
+    functions = {}
+    
+    # Keywords and macros to exclude from stub generation
+    excluded_names = {'assert', 'assert_eq', 'assert_ne', 'if', 'for', 'while', 
+                      'return', 'match', 'let', 'mut', 'fn', 'pub', 'use',
+                      'println', 'print', 'eprintln', 'eprint', 'main', 'panic'}
+    
+    for test_case in test_cases:
+        test_code = test_case.get("test_code", "")
+        
+        # Rust patterns: function_name(args)
+        # Use snake_case pattern to match typical Rust functions
+        patterns = [
+            # assert_eq!(func(args), value)
+            r'assert_eq!\s*\(\s*([a-z][a-z0-9_]*)\s*\(\s*([^)]*)\s*\)\s*,\s*([^)]+)\)',
+            # func(args) == value  
+            r'\b([a-z][a-z0-9_]*)\s*\(\s*([^)]*)\s*\)\s*==\s*(\w+|[-\d.]+)',
+        ]
+        for pattern in patterns:
+            matches = re.findall(pattern, test_code)
+            for match in matches:
+                func_name = match[0]
+                args_str = match[1] if len(match) > 1 else ""
+                expected_val = match[2] if len(match) > 2 else ""
+                
+                # Skip excluded names and Rust macros
+                if func_name.lower() in excluded_names or func_name.startswith('assert'):
+                    continue
+                
+                # Infer return type
+                if expected_val in ['true', 'false']:
+                    return_type = 'bool'
+                elif '.' in str(expected_val):
+                    return_type = 'f64'
+                else:
+                    return_type = 'i32'
+                
+                params = _infer_rust_params(args_str)
+                
+                if func_name not in functions:
+                    functions[func_name] = {
+                        'name': func_name,
+                        'return_type': return_type,
+                        'params': params
+                    }
+    
+    return list(functions.values())
+
+
+def _infer_rust_params(args_str: str) -> str:
+    """Infer Rust parameter types from argument string."""
+    if not args_str.strip():
+        return ""
+    
+    args = [a.strip() for a in args_str.split(',')]
+    params = []
+    
+    for i, arg in enumerate(args):
+        if arg in ['true', 'false']:
+            params.append(f"arg{i}: bool")
+        elif '.' in arg:
+            params.append(f"arg{i}: f64")
+        elif arg.startswith('-') or arg.isdigit():
+            # Check if it might be unsigned
+            if arg.startswith('-'):
+                params.append(f"arg{i}: i32")
+            else:
+                params.append(f"arg{i}: i32")
+        else:
+            params.append(f"arg{i}: i32")
+    
+    return ', '.join(params)
+
+
+def _generate_rust_stubs(functions: list[dict]) -> str:
+    """Generate Rust stub functions for the _stubs module."""
+    if not functions:
+        return "    // No stub functions needed"
+    
+    stubs = []
+    for func in functions:
+        name = func['name']
+        return_type = func['return_type']
+        params = func['params']
+        
+        # Default return value based on type
+        if return_type == 'bool':
+            default_return = 'false'
+        elif return_type == 'f64':
+            default_return = '0.0'
+        elif return_type in ['i32', 'i64']:
+            default_return = '0'
+        elif return_type in ['u32', 'u64']:
+            default_return = '0'
+        else:
+            default_return = 'Default::default()'
+        
+        stub = f'    pub fn {name}({params}) -> {return_type} {{ {default_return} }}'
+        stubs.append(stub)
+    
+    return '\n'.join(stubs)
+
+
+def generate_rust_stub_functions(test_cases: list[dict]) -> str:
+    """Generate Rust stub functions based on test cases."""
+    functions = _extract_rust_function_calls_from_tests(test_cases)
+    return _generate_rust_stubs(functions)
+
+
 def generate_test_harness(language: str, student_code: str, test_cases: list[dict]) -> str:
     """Generate complete test harness using template system."""
     # For Java: Make student's class package-private (remove 'public' modifier)
@@ -1214,6 +1328,21 @@ def generate_test_harness(language: str, student_code: str, test_cases: list[dic
         rendered = template_content.replace("$student_code", student_code)
         rendered = rendered.replace("$test_execution_code", test_execution_code)
         return rendered
+    
+    # For Rust: Generate stub functions for partial credit support
+    # Stubs provide default implementations that students can override
+    if language.lower() in ["rust", "rs"]:
+        stub_functions = generate_rust_stub_functions(test_cases)
+        template = Template(template_content)
+        try:
+            rendered = template.substitute(
+                student_code=student_code,
+                test_execution_code=test_execution_code,
+                stub_functions=stub_functions
+            )
+            return rendered
+        except KeyError as e:
+            raise ValueError(f"Template missing placeholder: {e}")
     
     # For other languages, use Template substitution
     template = Template(template_content)
