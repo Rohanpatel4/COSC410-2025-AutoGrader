@@ -794,6 +794,7 @@ def get_file_extension(language: str) -> str:
         "javascript": ".js",
         "gcc": ".cpp",  # GCC is used for C++ compilation in Piston
         "cpp": ".cpp",  # Keep for backward compatibility
+        "c++": ".cpp",  # Handle c++ language name
         "c": ".c",
         "csharp": ".cs",
         "go": ".go",
@@ -809,8 +810,8 @@ def load_template(language: str) -> str:
     template_dir = Path(__file__).parent / "templates"
     language_lower = language.lower()
     
-    # Map gcc to cpp for template lookup (templates use cpp naming)
-    template_language = "cpp" if language_lower == "gcc" else language_lower
+    # Map gcc and c++ to cpp for template lookup (templates use cpp naming)
+    template_language = "cpp" if language_lower in ["gcc", "c++"] else language_lower
     
     extension = get_file_extension(language)
     template_path = template_dir / f"{template_language}_test{extension}"
@@ -836,21 +837,24 @@ def _generate_python_test_execution(test_cases: list[dict]) -> str:
         points = test_case["point_value"]
         test_code = test_case["test_code"]
 
-        # Clean up the test code - remove comments and extract just the assert statement
+        # Process ALL lines - keep setup code (variable declarations) and asserts
         lines = test_code.split('\n')
-        assert_lines = []
+        processed_lines = []
         for line in lines:
-            line = line.strip()
-            if line.startswith('assert'):
-                assert_lines.append(line)
-
-        if assert_lines:
-            # Execute all assert statements in this test case
-            indented_code = textwrap.indent('\n'.join(assert_lines), "        ")
+            stripped = line.strip()
+            # Skip empty lines and comments
+            if not stripped or stripped.startswith('#'):
+                continue
+            processed_lines.append(stripped)
+        
+        # Fallback: if no lines were processed, use original code
+        if processed_lines:
+            code_to_run = '\n'.join(processed_lines)
         else:
-            # If no assert found, execute the whole code
-            dedented_code = textwrap.dedent(test_code).strip()
-            indented_code = textwrap.indent(dedented_code, "        ")
+            code_to_run = textwrap.dedent(test_code).strip()
+        
+        # Execute all code including setup and assertions
+        indented_code = textwrap.indent(code_to_run, "        ")
 
         # Generate code that captures output and errors per test case
         # All code is indented by 4 spaces since it will be inside "if _student_code_loaded:"
@@ -910,34 +914,31 @@ def _generate_java_test_execution(test_cases: list[dict]) -> str:
         points = test_case["point_value"]
         test_code = test_case["test_code"]
 
-        # Clean up the test code - remove comments and extract just the assert statement
+        # Process ALL lines - keep setup code and transform assert statements
         lines = test_code.split('\n')
-        assert_lines = []
+        processed_lines = []
         for line in lines:
-            line = line.strip()
-            if line.startswith('assert'):
-                assert_lines.append(line)
-
-        if assert_lines:
-            # Convert assert statements to if-throw statements
-            java_asserts = []
-            for line in assert_lines:
-                # Replace assert statements
-                java_line = re.sub(
+            stripped = line.strip()
+            # Skip empty lines and comments
+            if not stripped or stripped.startswith('//'):
+                continue
+            # Transform assert statements to if-throw (check both 'assert ' and 'assert(' patterns)
+            if stripped.startswith('assert'):
+                stripped = re.sub(
                     r'assert\s+([^;]+);',
                     r'if (!(\1)) throw new AssertionError();',
-                    line
+                    stripped
                 )
-                java_asserts.append(java_line)
-
-            java_test_code = '\n'.join(java_asserts)
-        else:
-            # If no assert found, use the whole code
-            java_test_code = test_code
+            processed_lines.append(stripped)
+        
+        java_test_code = '\n'.join(processed_lines)
+        
+        # Fallback: if no lines were processed, apply transform to whole code
+        if not java_test_code.strip():
             java_test_code = re.sub(
                 r'assert\s+([^;]+);',
                 r'if (!(\1)) throw new AssertionError();',
-                java_test_code
+                test_code
             )
 
         # Indent the java test code for inside the try block
@@ -993,48 +994,30 @@ def _generate_cpp_test_execution(test_cases: list[dict]) -> str:
         points = test_case["point_value"]
         test_code = test_case["test_code"]
 
-        # Clean up the test code - remove comments and extract just the assert statement
+        # Process ALL lines - keep setup code (variable declarations) and transform asserts
         lines = test_code.split('\n')
-        assert_lines = []
+        processed_lines = []
         for line in lines:
-            line = line.strip()
-            if line.startswith('assert'):
-                assert_lines.append(line)
-
-        if assert_lines:
-            # Replace assert with test_assert for all assert statements
-            cpp_asserts = []
-            for line in assert_lines:
-                if "test_assert" not in line:
-                    cpp_line = line.replace("assert(", "test_assert(").replace("assert ", "test_assert ")
-                else:
-                    cpp_line = line
+            stripped = line.strip()
+            # Skip empty lines and comments
+            if not stripped or stripped.startswith('//'):
+                continue
+            # Transform assert statements to test_assert
+            if stripped.startswith('assert(') or stripped.startswith('assert '):
+                if "test_assert" not in stripped:
+                    stripped = stripped.replace("assert(", "test_assert(").replace("assert ", "test_assert ")
                 # Ensure semicolon is present
-                if not cpp_line.rstrip().endswith(';'):
-                    cpp_line += ';'
-                cpp_asserts.append(cpp_line)
-
-            cpp_test_code = '\n'.join(cpp_asserts)
-        else:
-            # If no assert found, use the whole code with replacements
-            if "test_assert" not in test_code:
-                cpp_test_code = test_code.replace("assert(", "test_assert(").replace("assert ", "test_assert ")
-            else:
-                cpp_test_code = test_code
-            # Ensure semicolons are present for any assert statements
-            lines = cpp_test_code.split('\n')
-            processed_lines = []
-            for line in lines:
-                line = line.strip()
-                if line.startswith('test_assert') and not line.endswith(';'):
-                    line += ';'
-                processed_lines.append(line)
-            cpp_test_code = '\n'.join(processed_lines)
+                if not stripped.rstrip().endswith(';'):
+                    stripped += ';'
+            processed_lines.append(stripped)
+        
+        cpp_test_code = '\n'.join(processed_lines)
 
         # Indent the C++ test code for inside the try block
         indented_cpp_test_code = textwrap.indent(cpp_test_code, "            ")
 
         # Note: test_assert throws runtime_error with "Assertion failed" - don't show as error
+        # Use double braces {{ }} for literal braces in f-string, single braces for variable substitution
         code_parts.append(f"""    {{
         std::stringstream test_out_{test_id};
         std::streambuf* saved_cout_{test_id} = std::cout.rdbuf(test_out_{test_id}.rdbuf());
@@ -1059,13 +1042,13 @@ def _generate_cpp_test_execution(test_cases: list[dict]) -> str:
         std::cout.rdbuf(saved_cout_{test_id});
         std::string output_{test_id} = test_out_{test_id}.str();
         
-        TestResult r{test_id};
-        r{test_id}.id = {test_id};
-        r{test_id}.passed = test_passed_{test_id};
-        r{test_id}.points = {points};
-        r{test_id}.error_msg = error_msg_{test_id};
-        r{test_id}.output = output_{test_id};
-        testResults.push_back(r{test_id});
+        TestResult r_{test_id};
+        r_{test_id}.id = {test_id};
+        r_{test_id}.passed = test_passed_{test_id};
+        r_{test_id}.points = {points};
+        r_{test_id}.error_msg = error_msg_{test_id};
+        r_{test_id}.output = output_{test_id};
+        testResults.push_back(r_{test_id});
         
         if (test_passed_{test_id}) {{
             std::cout << "PASSED: test_case_{test_id}:{points}" << std::endl;
@@ -1091,40 +1074,32 @@ def _generate_rust_test_execution(test_cases: list[dict]) -> str:
         points = test_case["point_value"]
         test_code = test_case["test_code"]
 
-        # Clean up the test code - remove comments and extract assert statements
+        # Process ALL lines - keep setup code and transform assert statements
         lines = test_code.split('\n')
-        assert_lines = []
+        processed_lines = []
         for line in lines:
-            line = line.strip()
-            if line.startswith('assert'):
-                assert_lines.append(line)
-
-        if assert_lines:
-            # Convert assert statements to Rust format
-            rust_asserts = []
-            for line in assert_lines:
-                # Convert assert! or assert_eq! format
-                if "assert_eq!" in line or "assert_ne!" in line or "assert!" in line:
-                    rust_line = line
+            stripped = line.strip()
+            # Skip empty lines and comments
+            if not stripped or stripped.startswith('//'):
+                continue
+            # Transform assert statements to Rust format if needed
+            if stripped.startswith('assert'):
+                # Check if already in Rust format
+                if "assert_eq!" in stripped or "assert_ne!" in stripped or "assert!" in stripped:
+                    rust_line = stripped
                 else:
                     # Convert Python-style assert to Rust assert!
-                    rust_line = line.replace("assert ", "assert!(").replace("assert(", "assert!(")
+                    rust_line = stripped.replace("assert ", "assert!(").replace("assert(", "assert!(")
                     # Add closing paren and semicolon if needed
                     if "assert!(" in rust_line and not rust_line.rstrip().endswith(';'):
                         if not rust_line.rstrip().endswith(')'):
                             rust_line = rust_line.rstrip() + ')'
                         rust_line = rust_line.rstrip() + ';'
-                rust_asserts.append(rust_line)
-            rust_test_code = '\n'.join(rust_asserts)
-        else:
-            # If no assert found, use the whole code
-            rust_test_code = test_code
-            # Convert assert to Rust format
-            if "assert!(" not in rust_test_code and "assert_eq!(" not in rust_test_code:
-                rust_test_code = rust_test_code.replace("assert ", "assert!(").replace("assert(", "assert!(")
-            # Ensure semicolon is present
-            if not rust_test_code.rstrip().endswith(';'):
-                rust_test_code = rust_test_code.rstrip() + ';'
+                processed_lines.append(rust_line)
+            else:
+                processed_lines.append(stripped)
+        
+        rust_test_code = '\n'.join(processed_lines)
 
         # Indent the Rust test code for inside the block
         indented_rust_test_code = textwrap.indent(rust_test_code, "            ")

@@ -155,7 +155,7 @@ def test_get_file_extension():
     assert piston.get_file_extension("java") == ".java"
     assert piston.get_file_extension("cpp") == ".cpp"
     assert piston.get_file_extension("gcc") == ".cpp"  # GCC is used for C++ in Piston
-    assert piston.get_file_extension("c++") == ".txt"  # c++ not in mapping, defaults to .txt
+    assert piston.get_file_extension("c++") == ".cpp"  # c++ also maps to .cpp
     assert piston.get_file_extension("rust") == ".rs"
     assert piston.get_file_extension("javascript") == ".js"
     assert piston.get_file_extension("unknown") == ".txt"  # Default
