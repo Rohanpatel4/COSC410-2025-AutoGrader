@@ -73,10 +73,10 @@ export default function FacultyDashboard() {
       </div>
 
       {/* Top Action Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+      <div className="flex flex-wrap gap-5">
         {/* Active Courses Stat Card */}
         <div 
-          className="bg-card border border-border rounded-xl shadow-sm flex items-center gap-5 p-5 hover:shadow-md transition-shadow"
+          className="bg-card border border-border rounded-xl shadow-sm flex items-center gap-5 p-5 hover:shadow-md transition-shadow flex-1 min-w-[200px]"
         >
           <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center shrink-0">
             <GraduationCap className="w-6 h-6 text-blue-500" />
@@ -90,7 +90,7 @@ export default function FacultyDashboard() {
         {/* Join Course Action Card */}
         <div 
           onClick={() => navigate("/courses/join")}
-          className="bg-card border border-border rounded-xl shadow-sm flex items-center gap-5 p-5 cursor-pointer hover:shadow-md hover:border-primary/50 transition-all group"
+          className="bg-card border border-border rounded-xl shadow-sm flex items-center gap-5 p-5 cursor-pointer hover:shadow-md hover:border-primary/50 transition-all group flex-1 min-w-[200px]"
         >
           <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
             <UserPlus className="w-6 h-6 text-primary" />
@@ -102,9 +102,9 @@ export default function FacultyDashboard() {
         </div>
 
         {/* Create Course Action Card */}
-        <button
+        <div
           onClick={() => navigate("/courses/new")}
-          className="bg-card border border-border rounded-xl shadow-sm flex items-center gap-5 p-5 cursor-pointer hover:shadow-md hover:border-primary/50 transition-all group w-full text-left"
+          className="bg-card border border-border rounded-xl shadow-sm flex items-center gap-5 p-5 cursor-pointer hover:shadow-md hover:border-primary/50 transition-all group flex-1 min-w-[200px]"
         >
           <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
             <Plus className="w-6 h-6 text-primary" />
@@ -113,7 +113,7 @@ export default function FacultyDashboard() {
             <div className="text-lg font-semibold text-foreground group-hover:text-primary transition-colors">Create Course</div>
             <div className="text-sm text-muted-foreground">Add a new course</div>
           </div>
-        </button>
+        </div>
       </div>
 
       {/* Course Overview Section */}

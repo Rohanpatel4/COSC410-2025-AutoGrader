@@ -483,7 +483,7 @@ export default function StudentAssignmentView({
             {activeTab === "visible" ? (
               <div className="space-y-3">
                 {/* Show compile error at top if exists */}
-                {compileError && (
+                {/* {compileError && (
                   <div className="bg-danger/10 border border-danger/30 rounded-lg p-4 mb-4">
                     <div className="flex items-center gap-2 mb-2">
                       <XCircle className="w-4 h-4 text-danger shrink-0" />
@@ -493,7 +493,7 @@ export default function StudentAssignmentView({
                       {compileError}
                     </div>
                   </div>
-                )}
+                )} */}
                 
                 {visibleTestCases.length > 0 ? (
                   visibleTestCases.map((tc: any) => {
