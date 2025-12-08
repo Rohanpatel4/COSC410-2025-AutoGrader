@@ -228,6 +228,9 @@ export default function AssignmentsPage() {
     
     let filtered = [...assignments];
     
+    // Filter out "upcoming" assignments - only show active, due-soon, or closed
+    filtered = filtered.filter(a => getAssignmentStatus(a) !== "upcoming");
+    
     // Apply filter
     if (filter === "active") {
       filtered = filtered.filter(a => getAssignmentStatus(a) === "active");
@@ -274,12 +277,13 @@ export default function AssignmentsPage() {
     return filtered;
   }, [assignments, filter, sort, isStudent]);
 
-  // Count assignments by filter type for badges
+  // Count assignments by filter type for badges (excluding upcoming)
   const filterCounts = React.useMemo(() => {
-    const all = assignments.length;
-    const active = assignments.filter(a => getAssignmentStatus(a) === "active").length;
-    const dueSoon = assignments.filter(a => getAssignmentStatus(a) === "active" && isDueSoon(a)).length;
-    const closed = assignments.filter(a => getAssignmentStatus(a) === "closed").length;
+    const visibleAssignments = assignments.filter(a => getAssignmentStatus(a) !== "upcoming");
+    const all = visibleAssignments.length;
+    const active = visibleAssignments.filter(a => getAssignmentStatus(a) === "active").length;
+    const dueSoon = visibleAssignments.filter(a => getAssignmentStatus(a) === "active" && isDueSoon(a)).length;
+    const closed = visibleAssignments.filter(a => getAssignmentStatus(a) === "closed").length;
     return { all, active, dueSoon, closed };
   }, [assignments]);
 
