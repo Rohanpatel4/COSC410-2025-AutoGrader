@@ -12,25 +12,81 @@ import { setTimeout } from 'timers/promises';
 
 const coverageDir = join(process.cwd(), 'coverage');
 
-function calculateFileCoverage(fileData) {
+function getTotalLinesInFile(filePath) {
+  try {
+    if (existsSync(filePath)) {
+      const content = readFileSync(filePath, 'utf-8');
+      return content.split('\n').length;
+    }
+  } catch (e) {
+    // Ignore errors
+  }
+  return 0;
+}
+
+function calculateFileCoverage(fileData, fullPath = null) {
   const statements = {
-    covered: fileData.s ? fileData.s.length : 0,
+    covered: fileData.s ? Object.values(fileData.s).filter(count => count > 0).length : 0,
     total: fileData.statementMap ? Object.keys(fileData.statementMap).length : 0
   };
   
   const branches = {
-    covered: fileData.b ? fileData.b.length : 0,
+    covered: fileData.b ? Object.values(fileData.b).filter(count => count > 0).length : 0,
     total: fileData.branchMap ? Object.keys(fileData.branchMap).length : 0
   };
   
   const functions = {
-    covered: fileData.f ? fileData.f.length : 0,
+    covered: fileData.f ? Object.values(fileData.f).filter(count => count > 0).length : 0,
     total: fileData.fnMap ? Object.keys(fileData.fnMap).length : 0
   };
   
+  // Calculate actual line coverage from statementMap
+  // In v8 coverage format, there's no 'l' property - we need to calculate from statements
+  // Each statement in statementMap has start/end line numbers
+  const statementMap = fileData.statementMap || {};
+  const statementCounts = fileData.s || {};
+  
+  // Collect all unique line numbers that have executable statements
+  const lineCoverage = new Map(); // line number -> has coverage
+  
+  Object.keys(statementMap).forEach(stmtId => {
+    const stmt = statementMap[stmtId];
+    const count = statementCounts[stmtId] || 0;
+    const isCovered = count > 0;
+    
+    if (stmt && typeof stmt === 'object') {
+      // Get all line numbers this statement spans
+      const startLine = stmt.start?.line;
+      const endLine = stmt.end?.line || startLine;
+      
+      if (startLine) {
+        // Mark all lines from start to end
+        for (let line = startLine; line <= endLine; line++) {
+          if (!lineCoverage.has(line)) {
+            lineCoverage.set(line, false);
+          }
+          // If this statement is covered, mark the line as covered
+          if (isCovered) {
+            lineCoverage.set(line, true);
+          }
+        }
+      }
+    }
+  });
+  
+  const totalExecutableLines = lineCoverage.size;
+  const coveredExecutableLines = Array.from(lineCoverage.values()).filter(covered => covered).length;
+  
+  // Get total lines in the file (including blank lines, comments, etc.)
+  const totalFileLines = fullPath ? getTotalLinesInFile(fullPath) : 0;
+  
   const lines = {
-    covered: fileData.l ? fileData.l.length : 0,
-    total: fileData.statementMap ? Object.keys(fileData.statementMap).length : 0 // Lines typically same as statements
+    covered: coveredExecutableLines,
+    total: totalExecutableLines,
+    // Total file lines (including non-executable)
+    totalFileLines: totalFileLines,
+    // Percentage of total file lines that are covered (executable lines covered / total file lines)
+    totalFileLinesPct: totalFileLines > 0 ? (coveredExecutableLines / totalFileLines) * 100 : 0
   };
   
   return {
@@ -83,7 +139,7 @@ function getFileCoverageFromJSON() {
           relPath = parts.length > 1 ? parts[1] : fullPath;
         }
         
-        const coverage = calculateFileCoverage(data[fullPath]);
+        const coverage = calculateFileCoverage(data[fullPath], fullPath);
         return {
           file: relPath,
           fullPath: fullPath,
@@ -352,8 +408,10 @@ function extractTestFailures(output) {
   return { fileFailures: failures, individualFailures: [...new Set(individualFailures)] };
 }
 
-async function runTestsAndCapture() {
+async function runTestsAndCapture(filePath = null) {
   return new Promise((resolve) => {
+    // Always run all tests to get accurate coverage
+    // We'll filter the output later if a specific file is requested
     const child = spawn('npm', ['run', 'test:cov'], {
       cwd: process.cwd(),
       stdio: ['inherit', 'pipe', 'pipe'],
@@ -393,10 +451,17 @@ async function runTestsAndCapture() {
 }
 
 async function main() {
-  console.log('🧪 Running tests with coverage...\n');
+  // Get file path from command line arguments if provided
+  const filePath = process.argv[2] || null;
+  
+  if (filePath) {
+    console.log(`🧪 Running tests with coverage for: ${filePath}\n`);
+  } else {
+    console.log('🧪 Running tests with coverage...\n');
+  }
   
   // Run tests with real-time progress display
-  const { exitCode, output } = await runTestsAndCapture();
+  const { exitCode, output } = await runTestsAndCapture(filePath);
   
   // Wait for coverage files to be written
   await setTimeout(2000);
@@ -474,11 +539,144 @@ async function main() {
     }
   }
   
-  // Display coverage by file
-  if (coverageData && coverageData.fileCoverage.length > 0) {
+  // Get detailed file coverage from JSON for line counts
+  const detailedCoverage = getFileCoverageFromJSON();
+  
+  // Normalize the requested file path for filtering
+  let filterPath = null;
+  if (filePath) {
+    // Remove leading src/ if present, and normalize path separators
+    filterPath = filePath.replace(/^src\//, '').replace(/\\/g, '/');
+    // Remove leading ./ if present
+    filterPath = filterPath.replace(/^\.\//, '');
+    // Remove file extension for matching
+    const filterPathNoExt = filterPath.replace(/\.(ts|tsx)$/, '');
+    console.log(`\n📌 Filtering coverage for: ${filePath}\n`);
+  }
+  
+  // If we have JSON data, use it as primary source (more accurate line counts)
+  if (detailedCoverage && detailedCoverage.files && detailedCoverage.files.length > 0) {
+    // Filter files if a specific file was requested
+    let filesToShow = detailedCoverage.files;
+    if (filterPath) {
+      filesToShow = detailedCoverage.files.filter(file => {
+        const filePathNormalized = file.file.replace(/\.(ts|tsx)$/, '');
+        return file.file === filterPath || 
+               file.file === `src/${filterPath}` ||
+               filePathNormalized === filterPath ||
+               filePathNormalized === filterPath.replace(/\.(ts|tsx)$/, '') ||
+               file.file.endsWith(filterPath) ||
+               file.file.includes(filterPath);
+      });
+      
+      if (filesToShow.length === 0) {
+        console.log(`\n⚠️  No coverage data found for: ${filePath}`);
+        console.log(`   Available files (first 10):`);
+        detailedCoverage.files.slice(0, 10).forEach(f => {
+          console.log(`   - ${f.file}`);
+        });
+        process.exit(exitCode);
+        return;
+      }
+    }
     console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('📈 COVERAGE BY FILE');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    
+    // Calculate total lines in codebase (from all files, not just filtered)
+    const totalCodebaseLines = detailedCoverage.files.reduce((sum, f) => sum + (f.lines.totalFileLines || 0), 0);
+    
+    // Group files by directory
+    const grouped = {};
+    filesToShow.forEach(file => {
+      const parts = file.file.split('/');
+      const dir = parts.length > 1 ? parts.slice(0, -1).join('/') : '.';
+      const filename = parts[parts.length - 1];
+      
+      if (!grouped[dir]) grouped[dir] = [];
+      grouped[dir].push({ ...file, filename });
+    });
+    
+    // Display files grouped by directory
+    Object.keys(grouped).sort().forEach(dir => {
+      if (dir !== '.') {
+        console.log(`\n📁 ${dir}/`);
+      }
+      grouped[dir].forEach(file => {
+        const stmts = file.statements.pct.toFixed(1);
+        const branches = file.branches.pct.toFixed(1);
+        const funcs = file.functions.pct.toFixed(1);
+        const lines = file.lines.pct.toFixed(1);
+        const lineInfo = ` (${file.lines.covered}/${file.lines.total} lines)`;
+        
+        // Add total file lines vs codebase total as percentage
+        let totalFileInfo = '';
+        if (file.lines.totalFileLines > 0 && totalCodebaseLines > 0) {
+          const filePercentage = (file.lines.totalFileLines / totalCodebaseLines) * 100;
+          totalFileInfo = ` (${filePercentage.toFixed(2)}% total)`;
+        }
+        
+        console.log(`  ${file.filename.padEnd(40)} │ Stmts: ${stmts.padStart(6)}% │ Branches: ${branches.padStart(6)}% │ Funcs: ${funcs.padStart(6)}% │ Lines: ${lines.padStart(6)}%${lineInfo}${totalFileInfo}`);
+      });
+    });
+    
+    // Display summary - for single file, show just that file; otherwise show total
+    if (filterPath && filesToShow.length === 1) {
+      // Single file mode - show just this file's coverage
+      const file = filesToShow[0];
+      console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log(`📊 COVERAGE SUMMARY: ${file.file}`);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+      console.log(`Statements : ${file.statements.pct.toFixed(2)}% (${file.statements.covered}/${file.statements.total})`);
+      console.log(`Branches   : ${file.branches.pct.toFixed(2)}% (${file.branches.covered}/${file.branches.total})`);
+      console.log(`Functions  : ${file.functions.pct.toFixed(2)}% (${file.functions.covered}/${file.functions.total})`);
+      console.log(`Lines      : ${file.lines.pct.toFixed(2)}% (${file.lines.covered}/${file.lines.total} lines)`);
+      if (file.lines.totalFileLines > 0 && totalCodebaseLines > 0) {
+        const filePercentage = (file.lines.totalFileLines / totalCodebaseLines) * 100;
+        console.log(`           : (${filePercentage.toFixed(2)}% total)`);
+      }
+      console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    } else if (detailedCoverage.totalCoverage) {
+      // All files mode - show total
+      const total = detailedCoverage.totalCoverage;
+      
+      console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('📊 COVERAGE SUMMARY (TOTAL)');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+      console.log(`Statements : ${total.statements.pct.toFixed(2)}% (${total.statements.covered}/${total.statements.total})`);
+      console.log(`Branches   : ${total.branches.pct.toFixed(2)}% (${total.branches.covered}/${total.branches.total})`);
+      console.log(`Functions  : ${total.functions.pct.toFixed(2)}% (${total.functions.covered}/${total.functions.total})`);
+      console.log(`Lines      : ${total.lines.pct.toFixed(2)}% (${total.lines.covered}/${total.lines.total} lines)`);
+      if (totalCodebaseLines > 0) {
+        console.log(`           : (100.00% total)`);
+      }
+      console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    }
+  }
+  // Fallback to terminal output if JSON not available
+  else if (coverageData && coverageData.fileCoverage.length > 0) {
+    console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('📈 COVERAGE BY FILE');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    
+    // Create a map of file paths to detailed coverage data
+    // Map by both full path and just filename for better matching
+    const detailedMap = new Map();
+    if (detailedCoverage && detailedCoverage.files) {
+      detailedCoverage.files.forEach(file => {
+        // Store by relative path
+        detailedMap.set(file.file, file);
+        // Also store by just filename for matching
+        const filename = file.file.split('/').pop();
+        if (filename && !detailedMap.has(filename)) {
+          detailedMap.set(filename, file);
+        }
+        // Store by full path if available
+        if (file.fullPath) {
+          detailedMap.set(file.fullPath, file);
+        }
+      });
+    }
     
     // Group by directory and remove duplicates
     const seen = new Set();
@@ -506,7 +704,29 @@ async function main() {
         const branches = item.branches.toFixed(1);
         const funcs = item.functions.toFixed(1);
         const lines = item.lines.toFixed(1);
-        console.log(`  ${item.filename.padEnd(40)} │ Stmts: ${stmts.padStart(6)}% │ Branches: ${branches.padStart(6)}% │ Funcs: ${funcs.padStart(6)}% │ Lines: ${lines.padStart(6)}%`);
+        
+        // Get detailed line counts if available - try multiple matching strategies
+        let detailed = detailedMap.get(item.file);
+        if (!detailed) {
+          // Try matching by full path
+          detailed = detailedMap.get(item.file);
+        }
+        if (!detailed) {
+          // Try matching by filename
+          detailed = detailedMap.get(item.filename);
+        }
+        if (!detailed && item.file.includes('/')) {
+          // Try matching by relative path from src
+          const relPath = item.file.startsWith('src/') ? item.file : `src/${item.file}`;
+          detailed = detailedMap.get(relPath);
+        }
+        
+        let lineInfo = '';
+        if (detailed && detailed.lines && detailed.lines.total > 0) {
+          lineInfo = ` (${detailed.lines.covered}/${detailed.lines.total} lines)`;
+        }
+        
+        console.log(`  ${item.filename.padEnd(40)} │ Stmts: ${stmts.padStart(6)}% │ Branches: ${branches.padStart(6)}% │ Funcs: ${funcs.padStart(6)}% │ Lines: ${lines.padStart(6)}%${lineInfo}`);
       });
     });
     
@@ -516,10 +736,18 @@ async function main() {
       console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log('📊 COVERAGE SUMMARY (TOTAL)');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+      
+      // Get total line counts from detailed coverage if available
+      let totalLinesInfo = '';
+      if (detailedCoverage && detailedCoverage.totalCoverage && detailedCoverage.totalCoverage.lines) {
+        const lines = detailedCoverage.totalCoverage.lines;
+        totalLinesInfo = ` (${lines.covered}/${lines.total} lines)`;
+      }
+      
       console.log(`Statements : ${total.statements.toFixed(2)}%`);
       console.log(`Branches   : ${total.branches.toFixed(2)}%`);
       console.log(`Functions  : ${total.functions.toFixed(2)}%`);
-      console.log(`Lines      : ${total.lines.toFixed(2)}%`);
+      console.log(`Lines      : ${total.lines.toFixed(2)}%${totalLinesInfo}`);
       console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
     }
   } else {
